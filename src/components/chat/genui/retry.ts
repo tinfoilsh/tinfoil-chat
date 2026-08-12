@@ -10,7 +10,7 @@ import {
   estimateTokenCount,
   findContextStartIndex,
   getHistoryTokenBudget,
-  getSmallestContextWindow,
+  getSmallestContextWindowTokens,
 } from '@/utils/token-estimation'
 import { zodToJsonSchema } from 'zod-to-json-schema'
 import { GENUI_WIDGETS_BY_NAME, isGenUIToolName } from './registry'
@@ -58,7 +58,7 @@ function toPlainText(message: Message): string {
 
 export function selectArtifactRetryContext(
   contextMessages: Message[],
-  contextWindow: string | undefined,
+  contextWindowTokens: number | undefined,
   mandatoryPrompt: string,
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   const messages = contextMessages
@@ -80,7 +80,7 @@ export function selectArtifactRetryContext(
     searchReasoning: undefined,
   }))
   const budget = getHistoryTokenBudget(
-    contextWindow,
+    contextWindowTokens,
     estimateTokenCount(mandatoryPrompt),
   )
   const startIndex = findContextStartIndex(projected, budget, {
@@ -145,12 +145,12 @@ export async function regenerateToolCallArguments({
     'including the matching fields for the selected variant. Do not generate or revise prose.'
   const malformedArtifact = `Malformed arguments to repair:\n${originalArguments}`
   const mandatoryPrompt = `${instruction}\n${JSON.stringify(jsonSchema)}\n${malformedArtifact}`
-  const contextWindow = getSmallestContextWindow(
-    (autoCandidates ?? [model]).map((candidate) => candidate.contextWindow),
+  const contextWindowTokens = getSmallestContextWindowTokens(
+    autoCandidates ?? [model],
   )
   const conversation = selectArtifactRetryContext(
     contextMessages,
-    contextWindow,
+    contextWindowTokens,
     mandatoryPrompt,
   )
 

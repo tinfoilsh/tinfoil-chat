@@ -37,6 +37,26 @@ const toolCallHistoryModel: BaseModel = {
 }
 
 describe('ChatQueryBuilder', () => {
+  it('archives history using numeric context metadata', () => {
+    const messages = ChatQueryBuilder.buildMessages({
+      model: {
+        ...model,
+        contextWindow: '256k tokens',
+        contextWindowTokens: 1000,
+      },
+      systemPrompt: '',
+      rules: '',
+      messages: [
+        { ...userMessage, content: 'a'.repeat(1600) },
+        { ...userMessage, content: 'b'.repeat(1600) },
+        { ...userMessage, content: 'c'.repeat(1600) },
+      ],
+    })
+
+    expect(messages).toHaveLength(2)
+    expect(messages[0]).toEqual({ role: 'user', content: 'b'.repeat(1600) })
+  })
+
   it('omits system messages when there is no prompt content', () => {
     const messages = ChatQueryBuilder.buildMessages({
       model,

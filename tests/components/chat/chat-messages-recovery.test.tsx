@@ -46,6 +46,7 @@ vi.mock('@/utils/token-estimation', () => ({
   findContextStartIndex: () => 0,
   getContextTokenBudget: () => 1000,
   getHistoryTokenBudget: () => 1000,
+  resolveContextWindowTokens: () => 1000,
 }))
 
 vi.mock('@/components/chat/PrintableChat', () => ({

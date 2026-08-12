@@ -11,7 +11,7 @@ export const DEV_SIMULATOR_MODEL: BaseModel = {
   details:
     'Simulates various streaming patterns including thinking, content generation, and edge cases',
   parameters: 'Configurable via query patterns',
-  contextWindow: '32k tokens',
+  contextWindowTokens: 32000,
   recommendedUse: 'Testing and development only',
   type: 'chat',
   chat: true,

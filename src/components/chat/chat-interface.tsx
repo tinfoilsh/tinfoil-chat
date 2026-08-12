@@ -2,7 +2,7 @@ import {
   findSelectableModel,
   getAIModels,
   getReasoningHistoryPolicy,
-  getResolvedModelContextWindow,
+  getResolvedModelContextWindowTokens,
   getSystemPromptAndRules,
   resolveModelSelection,
   type BaseModel,
@@ -1566,7 +1566,9 @@ export function ChatInterface({
   const reasoningHistoryPolicy = getReasoningHistoryPolicy(
     contextModelSelection,
   )
-  const contextWindow = getResolvedModelContextWindow(contextModelSelection)
+  const contextWindowTokens = getResolvedModelContextWindowTokens(
+    contextModelSelection,
+  )
   const pendingAttachments = buildCompletedAttachments(processedDocuments)
   const pendingContextTokens = estimateMessageTokens({
     role: 'user',
@@ -2296,9 +2298,7 @@ export function ChatInterface({
         file,
         (content, documentId, imageData, hasDescription, pages) => {
           const newDocTokens = estimateTokenCount(content)
-          const contextBudget = getContextTokenBudget(
-            selectedModelDetails?.contextWindow,
-          )
+          const contextBudget = getContextTokenBudget(contextWindowTokens)
 
           // Attachments are part of the next message, which cannot be
           // archived, so all pending attachments together must fit within
@@ -2386,12 +2386,7 @@ export function ChatInterface({
         },
       )
     },
-    [
-      handleDocumentUpload,
-      processedDocuments,
-      selectedModelDetails?.contextWindow,
-      toast,
-    ],
+    [handleDocumentUpload, processedDocuments, contextWindowTokens, toast],
   )
 
   // Helper to process file and add to project context
@@ -2596,7 +2591,7 @@ export function ChatInterface({
 
   // Calculate context usage (memoized to prevent re-calculation during streaming)
   const contextUsage = useMemo(() => {
-    const limitTokens = getContextTokenBudget(contextWindow)
+    const limitTokens = getContextTokenBudget(contextWindowTokens)
 
     let usedTokens = pendingContextTokens
 
@@ -2605,7 +2600,7 @@ export function ChatInterface({
     if (currentChat?.messages) {
       const messages = currentChat.messages
       const historyBudget = getHistoryTokenBudget(
-        contextWindow,
+        contextWindowTokens,
         pendingContextTokens,
       )
       const startIndex = findContextStartIndex(messages, historyBudget, {
@@ -2626,7 +2621,7 @@ export function ChatInterface({
     }
   }, [
     currentChat?.messages,
-    contextWindow,
+    contextWindowTokens,
     reasoningHistoryPolicy,
     pendingContextTokens,
   ])
@@ -3718,7 +3713,7 @@ export function ChatInterface({
                     recoveryDrafts={recoveryDrafts}
                     activeRecoveryTurnIds={activeRecoveryTurnIds}
                     reasoningHistoryPolicy={reasoningHistoryPolicy}
-                    contextWindow={contextWindow}
+                    contextWindowTokens={contextWindowTokens}
                     pendingContextTokens={pendingContextTokens}
                     isDarkMode={isDarkMode}
                     chatId={currentChat.id}

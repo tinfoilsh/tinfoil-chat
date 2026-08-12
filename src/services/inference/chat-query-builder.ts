@@ -6,7 +6,7 @@ import { buildGenUIPromptHint } from '@/components/chat/genui/system-prompt'
 import type { Message } from '@/components/chat/types'
 import {
   getReasoningHistoryPolicy,
-  getResolvedModelContextWindow,
+  getResolvedModelContextWindowTokens,
   type BaseModel,
 } from '@/config/models'
 import { shouldIncludeReasoning } from '@/utils/reasoning-history'
@@ -82,7 +82,7 @@ export class ChatQueryBuilder {
       model,
       autoCandidates,
     })
-    const contextWindow = getResolvedModelContextWindow({
+    const contextWindowTokens = getResolvedModelContextWindowTokens({
       model,
       autoCandidates,
     })
@@ -122,7 +122,7 @@ export class ChatQueryBuilder {
     // Add conversation history that fits within the model's context budget
     const recentMessages = selectMessagesWithinBudget(
       conversationMessages,
-      contextWindow,
+      contextWindowTokens,
       { reasoningHistoryPolicy },
     )
     let addedSystemInstructions = useSystemRole
