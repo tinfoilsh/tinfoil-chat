@@ -4,6 +4,10 @@
 // ---------------------------------------------------------------------------
 
 const MIGRATION_FLAG = 'tinfoil-storage-migrated'
+const RETIRED_LOCAL_STORAGE_KEYS = [
+  'projectUploadPreference',
+  'tinfoil-user-prefs-project-upload',
+]
 
 const LOCAL_STORAGE_KEY_MAP: Record<string, string> = {
   // Sensitive
@@ -110,6 +114,10 @@ export function migrateStorageKeys(): void {
   if (typeof window === 'undefined') return
 
   try {
+    for (const key of RETIRED_LOCAL_STORAGE_KEYS) {
+      localStorage.removeItem(key)
+    }
+
     if (localStorage.getItem(MIGRATION_FLAG) === 'true') return
 
     migrateStorage(localStorage, LOCAL_STORAGE_KEY_MAP)

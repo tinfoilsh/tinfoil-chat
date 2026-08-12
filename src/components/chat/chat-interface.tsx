@@ -116,7 +116,10 @@ import { CONSTANTS } from './constants'
 import { getDocumentTextContent } from './document-content'
 import { useDocumentUploader } from './document-uploader'
 import { DragProvider } from './drag-context'
-import { routeChatFileUpload } from './file-upload-routing'
+import {
+  resolveProjectUploadTarget,
+  routeChatFileUpload,
+} from './file-upload-routing'
 import { GenUIInputAreaRenderer } from './genui/GenUIInputAreaRenderer'
 import { selectPendingInputToolCallFromChat } from './genui/pending-input-tool-call'
 import {
@@ -542,7 +545,10 @@ export function ChatInterface({
 
   // State for add-to-project-context modal
   const [showAddToProjectModal, setShowAddToProjectModal] = useState(false)
-  const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([])
+  const [pendingProjectUpload, setPendingProjectUpload] = useState<{
+    projectId: string
+    files: File[]
+  } | null>(null)
 
   // Quote state for highlighted text from messages
   const [quote, setQuote] = useState<string | null>(null)
@@ -665,10 +671,63 @@ export function ChatInterface({
     exitProjectMode,
     createProject,
     loadingProject,
+    error: projectError,
     uploadDocument: uploadProjectDocument,
     addUploadingFile,
     removeUploadingFile,
   } = useProject()
+
+  useEffect(() => {
+    if (!pendingProjectUpload) return
+
+    if (loadingProject) {
+      if (loadingProject.id === pendingProjectUpload.projectId) return
+      setPendingProjectUpload(null)
+      setShowAddToProjectModal(false)
+      toast({
+        title: 'Upload canceled',
+        description: 'The file was not attached because the project changed.',
+        variant: 'destructive',
+        position: 'top-right',
+      })
+      return
+    }
+
+    if (activeProject?.id === pendingProjectUpload.projectId) {
+      setShowAddToProjectModal(true)
+      return
+    }
+
+    if (projectError) {
+      setPendingProjectUpload(null)
+      setShowAddToProjectModal(false)
+      toast({
+        title: 'Project unavailable',
+        description:
+          'The file was not attached because the project failed to load.',
+        variant: 'destructive',
+        position: 'top-right',
+      })
+      return
+    }
+
+    if (activeProject?.id) {
+      setPendingProjectUpload(null)
+      setShowAddToProjectModal(false)
+      toast({
+        title: 'Upload canceled',
+        description: 'The file was not attached because the project changed.',
+        variant: 'destructive',
+        position: 'top-right',
+      })
+    }
+  }, [
+    activeProject?.id,
+    loadingProject,
+    pendingProjectUpload,
+    projectError,
+    toast,
+  ])
   const { effectiveSystemPrompt: finalSystemPrompt } = useProjectSystemPrompt({
     baseSystemPrompt: effectiveSystemPrompt,
     baseRules: processedRules,
@@ -1920,6 +1979,8 @@ export function ChatInterface({
 
   // Handler for exiting project mode - creates a new chat and exits
   const handleExitProject = useCallback(() => {
+    setPendingProjectUpload(null)
+    setShowAddToProjectModal(false)
     createNewChat(false, true)
     exitProjectMode()
   }, [createNewChat, exitProjectMode])
@@ -2043,6 +2104,8 @@ export function ChatInterface({
   // Handler for exiting project mode while dragging - does NOT create a new chat
   // so the drag operation can continue and drop into cloud/local tabs
   const handleExitProjectWhileDragging = useCallback(() => {
+    setPendingProjectUpload(null)
+    setShowAddToProjectModal(false)
     exitProjectMode()
   }, [exitProjectMode])
 
@@ -2396,9 +2459,24 @@ export function ChatInterface({
   // Handler for modal confirmation
   const handleAddToProjectConfirm = useCallback(
     async (addToProject: boolean) => {
+      if (
+        !pendingProjectUpload ||
+        activeProject?.id !== pendingProjectUpload.projectId
+      ) {
+        setPendingProjectUpload(null)
+        setShowAddToProjectModal(false)
+        toast({
+          title: 'Upload canceled',
+          description: 'The file was not attached because the project changed.',
+          variant: 'destructive',
+          position: 'top-right',
+        })
+        return
+      }
+
       // Capture files and close modal immediately
-      const filesToUpload = pendingUploadFiles
-      setPendingUploadFiles([])
+      const filesToUpload = pendingProjectUpload.files
+      setPendingProjectUpload(null)
       setShowAddToProjectModal(false)
 
       // Then process uploads (UI will show upload progress)
@@ -2410,23 +2488,58 @@ export function ChatInterface({
         }
       }
     },
-    [pendingUploadFiles, addFileToProjectContext, processFileForChat],
+    [
+      activeProject?.id,
+      pendingProjectUpload,
+      addFileToProjectContext,
+      processFileForChat,
+      toast,
+    ],
   )
 
   // Document upload handler wrapper
   const handleFileUpload = useCallback(
     async (file: File) => {
+      const projectTarget = resolveProjectUploadTarget({
+        activeProjectId: activeProject?.id,
+        loadingProjectId: loadingProject?.id,
+      })
+
       await routeChatFileUpload(file, {
-        isProjectMode,
-        hasActiveProject: !!activeProject,
-        requestDestination: (pendingFile) => {
-          setPendingUploadFiles((prev) => [...prev, pendingFile])
-          setShowAddToProjectModal(true)
+        projectTarget,
+        requestDestination: (pendingFile, target) => {
+          if (
+            pendingProjectUpload &&
+            pendingProjectUpload.projectId !== target.projectId
+          ) {
+            toast({
+              title: 'Previous upload canceled',
+              description: 'The project changed before the file was attached.',
+              variant: 'destructive',
+              position: 'top-right',
+            })
+          }
+          setPendingProjectUpload((previous) => ({
+            projectId: target.projectId,
+            files:
+              previous?.projectId === target.projectId
+                ? [...previous.files, pendingFile]
+                : [pendingFile],
+          }))
+          if (target.isReady) {
+            setShowAddToProjectModal(true)
+          }
         },
         processFileForChat,
       })
     },
-    [isProjectMode, activeProject, processFileForChat],
+    [
+      activeProject,
+      loadingProject,
+      pendingProjectUpload,
+      processFileForChat,
+      toast,
+    ],
   )
 
   // Global drag and drop handlers
@@ -3943,14 +4056,14 @@ export function ChatInterface({
       <AddToProjectContextModal
         isOpen={showAddToProjectModal}
         onClose={() => {
-          setPendingUploadFiles([])
+          setPendingProjectUpload(null)
           setShowAddToProjectModal(false)
         }}
         onConfirm={handleAddToProjectConfirm}
         fileName={
-          pendingUploadFiles.length === 1
-            ? pendingUploadFiles[0].name
-            : `${pendingUploadFiles.length} files`
+          pendingProjectUpload?.files.length === 1
+            ? pendingProjectUpload.files[0].name
+            : `${pendingProjectUpload?.files.length ?? 0} files`
         }
         projectName={activeProject?.name ?? ''}
         isDarkMode={isDarkMode}
