@@ -177,15 +177,31 @@ export function useChatStorage({
             )
             .map((c) => {
               const existing = previousById.get(c.id)
-              const chat =
-                c.isMetadataOnly && existing && !existing.isMetadataOnly
-                  ? {
-                      ...existing,
-                      ...c,
-                      messages: existing.messages,
-                      isMetadataOnly: false,
-                    }
-                  : c
+              let chat = c
+              if (c.isMetadataOnly && existing && !existing.isMetadataOnly) {
+                // A hydrated copy keeps its messages only while it still
+                // mirrors storage. When the stored chat has newer content
+                // (another device, a background write), fall back to the
+                // summary so the next selection rehydrates instead of
+                // pinning stale messages. Streaming chats and sends in
+                // their pre-save window are ahead of storage, so they
+                // always keep their in-memory messages.
+                const hydratedMatchesStorage =
+                  existing.updatedAt === c.updatedAt &&
+                  existing.messages.length === (c.messageCount ?? 0)
+                if (
+                  hydratedMatchesStorage ||
+                  existing.pendingSave === true ||
+                  streamingTracker.isStreamingOrPending(c.id)
+                ) {
+                  chat = {
+                    ...existing,
+                    ...c,
+                    messages: existing.messages,
+                    isMetadataOnly: false,
+                  }
+                }
+              }
               return chat.pendingRecoveries?.length
                 ? {
                     ...chat,
@@ -261,7 +277,10 @@ export function useChatStorage({
                 )
                 if (
                   (isRecoveryReload || recoveryResolvedElsewhere) &&
-                  !isStreaming
+                  !isStreaming &&
+                  // A summary entry has no messages to adopt; keep the
+                  // on-screen copy and only update its metadata below.
+                  !existingChat.isMetadataOnly
                 ) {
                   nextCurrent = {
                     ...existingChat,
@@ -548,12 +567,16 @@ export function useChatStorage({
       try {
         const hydratedChat = await chatStorage.getChat(chat.id)
         if (!hydratedChat) return
-        setChats((previous) =>
-          previous.map((candidate) =>
-            candidate === chat ? hydratedChat : candidate,
-          ),
-        )
-        setCurrentChat((current) => (current === chat ? hydratedChat : current))
+        // Apply by id, not reference: a concurrent reload may have
+        // replaced the objects in state. Only chats still waiting on
+        // their messages adopt the hydrated copy, so live updates that
+        // landed during hydration are never overwritten.
+        const applyHydration = (candidate: Chat): Chat =>
+          candidate.id === chat.id && candidate.isMetadataOnly
+            ? hydratedChat
+            : candidate
+        setChats((previous) => previous.map(applyHydration))
+        setCurrentChat(applyHydration)
       } catch (error) {
         logError('Failed to load selected chat', error, {
           component: 'useChatStorage',
