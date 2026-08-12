@@ -1,11 +1,16 @@
 import type { Chat } from '@/components/chat/types'
 import { chatStorage } from '@/services/storage/chat-storage'
+import { setCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const saveChatSpy = vi.fn(async (chat: unknown) => chat)
 const getChatSpy = vi.fn(async () => null as unknown)
 const getAllChatsSpy = vi.fn(async () => [] as unknown[])
+const resetChatTimestampsSpy = vi.fn(async () => {})
+const updateChatLocalOnlySpy = vi.fn(async () => {})
+const updateChatProjectSpy = vi.fn(async () => {})
 const backupChatSpy = vi.fn(async () => {})
+const deleteFromCloudSpy = vi.fn(async () => {})
 
 vi.mock('@/services/storage/indexed-db', () => ({
   indexedDBStorage: {
@@ -13,11 +18,17 @@ vi.mock('@/services/storage/indexed-db', () => ({
     getChat: (...args: unknown[]) => getChatSpy(...args),
     saveChat: (...args: unknown[]) => saveChatSpy(...args),
     getAllChats: (...args: unknown[]) => getAllChatsSpy(...args),
+    resetChatTimestamps: (...args: unknown[]) =>
+      resetChatTimestampsSpy(...args),
+    updateChatLocalOnly: (...args: unknown[]) =>
+      updateChatLocalOnlySpy(...args),
+    updateChatProject: (...args: unknown[]) => updateChatProjectSpy(...args),
   },
 }))
 vi.mock('@/services/cloud/cloud-sync', () => ({
   cloudSync: {
     backupChat: (...args: unknown[]) => backupChatSpy(...args),
+    deleteFromCloud: (...args: unknown[]) => deleteFromCloudSpy(...args),
   },
 }))
 vi.mock('@/services/cloud/cloud-storage', () => ({ cloudStorage: {} }))
@@ -97,5 +108,32 @@ describe('chatStorage pendingSave is not persisted', () => {
     const chats = await chatStorage.getAllChatsWithSyncStatus()
 
     expect('pendingSave' in chats[0]).toBe(false)
+  })
+})
+
+describe('chatStorage local-only classification', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('stores chats as local-only and skips backup while cloud sync is disabled', async () => {
+    setCloudSyncEnabled(false)
+
+    const saved = await chatStorage.saveChat(makeChat({ isLocalOnly: false }))
+
+    const persisted = saveChatSpy.mock.calls[0][0] as Record<string, unknown>
+    expect(persisted.isLocalOnly).toBe(true)
+    expect(saved.isLocalOnly).toBe(true)
+    expect(backupChatSpy).not.toHaveBeenCalled()
+  })
+
+  it('keeps cloud chats eligible for backup while cloud sync is enabled', async () => {
+    setCloudSyncEnabled(true)
+
+    await chatStorage.saveChat(makeChat({ isLocalOnly: false }))
+
+    const persisted = saveChatSpy.mock.calls[0][0] as Record<string, unknown>
+    expect(persisted.isLocalOnly).toBe(false)
+    expect(backupChatSpy).toHaveBeenCalledTimes(1)
   })
 })
