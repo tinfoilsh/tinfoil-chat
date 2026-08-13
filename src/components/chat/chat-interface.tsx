@@ -1054,11 +1054,15 @@ export function ChatInterface({
     handleQuery,
     isRateLimited,
     isDispatchBlocked: () =>
+      models.length === 0 ||
       isChatHydrating ||
       hasPendingRecoveryRef.current ||
       (currentChatId ? isChatRecoveryActive(currentChatId) : false),
     dispatchBlocked:
-      isChatHydrating || hasPendingRecovery || activeRecoveryTurnIds.length > 0,
+      models.length === 0 ||
+      isChatHydrating ||
+      hasPendingRecovery ||
+      activeRecoveryTurnIds.length > 0,
     onRateLimited: handleQueueRateLimited,
     cancelGeneration,
   })
@@ -2937,8 +2941,6 @@ export function ChatInterface({
       </div>
     )
   }
-
-  // Config loading is handled by the combined loading screen above.
 
   // Show decryption failed message when accessing a chat that couldn't be decrypted
   if (initialChatId && initialChatDecryptionFailed) {

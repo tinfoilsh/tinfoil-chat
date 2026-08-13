@@ -555,6 +555,7 @@ export function useChatMessaging({
           !systemPromptOverride &&
           !attachments?.length &&
           !quote) ||
+        models.length === 0 ||
         targetChatStatus.loadingState !== 'idle' ||
         isRecoveryActive
       )

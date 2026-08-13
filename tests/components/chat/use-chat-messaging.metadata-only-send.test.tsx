@@ -327,3 +327,40 @@ describe('useChatMessaging metadata-only sends', () => {
     expect(sendChatStreamMock).not.toHaveBeenCalled()
   })
 })
+
+describe('useChatMessaging model availability', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    sendChatStreamMock.mockResolvedValue(completedStream())
+  })
+
+  it('does not dispatch without an available model', async () => {
+    const initialChat = hydratedChat()
+    const { result } = renderHook(() => {
+      const [currentChat, setCurrentChat] = useState(initialChat)
+      const [chats, setChats] = useState([initialChat])
+      const messaging = useChatMessaging({
+        systemPrompt: '',
+        storeHistory: true,
+        models: [],
+        selectedModel: '',
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+      })
+      return { currentChat, messaging }
+    })
+
+    await act(async () => {
+      await result.current.messaging.handleQuery('No model')
+    })
+
+    expect(sendChatStreamMock).not.toHaveBeenCalled()
+    expect(saveChatMock).not.toHaveBeenCalled()
+    expect(saveChatAndSyncMock).not.toHaveBeenCalled()
+    expect(result.current.currentChat.messages).toHaveLength(
+      storedMessages.length,
+    )
+  })
+})
