@@ -63,6 +63,7 @@ vi.mock('@/services/inference/tinfoil-client', async () => {
 })
 
 vi.mock('@/utils/cloud-sync-settings', () => ({
+  CLOUD_SYNC_SETTING_CHANGED_EVENT: 'cloudSyncSettingChanged',
   isCloudSyncEnabled: () => cloudSyncState.enabled,
 }))
 
