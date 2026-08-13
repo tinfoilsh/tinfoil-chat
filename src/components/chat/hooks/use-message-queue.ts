@@ -10,6 +10,7 @@ type HandleQuery = (
   systemPromptOverride?: string,
   baseMessages?: Message[],
   quote?: string,
+  onReadyForNextMessage?: () => void,
 ) => void | ChatDispatchResult | Promise<void | ChatDispatchResult>
 
 export type QueueSubmitInput = {
@@ -115,11 +116,10 @@ function writeToStorage(key: string | null, queue: QueuedMessage[]): void {
  *   "my dispatch finished" and fires the next one in parallel.
  *
  *   The pump avoids that race entirely: it owns the dispatch lifecycle
- *   end-to-end. It awaits `handleQuery`'s returned promise — which only
- *   settles when the stream we kicked off truly completes — and only
- *   then loops to the next message. Stale `loadingState` writes from a
- *   previously-cancelled stream can't trigger anything because nothing
- *   observes them.
+ *   end-to-end. It awaits either `handleQuery`'s returned promise or its
+ *   explicit ready-for-next-message signal, emitted after the response is
+ *   fully visible. Stale `loadingState` writes from a previously-cancelled
+ *   stream can't trigger anything because nothing observes them.
  *
  * Cancellation (Stop button):
  *
@@ -319,12 +319,17 @@ export function useMessageQueue({
           setQueueFor(pump.id, rest)
 
           try {
+            let markReadyForNextMessage!: () => void
+            const readyForNextMessage = new Promise<void>((resolve) => {
+              markReadyForNextMessage = resolve
+            })
             const result = handleQueryRef.current(
               next.text,
               next.attachments,
               undefined,
               undefined,
               next.quote,
+              markReadyForNextMessage,
             )
             let dispatchResult: void | ChatDispatchResult = undefined
             if (
@@ -342,6 +347,9 @@ export function useMessageQueue({
                     .catch(() => ({ type: 'error' as const })),
                   cancelWaiter.promise.then(() => ({
                     type: 'cancelled' as const,
+                  })),
+                  readyForNextMessage.then(() => ({
+                    type: 'ready' as const,
                   })),
                 ])
                 if (settled.type === 'result') {

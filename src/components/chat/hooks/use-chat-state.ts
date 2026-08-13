@@ -51,6 +51,7 @@ interface UseChatStateReturn {
     systemPromptOverride?: string,
     baseMessages?: Message[],
     quote?: string,
+    onReadyForNextMessage?: () => void,
   ) => Promise<ChatDispatchResult>
   createNewChat: (isLocalOnly?: boolean, fromUserAction?: boolean) => void
   deleteChat: (chatId: string) => void

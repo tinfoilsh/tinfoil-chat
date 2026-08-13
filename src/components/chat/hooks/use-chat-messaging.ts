@@ -127,6 +127,7 @@ interface UseChatMessagingReturn {
     systemPromptOverride?: string,
     baseMessages?: Message[],
     quote?: string,
+    onReadyForNextMessage?: () => void,
   ) => Promise<ChatDispatchResult>
   cancelGeneration: (chatId?: string) => Promise<void>
   editMessage: (messageIndex: number, newContent: string) => void
@@ -543,6 +544,7 @@ export function useChatMessaging({
       systemPromptOverride?: string,
       baseMessages?: Message[],
       quote?: string,
+      onReadyForNextMessage?: () => void,
     ) => {
       // Gate on the target chat's own status so a busy background stream
       // never blocks sending in a different chat.
@@ -602,6 +604,12 @@ export function useChatMessaging({
       let recoveryLocalSavePromise: Promise<Chat> | undefined
       let dispatchAccepted = false
       let optimisticTurnApplied = false
+      let readyForNextMessageSignalled = false
+      const signalReadyForNextMessage = () => {
+        if (readyForNextMessageSignalled) return
+        readyForNextMessageSignalled = true
+        onReadyForNextMessage?.()
+      }
 
       const setLoadingStateFor = (s: LoadingState) =>
         patchStatus(streamChatIdRef.current, { loadingState: s })
@@ -1337,6 +1345,7 @@ export function useChatMessaging({
                   : previous,
               )
             }
+            signalReadyForNextMessage()
           }
 
           logInfo('[handleQuery] Streaming completed, processing response', {
@@ -1622,6 +1631,7 @@ export function useChatMessaging({
             isStreaming: false,
             isThinking: false,
           })
+          if (!controller.signal.aborted) signalReadyForNextMessage()
         }
         clearController(streamChatIdRef.current, controller)
         if (
