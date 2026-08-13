@@ -1,6 +1,7 @@
 import {
   DB_NAME,
   DB_VERSION,
+  INDEXED_DB_UPGRADE_BLOCKED_EVENT,
   IndexedDBStorage,
   type StoredChat,
 } from '@/services/storage/indexed-db'
@@ -22,7 +23,7 @@ function storedChat(
   }
 }
 
-async function seedVersionThree(chats: StoredChat[]): Promise<void> {
+async function openVersionThree(chats: StoredChat[]): Promise<IDBDatabase> {
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 3)
     request.onerror = () => reject(request.error)
@@ -50,6 +51,11 @@ async function seedVersionThree(chats: StoredChat[]): Promise<void> {
     transaction.oncomplete = () => resolve()
     transaction.onerror = () => reject(transaction.error)
   })
+  return db
+}
+
+async function seedVersionThree(chats: StoredChat[]): Promise<void> {
+  const db = await openVersionThree(chats)
   db.close()
 }
 
@@ -92,5 +98,26 @@ describe('IndexedDB pending sync index', () => {
     expect(indexNames.contains('syncPending')).toBe(true)
     expect(indexNames.contains('locallyModified')).toBe(false)
     upgraded.close()
+  })
+
+  it('continues a blocked upgrade after the older connection closes', async () => {
+    const olderConnection = await openVersionThree([storedChat('cloud-chat')])
+    olderConnection.onversionchange = () => undefined
+    const blocked = new Promise<void>((resolve) => {
+      window.addEventListener(
+        INDEXED_DB_UPGRADE_BLOCKED_EVENT,
+        () => resolve(),
+        { once: true },
+      )
+    })
+    const storage = new IndexedDBStorage()
+    const chatsPromise = storage.getAllChats()
+
+    await blocked
+    olderConnection.close()
+
+    await expect(chatsPromise).resolves.toEqual([
+      expect.objectContaining({ id: 'cloud-chat' }),
+    ])
   })
 })

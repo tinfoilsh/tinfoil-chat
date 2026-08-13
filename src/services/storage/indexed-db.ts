@@ -281,7 +281,6 @@ export class IndexedDBStorage {
     const saveGeneration = this.saveGeneration
     const initializationPromise = new Promise<void>((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION)
-      let abandoned = false
 
       request.onerror = (event) => {
         const error = (event.target as IDBOpenDBRequest).error
@@ -296,10 +295,6 @@ export class IndexedDBStorage {
       }
 
       request.onsuccess = () => {
-        if (abandoned) {
-          request.result.close()
-          return
-        }
         isUpgradeBlocked = false
         const db = request.result
         db.onversionchange = () => {
@@ -377,13 +372,11 @@ export class IndexedDBStorage {
       }
 
       request.onblocked = () => {
-        abandoned = true
         isUpgradeBlocked = true
         logWarning('IndexedDB upgrade blocked - close other tabs', {
           component: 'IndexedDBStorage',
         })
         window.dispatchEvent(new Event(INDEXED_DB_UPGRADE_BLOCKED_EVENT))
-        reject(new Error('Database upgrade blocked'))
       }
     })
 
