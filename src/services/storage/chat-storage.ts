@@ -295,9 +295,10 @@ export class ChatStorageService {
     // retry without partial-deletion side effects.
     let cloudDeleted = 0
     let notificationSent = false
+    const guard = cloudSync.createAccountOperationGuard()
     if (await cloudStorage.isAuthenticated()) {
       try {
-        const guard = cloudSync.createAccountOperationGuard()
+        guard.assertCurrent()
         const result = await cloudStorage.deleteAllChats(guard)
         cloudDeleted = result.deleted
         notificationSent = result.notificationSent ?? false
@@ -311,7 +312,10 @@ export class ChatStorageService {
     }
 
     // Cloud delete succeeded (or user is anonymous); now it's safe to
-    // tombstone the IDs locally and wipe IndexedDB.
+    // tombstone the IDs locally and wipe IndexedDB — but only for the
+    // same account: the local wipe clears the whole store without
+    // account scoping.
+    guard.assertCurrent()
     for (const id of localIds) {
       if (id) deletedChatsTracker.markAsDeleted(id)
     }
