@@ -219,6 +219,7 @@ describe('useChatCollection', () => {
 
   it('skips IndexedDB during streaming updates', () => {
     vi.mocked(chatStorage.saveChat).mockClear()
+    vi.mocked(sessionChatStorage.clearStreamingDraft).mockClear()
     const chat = createChat()
     const updateChat = createUpdateChatWithHistoryCheck({
       storeHistory: true,
@@ -231,5 +232,12 @@ describe('useChatCollection', () => {
     })
 
     expect(chatStorage.saveChat).not.toHaveBeenCalled()
+    expect(sessionChatStorage.clearStreamingDraft).not.toHaveBeenCalled()
+
+    vi.mocked(chatStorage.saveChat).mockResolvedValue(chat)
+    updateChat(vi.fn(), chat, vi.fn(), chat.id, [])
+
+    expect(sessionChatStorage.clearStreamingDraft).toHaveBeenCalledWith(chat.id)
+    expect(chatStorage.saveChat).toHaveBeenCalled()
   })
 })

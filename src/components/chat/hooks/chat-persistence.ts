@@ -102,7 +102,6 @@ export function createUpdateChatWithHistoryCheck({
     }
 
     if (storeHistory) {
-      sessionChatStorage.clearStreamingDraft(chatId)
       const shouldSkipCloudSync =
         skipCloudSync ||
         updatedChat.isLocalOnly ||
@@ -111,6 +110,8 @@ export function createUpdateChatWithHistoryCheck({
       if (skipIndexedDBSave) {
         return
       }
+
+      sessionChatStorage.clearStreamingDraft(chatId)
 
       logInfo('[persistence] Saving chat to storage', {
         component: 'chat-persistence',

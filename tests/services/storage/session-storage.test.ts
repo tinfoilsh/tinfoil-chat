@@ -28,6 +28,7 @@ function chat(id: string, content: string): Chat {
 
 describe('sessionChatStorage streaming drafts', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     sessionStorage.clear()
   })
 
@@ -59,6 +60,83 @@ describe('sessionChatStorage streaming drafts', () => {
       'complete',
     )
   })
+
+  it('keeps unrelated drafts separate when saving a chat', () => {
+    sessionChatStorage.saveChat(chat('chat-a', 'before'))
+    sessionChatStorage.saveChat(chat('chat-b', 'persisted'))
+    sessionChatStorage.saveStreamingDraft(chat('chat-b', 'streaming'))
+
+    sessionChatStorage.saveChat(chat('chat-a', 'complete'))
+
+    const canonicalChats = JSON.parse(
+      sessionStorage.getItem(SYNC_SESSION_CHATS) ?? '[]',
+    ) as Chat[]
+    expect(
+      canonicalChats.find((storedChat) => storedChat.id === 'chat-b')
+        ?.messages[0].content,
+    ).toBe('persisted')
+    expect(sessionChatStorage.getChat('chat-b')?.messages[0].content).toBe(
+      'streaming',
+    )
+
+    sessionChatStorage.saveChat(chat('chat-b', 'complete'))
+
+    expect(
+      sessionStorage.getItem(`${SYNC_SESSION_CHAT_DRAFT_PREFIX}chat-b`),
+    ).toBeNull()
+    expect(sessionChatStorage.getChat('chat-b')?.messages[0].content).toBe(
+      'complete',
+    )
+  })
+
+  it('keeps unrelated drafts separate when deleting a chat', () => {
+    sessionChatStorage.saveChat(chat('chat-a', 'persisted'))
+    sessionChatStorage.saveChat(chat('chat-b', 'persisted'))
+    sessionChatStorage.saveStreamingDraft(chat('chat-b', 'streaming'))
+
+    sessionChatStorage.deleteChat('chat-a')
+
+    const canonicalChats = JSON.parse(
+      sessionStorage.getItem(SYNC_SESSION_CHATS) ?? '[]',
+    ) as Chat[]
+    expect(canonicalChats).toHaveLength(1)
+    expect(canonicalChats[0].id).toBe('chat-b')
+    expect(canonicalChats[0].messages[0].content).toBe('persisted')
+    expect(sessionChatStorage.getChat('chat-b')?.messages[0].content).toBe(
+      'streaming',
+    )
+  })
+
+  it.each(['save', 'delete'] as const)(
+    'restores the target draft when a canonical %s fails',
+    (operation) => {
+      sessionChatStorage.saveChat(chat('chat-1', 'persisted'))
+      sessionChatStorage.saveStreamingDraft(chat('chat-1', 'streaming'))
+      const originalSetItem = sessionStorage.setItem.bind(sessionStorage)
+      const setItemSpy = vi
+        .spyOn(sessionStorage, 'setItem')
+        .mockImplementation((key, value) => {
+          if (key === SYNC_SESSION_CHATS) {
+            throw new DOMException(
+              'Storage quota exceeded',
+              'QuotaExceededError',
+            )
+          }
+          originalSetItem(key, value)
+        })
+
+      if (operation === 'save') {
+        sessionChatStorage.saveChat(chat('chat-1', 'complete'))
+      } else {
+        sessionChatStorage.deleteChat('chat-1')
+      }
+
+      expect(sessionChatStorage.getChat('chat-1')?.messages[0].content).toBe(
+        'streaming',
+      )
+      setItemSpy.mockRestore()
+    },
+  )
 
   it('clears drafts when chats are deleted or storage is cleared', () => {
     sessionChatStorage.saveChat(chat('chat-1', 'before'))

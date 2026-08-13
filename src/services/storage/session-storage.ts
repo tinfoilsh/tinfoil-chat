@@ -43,14 +43,18 @@ function getStreamingDrafts(): Chat[] {
   return drafts
 }
 
+function getCanonicalChats(): Chat[] {
+  const chatsJson = sessionStorage.getItem(SYNC_SESSION_CHATS)
+  const parsedChats = chatsJson ? JSON.parse(chatsJson) : []
+  return Array.isArray(parsedChats)
+    ? parsedChats.map((chat) => restoreChat(chat as Chat))
+    : []
+}
+
 export const sessionChatStorage = {
   getAllChats(): Chat[] {
     try {
-      const chatsJson = sessionStorage.getItem(SYNC_SESSION_CHATS)
-      const parsedChats = chatsJson ? JSON.parse(chatsJson) : []
-      const chats: Chat[] = Array.isArray(parsedChats)
-        ? parsedChats.map((chat) => restoreChat(chat as Chat))
-        : []
+      const chats = getCanonicalChats()
 
       for (const draft of getStreamingDrafts()) {
         const existingIndex = chats.findIndex((chat) => chat.id === draft.id)
@@ -131,7 +135,7 @@ export const sessionChatStorage = {
         return
       }
 
-      const chats = this.getAllChats()
+      const chats = getCanonicalChats()
       const existingIndex = chats.findIndex((c) => c.id === chat.id)
 
       if (existingIndex >= 0) {
@@ -166,10 +170,26 @@ export const sessionChatStorage = {
 
   deleteChat(chatId: string): void {
     try {
-      this.clearStreamingDraft(chatId)
-      const chats = this.getAllChats()
+      const chats = getCanonicalChats()
       const filteredChats = chats.filter((c) => c.id !== chatId)
-      sessionStorage.setItem(SYNC_SESSION_CHATS, JSON.stringify(filteredChats))
+      const draftKey = getDraftKey(chatId)
+      const draft = sessionStorage.getItem(draftKey)
+      sessionStorage.removeItem(draftKey)
+      try {
+        sessionStorage.setItem(
+          SYNC_SESSION_CHATS,
+          JSON.stringify(filteredChats),
+        )
+      } catch (error) {
+        if (draft !== null) {
+          try {
+            sessionStorage.setItem(draftKey, draft)
+          } catch {
+            // Both session writes are best effort.
+          }
+        }
+        throw error
+      }
     } catch (error) {
       logError('Failed to delete chat from session storage', error, {
         component: 'sessionChatStorage',
