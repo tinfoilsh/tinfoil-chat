@@ -1299,7 +1299,6 @@ export class IndexedDBStorage {
         // row from a summary whose full chat no longer exists.
         if ((chat as StoredChat).isMetadataOnly === true) {
           if (!existingChat) {
-            resolve()
             return
           }
           chat = {
