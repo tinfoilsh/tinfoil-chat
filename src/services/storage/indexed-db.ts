@@ -1095,7 +1095,7 @@ export class IndexedDBStorage {
 
   async restoreDecryptionPlaceholder(chat: StoredChat): Promise<void> {
     const chatSnapshot = snapshotChatForStorage(chat)
-    return this.enqueueSave('restoreDecryptionPlaceholder', () =>
+    await this.enqueueSave('restoreDecryptionPlaceholder', () =>
       this.saveChatInternal(chatSnapshot, { markContentChangesAsLocal: false }),
     )
   }
