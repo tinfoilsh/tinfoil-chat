@@ -20,6 +20,8 @@ const {
   downloadChats,
   deleteChat,
   ingestRemoteChats,
+  markAsDeleted,
+  removeFromDeleted,
 } = vi.hoisted(() => ({
   getSyncState: vi.fn(),
   hasPendingSyncWork: vi.fn(),
@@ -36,6 +38,8 @@ const {
   downloadChats: vi.fn(),
   deleteChat: vi.fn(),
   ingestRemoteChats: vi.fn(),
+  markAsDeleted: vi.fn(),
+  removeFromDeleted: vi.fn(),
 }))
 
 vi.mock('@/services/storage/indexed-db', () => ({
@@ -65,6 +69,9 @@ vi.mock('@/services/cloud/cloud-storage', () => ({
 vi.mock('@/services/cloud/chat-ingestion', () => ({ ingestRemoteChats }))
 vi.mock('@/services/storage/chat-events', () => ({
   chatEvents: { emit: vi.fn() },
+}))
+vi.mock('@/services/storage/deleted-chats-tracker', () => ({
+  deletedChatsTracker: { markAsDeleted, removeFromDeleted },
 }))
 vi.mock('@/services/cloud/sync-predicates', () => ({
   isUploadableChat: (
@@ -181,6 +188,8 @@ describe('chat revision synchronization', () => {
     await drainChatRevisionSync(adapter, userId)
 
     expect(order).toEqual(['remote-delete', 'checkpoint', 'upload'])
+    expect(markAsDeleted).toHaveBeenCalledWith('deleted-chat')
+    expect(removeFromDeleted).toHaveBeenCalledWith('moved-chat')
     expect(commitRevisionBatch).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({
@@ -192,6 +201,31 @@ describe('chat revision synchronization', () => {
       '9',
       userId,
     )
+  })
+
+  it('does not tombstone a remote delete before its transaction commits', async () => {
+    revisionSummary.mockResolvedValue({
+      current_revision: '8',
+      oldest_replayable_revision: '1',
+    })
+    revisionEvents.mockResolvedValue({
+      events: [
+        {
+          revision: '8',
+          kind: 'delete',
+          id: 'deleted-chat',
+          project_id: null,
+          updated_at: '2026-01-01T00:00:00Z',
+        },
+      ],
+    })
+    applyRemoteDeletion.mockRejectedValue(new Error('transaction failed'))
+
+    await expect(drainChatRevisionSync(adapter, userId)).rejects.toThrow(
+      'transaction failed',
+    )
+
+    expect(markAsDeleted).not.toHaveBeenCalled()
   })
 
   it('repairs an expired checkpoint with a metadata snapshot', async () => {
@@ -241,6 +275,60 @@ describe('chat revision synchronization', () => {
       userId,
     )
     expect(revisionEvents).not.toHaveBeenCalled()
+  })
+
+  it('marks snapshot deletions and clears tombstones for remote rows', async () => {
+    getSyncState.mockResolvedValue(null)
+    revisionSummary.mockResolvedValue({
+      current_revision: '12',
+      oldest_replayable_revision: '1',
+    })
+    revisionSnapshot.mockResolvedValue({
+      snapshot_revision: '12',
+      items: [
+        {
+          id: 'restored-chat',
+          etag: '4',
+          key_id: 'key-1',
+          project_id: null,
+          updated_at: '2026-01-02T00:00:00Z',
+        },
+      ],
+    })
+    getChat.mockResolvedValue({ id: 'restored-chat', syncVersion: 4 })
+    reconcileRevisionSnapshot.mockResolvedValue(['deleted-chat'])
+
+    await drainChatRevisionSync(adapter, userId)
+
+    expect(markAsDeleted).toHaveBeenCalledWith('deleted-chat')
+    expect(removeFromDeleted).toHaveBeenCalledWith('restored-chat')
+  })
+
+  it('keeps a tombstone when a remote upsert has a pending local delete', async () => {
+    revisionSummary.mockResolvedValue({
+      current_revision: '8',
+      oldest_replayable_revision: '1',
+    })
+    revisionEvents.mockResolvedValue({
+      events: [
+        {
+          revision: '8',
+          kind: 'upsert',
+          id: 'deleted-chat',
+          etag: '4',
+          key_id: 'key-1',
+          project_id: null,
+          updated_at: '2026-01-02T00:00:00Z',
+        },
+      ],
+    })
+    getPendingDeletes.mockResolvedValue([
+      { id: 'deleted-chat', userId, idempotencyKey: 'delete-key' },
+    ])
+
+    await drainChatRevisionSync(adapter, userId)
+
+    expect(removeFromDeleted).not.toHaveBeenCalledWith('deleted-chat')
   })
 
   it('fails closed without uploads or checkpoint advancement', async () => {
@@ -360,7 +448,7 @@ describe('chat revision synchronization', () => {
     })
   })
 
-  it('does not pull or overwrite metadata for a dirty event row', async () => {
+  it('does not pull content for a dirty event row', async () => {
     revisionSummary.mockResolvedValue({
       current_revision: '8',
       oldest_replayable_revision: '1',

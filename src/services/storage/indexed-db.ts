@@ -3476,7 +3476,9 @@ export class IndexedDBStorage {
             const request = chats.get(state.id)
             request.onsuccess = () => {
               const chat = request.result as StoredChat | undefined
-              if (!chat || chat.isLocalOnly || chat.locallyModified) return
+              if (!chat || chat.isLocalOnly || chat.projectLocallyModified) {
+                return
+              }
               chat.projectId = state.projectId ?? undefined
               chat.projectLocallyModified = false
               chats.put(chat)
@@ -3540,7 +3542,7 @@ export class IndexedDBStorage {
               deleteAttachmentPayloadsForChat(payloads, chat.id)
               deletedIds.push(chat.id)
             }
-          } else if (!chat.locallyModified) {
+          } else if (!chat.projectLocallyModified) {
             chat.projectId = state.projectId ?? undefined
             chat.projectLocallyModified = false
             cursor.update(chat)

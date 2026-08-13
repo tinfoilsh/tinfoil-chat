@@ -112,6 +112,8 @@ export type RawChatContent = {
   plaintext: string
   formatVersion: 2
   syncVersion?: number
+  projectIdSet: boolean
+  projectId?: string | null
 }
 
 function etagToSyncVersion(etag: string | undefined): number | undefined {
@@ -436,6 +438,8 @@ export class CloudStorageService {
       plaintext: new TextDecoder().decode(plaintext),
       formatVersion: 2,
       syncVersion: etagToSyncVersion(item.etag),
+      projectIdSet: item.project_id_set === true,
+      projectId: item.project_id,
     }
   }
 
@@ -454,7 +458,10 @@ export class CloudStorageService {
         syncVersion: raw.syncVersion,
       }
 
-      const result = await processRemoteChat(remote)
+      const result = await processRemoteChat(
+        remote,
+        raw.projectIdSet ? { projectId: raw.projectId } : {},
+      )
       return result.chat
     } catch (error) {
       logError(`Failed to download chat ${chatId}`, error, {

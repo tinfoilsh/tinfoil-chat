@@ -136,6 +136,34 @@ describe('CloudStorageService auth readiness', () => {
     ).rejects.toThrow('incomplete chat batch')
   })
 
+  it('preserves an explicit project delete on a single conflict pull', async () => {
+    mockEnclavePull.mockResolvedValue({
+      items: [
+        {
+          id: 'chat-1',
+          ok: true,
+          etag: '2',
+          project_id_set: true,
+          project_id: null,
+          plaintext: btoa(
+            JSON.stringify({
+              id: 'chat-1',
+              title: 'Remote',
+              messages: [],
+              projectId: 'stale-project',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-02T00:00:00.000Z',
+            }),
+          ),
+        },
+      ],
+    })
+
+    const chat = await new CloudStorageService().downloadChat('chat-1')
+
+    expect(chat?.projectId).toBeUndefined()
+  })
+
   it('waits for auth token manager initialization before listing chats', async () => {
     mockIsInitialized.mockReturnValue(false)
     localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')

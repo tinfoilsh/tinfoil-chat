@@ -90,6 +90,8 @@ export interface PullItem {
   plaintext?: string
   key_id?: string
   etag?: string
+  project_id_set?: boolean
+  project_id?: string | null
   needs_rewrap?: boolean
   /** Error code when `ok=false` (e.g. "NEEDS_REWRAP", "NOT_FOUND"). */
   code?: string

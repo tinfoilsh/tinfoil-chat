@@ -637,6 +637,88 @@ describe('IndexedDB sync protocol v2 migration', () => {
     )
   })
 
+  it('applies a remote project delete to a content-dirty chat', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'dirty-chat',
+      title: 'Chat',
+      projectId: 'old-project',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    await storage.markAsSynced('dirty-chat', 2)
+    await storage.saveChat({
+      ...(await storage.getChat('dirty-chat'))!,
+      title: 'Locally edited',
+    })
+
+    await storage.commitRevisionBatch(
+      [
+        {
+          id: 'dirty-chat',
+          revision: '3',
+          kind: 'upsert',
+          etag: '3',
+          projectId: null,
+          updatedAt: '2026-01-02T00:00:00Z',
+        },
+      ],
+      '3',
+      'user-1',
+    )
+
+    await expect(storage.getChat('dirty-chat')).resolves.toEqual(
+      expect.objectContaining({
+        projectId: undefined,
+        locallyModified: true,
+        projectLocallyModified: false,
+      }),
+    )
+  })
+
+  it('applies a remote project move during dirty snapshot reconciliation', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'dirty-chat',
+      title: 'Chat',
+      projectId: 'old-project',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    await storage.markAsSynced('dirty-chat', 2)
+    await storage.saveChat({
+      ...(await storage.getChat('dirty-chat'))!,
+      title: 'Locally edited',
+    })
+
+    await storage.reconcileRevisionSnapshot(
+      [
+        {
+          id: 'dirty-chat',
+          revision: '4',
+          kind: 'upsert',
+          etag: '4',
+          projectId: 'remote-project',
+          updatedAt: '2026-01-02T00:00:00Z',
+        },
+      ],
+      '4',
+      'user-1',
+    )
+
+    await expect(storage.getChat('dirty-chat')).resolves.toEqual(
+      expect.objectContaining({
+        projectId: 'remote-project',
+        locallyModified: true,
+        projectLocallyModified: false,
+      }),
+    )
+  })
+
   it('recomputes pending state for local-only and project toggles', async () => {
     const storage = new IndexedDBStorage()
     await storage.initialize()
@@ -701,6 +783,31 @@ describe('IndexedDB sync protocol v2 migration', () => {
       expect.objectContaining({
         projectId: 'project-b',
         projectLocallyModified: true,
+      }),
+    )
+  })
+
+  it('preserves local project intent while rebasing a conflict retry', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'chat-1',
+      title: 'Chat',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    await storage.markAsSynced('chat-1', 1)
+    await storage.updateChatProject('chat-1', 'local-project')
+
+    await storage.rebaseSyncVersion('chat-1', 2)
+
+    await expect(storage.getChat('chat-1')).resolves.toEqual(
+      expect.objectContaining({
+        projectId: 'local-project',
+        projectLocallyModified: true,
+        locallyModified: true,
+        syncVersion: 2,
       }),
     )
   })

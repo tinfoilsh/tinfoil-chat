@@ -8,6 +8,7 @@ import {
   SYNC_SESSION_CHATS,
 } from '@/constants/storage-keys'
 import { chatEvents } from '@/services/storage/chat-events'
+import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import {
   indexedDBStorage,
   type RemoteChatState,
@@ -143,6 +144,7 @@ async function applyPulledUpserts(
           ...chat,
           updatedAt: event.updated_at,
           syncVersion: etagToSyncVersion(event.etag),
+          projectId: event.project_id,
         }
       }),
       { isCurrent, userId },
@@ -228,6 +230,7 @@ async function bootstrapFromSnapshot(
         ...chat,
         updatedAt: metadata.get(chat.id)!.updated_at,
         syncVersion: etagToSyncVersion(metadata.get(chat.id)!.etag),
+        projectId: metadata.get(chat.id)!.project_id,
       })),
       { isCurrent, userId },
     )
@@ -241,6 +244,12 @@ async function bootstrapFromSnapshot(
     snapshotRevision,
     userId,
   )
+  for (const id of deletedIds) deletedChatsTracker.markAsDeleted(id)
+  for (const item of items) {
+    if (!pendingDeleteIds.has(item.id)) {
+      deletedChatsTracker.removeFromDeleted(item.id)
+    }
+  }
   if (deletedIds.length > 0) {
     chatEvents.emit({ reason: 'sync', ids: deletedIds })
   }
@@ -258,11 +267,20 @@ async function applyEvents(
   let downloaded = 0
   const committedStates: RemoteChatState[] = []
   let pendingUpserts: RevisionEvent[] = []
+  const clearTombstoneIds = new Set<string>()
 
   const flushUpserts = async () => {
     const applied = await applyPulledUpserts(pendingUpserts, userId, isCurrent)
     downloaded += applied.downloaded
     committedStates.push(...applied.states)
+    const pendingDeleteIds = new Set(
+      (await indexedDBStorage.getPendingDeletes(userId)).map(
+        (entry) => entry.id,
+      ),
+    )
+    for (const state of applied.states) {
+      if (!pendingDeleteIds.has(state.id)) clearTombstoneIds.add(state.id)
+    }
     pendingUpserts = []
   }
 
@@ -294,6 +312,8 @@ async function applyEvents(
         userId,
         isCurrent,
       )
+      deletedChatsTracker.markAsDeleted(event.id)
+      clearTombstoneIds.delete(event.id)
       committedStates.push(toRemoteState(event, event.revision, 'delete'))
       if (deleted) chatEvents.emit({ reason: 'sync', ids: [event.id] })
     }
@@ -306,6 +326,11 @@ async function applyEvents(
     throughRevision,
     userId,
   )
+  for (const state of committedStates) {
+    if (state.kind === 'upsert' && clearTombstoneIds.has(state.id)) {
+      deletedChatsTracker.removeFromDeleted(state.id)
+    }
+  }
   return downloaded
 }
 

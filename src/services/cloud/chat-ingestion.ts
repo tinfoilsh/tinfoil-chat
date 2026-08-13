@@ -22,6 +22,7 @@ export interface RemoteChatEntry {
   createdAt?: string
   updatedAt?: string
   syncVersion?: number
+  projectId?: string | null
 }
 
 export interface IngestOptions {
@@ -94,7 +95,11 @@ export async function ingestRemoteChats(
       if (!codecInput.plaintext) continue
 
       const codecOptions: ProcessRemoteChatOptions = { localChat }
-      if (projectId) codecOptions.projectId = projectId
+      if ('projectId' in remoteChat) {
+        codecOptions.projectId = remoteChat.projectId
+      } else if (projectId) {
+        codecOptions.projectId = projectId
+      }
       const decoded = await processRemoteChat(codecInput, codecOptions)
       if (!isCurrent()) break
       const applied = await indexedDBStorage.applyRemoteChatIfFresh({
