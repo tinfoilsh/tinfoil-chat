@@ -1,3 +1,4 @@
+import { useToast } from '@/hooks/use-toast'
 import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { isChatRecoveryTurnCancelled } from '@/services/inference/chat-recovery'
@@ -91,6 +92,7 @@ export function useChatStorage({
   initialNewChatIsLocalOnly = false,
 }: UseChatStorageProps): UseChatStorageReturn {
   const { isSignedIn } = useAuth()
+  const { toast } = useToast()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const initialChatLoadedRef = useRef(false)
   const reloadGenerationRef = useRef(0)
@@ -114,6 +116,7 @@ export function useChatStorage({
     })
   const currentChatRef = useRef(currentChat)
   currentChatRef.current = currentChat
+  const selectionRequestRef = useRef(0)
 
   // Create persistence manager
   const persistenceManager = useMemo(
@@ -550,30 +553,51 @@ export function useChatStorage({
 
   const selectChat = useCallback(
     async (chat: Chat) => {
-      switchChat(chat)
-      if (!chat.isMetadataOnly) return
+      const selectionRequest = ++selectionRequestRef.current
+      if (!chat.isMetadataOnly) {
+        switchChat(chat)
+        return
+      }
 
       try {
         const hydratedChat = await chatStorage.getChat(chat.id)
-        if (!hydratedChat) return
+        if (!hydratedChat) {
+          throw new Error('Selected chat no longer exists')
+        }
         // Apply by id, not reference: a concurrent reload may have
-        // replaced the objects in state. Only chats still waiting on
-        // their messages adopt the hydrated copy, so live updates that
-        // landed during hydration are never overwritten.
-        const applyHydration = (candidate: Chat): Chat =>
-          candidate.id === chat.id && candidate.isMetadataOnly
-            ? hydratedChat
-            : candidate
-        setChats((previous) => previous.map(applyHydration))
-        setCurrentChat(applyHydration)
+        // replaced the objects in state. The selected summary revision
+        // must still be current so a live update is never overwritten.
+        setChatCollection((previous) => {
+          if (selectionRequest !== selectionRequestRef.current) return previous
+          const candidate = previous.chats.find(({ id }) => id === chat.id)
+          if (
+            !candidate?.isMetadataOnly ||
+            candidate.updatedAt !== chat.updatedAt ||
+            candidate.messageCount !== chat.messageCount
+          ) {
+            return previous
+          }
+          return {
+            chats: previous.chats.map((current) =>
+              current.id === chat.id ? hydratedChat : current,
+            ),
+            currentChat: hydratedChat,
+          }
+        })
       } catch (error) {
+        if (selectionRequest !== selectionRequestRef.current) return
         logError('Failed to load selected chat', error, {
           component: 'useChatStorage',
           metadata: { chatId: chat.id },
         })
+        toast({
+          title: 'Failed to load chat',
+          description: 'Please try again.',
+          variant: 'destructive',
+        })
       }
     },
-    [setChats, setCurrentChat, switchChat],
+    [setChatCollection, switchChat, toast],
   )
 
   // Handle chat selection

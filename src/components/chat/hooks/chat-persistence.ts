@@ -29,6 +29,7 @@ interface UpdateChatOptions {
   skipIndexedDBSave?: boolean
   allowCloudSyncWhileStreaming?: boolean
   metadataPatch?: Partial<Chat>
+  requireExisting?: boolean
 }
 
 export function createUpdateChatWithHistoryCheck({
@@ -49,6 +50,7 @@ export function createUpdateChatWithHistoryCheck({
       skipIndexedDBSave = false,
       allowCloudSyncWhileStreaming = false,
       metadataPatch = {},
+      requireExisting = false,
     } = options
     const liveChat =
       (currentChatRef.current.id === chatId
@@ -132,9 +134,12 @@ export function createUpdateChatWithHistoryCheck({
         },
       })
 
-      chatStorage
-        .saveChat(updatedChat, shouldSkipCloudSync)
+      const save = requireExisting
+        ? chatStorage.saveExistingChat(updatedChat, shouldSkipCloudSync)
+        : chatStorage.saveChat(updatedChat, shouldSkipCloudSync)
+      save
         .then((savedChat) => {
+          if (!savedChat) return
           logInfo('[persistence] Chat saved successfully', {
             component: 'chat-persistence',
             action: 'updateChatWithHistoryCheck.saved',

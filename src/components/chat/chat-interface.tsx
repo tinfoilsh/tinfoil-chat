@@ -1043,6 +1043,11 @@ export function ChatInterface({
     notifyGenerationCancelled,
   } = useMessageQueue({
     chatId: currentChat?.id ?? null,
+    queueId: currentChat?.id
+      ? currentChat.id
+      : currentChat?.isLocalOnly
+        ? 'blank-local'
+        : 'blank-cloud',
     loadingState,
     handleQuery,
     isRateLimited,

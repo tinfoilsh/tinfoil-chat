@@ -112,6 +112,27 @@ describe('IndexedDB metadata-only chat saves', () => {
     expect(await storage.getChat('chat-1')).toBeNull()
   })
 
+  it('does not recreate a deleted row from a hydrated existing-chat save', async () => {
+    const storage = new IndexedDBStorage()
+    const chat = storedChat('chat-1', { messages: conversationMessages() })
+    await storage.saveChat(chat)
+    await storage.deleteChat('chat-1')
+
+    await storage.saveExistingChat({
+      ...chat,
+      messages: [
+        ...chat.messages,
+        {
+          role: 'user',
+          content: 'Late send',
+          timestamp: new Date('2026-08-12T00:00:02.000Z'),
+        },
+      ],
+    })
+
+    expect(await storage.getChat('chat-1')).toBeNull()
+  })
+
   it('never persists summary markers on the full chat row', async () => {
     const storage = new IndexedDBStorage()
     await storage.saveChat(

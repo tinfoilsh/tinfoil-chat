@@ -46,6 +46,21 @@ export class ChatStorageService {
   }
 
   async saveChat(chat: Chat, skipCloudSync = false): Promise<Chat> {
+    return (await this.saveChatInternal(chat, skipCloudSync, false)) ?? chat
+  }
+
+  async saveExistingChat(
+    chat: Chat,
+    skipCloudSync = false,
+  ): Promise<Chat | null> {
+    return this.saveChatInternal(chat, skipCloudSync, true)
+  }
+
+  private async saveChatInternal(
+    chat: Chat,
+    skipCloudSync: boolean,
+    requireExisting: boolean,
+  ): Promise<Chat | null> {
     await this.initialize()
 
     // Never save blank chats to storage
@@ -72,7 +87,12 @@ export class ChatStorageService {
       isLocalOnly: chatToSave.isLocalOnly === true || !isCloudSyncEnabled(),
     }
 
-    await indexedDBStorage.saveChat(storageChat)
+    if (requireExisting) {
+      await indexedDBStorage.saveExistingChat(storageChat)
+      if (!(await indexedDBStorage.getChat(chat.id))) return null
+    } else {
+      await indexedDBStorage.saveChat(storageChat)
+    }
 
     // Emit change event after local save
     chatEvents.emit({ reason: 'save', ids: [chatToSave.id] })

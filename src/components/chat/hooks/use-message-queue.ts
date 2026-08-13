@@ -18,6 +18,7 @@ export type QueueSubmitInput = {
 
 type UseMessageQueueArgs = {
   chatId: string | null | undefined
+  queueId?: string | null
   loadingState: LoadingState
   handleQuery: HandleQuery
   isRateLimited: () => boolean
@@ -37,8 +38,14 @@ type UseMessageQueueReturn = {
 
 const isBrowser = typeof window !== 'undefined'
 
-function storageKeyFor(chatId: string | null | undefined): string | null {
-  return chatId ? `${MESSAGE_QUEUE_PREFIX}${chatId}` : null
+function isBlankQueueId(queueId: string): boolean {
+  return queueId === 'blank-local' || queueId === 'blank-cloud'
+}
+
+function storageKeyFor(queueId: string | null | undefined): string | null {
+  return queueId && !isBlankQueueId(queueId)
+    ? `${MESSAGE_QUEUE_PREFIX}${queueId}`
+    : null
 }
 
 function generateQueuedId(): string {
@@ -114,6 +121,7 @@ function writeToStorage(key: string | null, queue: QueuedMessage[]): void {
  */
 export function useMessageQueue({
   chatId,
+  queueId = chatId,
   loadingState,
   handleQuery,
   isRateLimited,
@@ -145,14 +153,16 @@ export function useMessageQueue({
   // Mirror of the active chat id for reads inside stable callbacks.
   const currentChatIdRef = useRef<string | null | undefined>(chatId)
   currentChatIdRef.current = chatId
+  const currentQueueIdRef = useRef<string | null | undefined>(queueId)
+  currentQueueIdRef.current = queueId
 
   // Rendered queue tracks the chat on screen.
-  const [queue, setQueue] = useState<QueuedMessage[]>(() => getQueue(chatId))
+  const [queue, setQueue] = useState<QueuedMessage[]>(() => getQueue(queueId))
 
   const setQueueFor = useCallback((id: string, next: QueuedMessage[]) => {
     queuesRef.current.set(id, next)
     writeToStorage(storageKeyFor(id), next)
-    if (id === currentChatIdRef.current) setQueue(next)
+    if (id === currentQueueIdRef.current) setQueue(next)
   }, [])
 
   // Latest-value mirrors so the async pump always calls the current
@@ -202,9 +212,12 @@ export function useMessageQueue({
   const cancelWaitersRef = useRef<Map<string, Set<() => void>>>(new Map())
 
   const notifyGenerationCancelled = useCallback((id: string): void => {
-    const waiters = cancelWaitersRef.current.get(id)
+    const queueKey =
+      id === currentChatIdRef.current ? currentQueueIdRef.current : id
+    if (queueKey == null) return
+    const waiters = cancelWaitersRef.current.get(queueKey)
     if (!waiters) return
-    cancelWaitersRef.current.delete(id)
+    cancelWaitersRef.current.delete(queueKey)
     for (const resolve of waiters) resolve()
   }, [])
 
@@ -256,9 +269,9 @@ export function useMessageQueue({
       try {
         while (getQueue(pump.id).length > 0) {
           // Only the chat on screen can dispatch; pause otherwise.
-          if (pump.id !== currentChatIdRef.current) return
+          if (pump.id !== currentQueueIdRef.current) return
           await waitForIdle()
-          if (pump.id !== currentChatIdRef.current) return
+          if (pump.id !== currentQueueIdRef.current) return
 
           if (isRateLimitedRef.current()) {
             if (!rateLimitPromptShownRef.current) {
@@ -314,7 +327,7 @@ export function useMessageQueue({
         // rate-limited so we don't busy-spin; the rate-limit effect resumes
         // the queue once the limit clears.
         if (
-          pump.id === currentChatIdRef.current &&
+          pump.id === currentQueueIdRef.current &&
           getQueue(pump.id).length > 0 &&
           !isRateLimitedRef.current() &&
           !isDispatchBlockedRef.current?.()
@@ -334,7 +347,7 @@ export function useMessageQueue({
   useEffect(() => {
     if (!isRateLimited()) {
       rateLimitPromptShownRef.current = false
-      const id = currentChatIdRef.current
+      const id = currentQueueIdRef.current
       if (id != null && getQueue(id).length > 0) {
         void runPump(id)
       }
@@ -343,7 +356,7 @@ export function useMessageQueue({
 
   useEffect(() => {
     if (dispatchBlocked) return
-    const id = currentChatIdRef.current
+    const id = currentQueueIdRef.current
     if (id != null && getQueue(id).length > 0) {
       void runPump(id)
     }
@@ -351,7 +364,7 @@ export function useMessageQueue({
 
   const submit = useCallback(
     (input: QueueSubmitInput): void => {
-      const id = currentChatIdRef.current
+      const id = currentQueueIdRef.current
       if (id == null) return
       const item: QueuedMessage = {
         id: generateQueuedId(),
@@ -372,13 +385,16 @@ export function useMessageQueue({
   // being converted to a real id (a brand-new conversation getting its
   // server/local id on its first message).
   const prevChatIdRef = useRef<string | null | undefined>(chatId)
+  const prevQueueIdRef = useRef<string | null | undefined>(queueId)
 
   // Sync the rendered queue to the active chat and resume draining it (e.g.
   // messages left in sessionStorage, or queued while the chat was in the
   // background). Runs on mount and on every chat switch.
   useEffect(() => {
     const prev = prevChatIdRef.current
+    const previousQueueId = prevQueueIdRef.current
     prevChatIdRef.current = chatId
+    prevQueueIdRef.current = queueId
 
     // Blank chats all share the empty-string id. When one converts to a
     // real id, re-key its in-flight pump and queue so the freed blank id is
@@ -387,12 +403,13 @@ export function useMessageQueue({
     // between existing chats.
     if (
       prev === '' &&
+      previousQueueId != null &&
       chatId != null &&
       chatId !== '' &&
-      pumpsRef.current.has('')
+      pumpsRef.current.has(previousQueueId)
     ) {
-      const pump = pumpsRef.current.get('')
-      const pending = queuesRef.current.get('')
+      const pump = pumpsRef.current.get(previousQueueId)
+      const pending = queuesRef.current.get(previousQueueId)
       if (pending && pending.length > 0) {
         queuesRef.current.set(chatId, [
           ...(queuesRef.current.get(chatId) ?? []),
@@ -400,17 +417,17 @@ export function useMessageQueue({
         ])
         writeToStorage(storageKeyFor(chatId), queuesRef.current.get(chatId)!)
       }
-      queuesRef.current.delete('')
+      queuesRef.current.delete(previousQueueId)
       if (pump) {
         pump.id = chatId
-        pumpsRef.current.delete('')
+        pumpsRef.current.delete(previousQueueId)
         pumpsRef.current.set(chatId, pump)
       }
       // Follow the conversion for armed cancel waiters too, so a Stop on
       // the (now real) chat still unwedges a dispatch started while blank.
-      const cancelWaiters = cancelWaitersRef.current.get('')
+      const cancelWaiters = cancelWaitersRef.current.get(previousQueueId)
       if (cancelWaiters) {
-        cancelWaitersRef.current.delete('')
+        cancelWaitersRef.current.delete(previousQueueId)
         const existing = cancelWaitersRef.current.get(chatId)
         if (existing) {
           for (const waiter of cancelWaiters) existing.add(waiter)
@@ -420,15 +437,15 @@ export function useMessageQueue({
       }
     }
 
-    setQueue(getQueue(chatId))
-    if (chatId != null && getQueue(chatId).length > 0) {
-      void runPump(chatId)
+    setQueue(getQueue(queueId))
+    if (queueId != null && getQueue(queueId).length > 0) {
+      void runPump(queueId)
     }
-  }, [chatId, getQueue, runPump])
+  }, [chatId, queueId, getQueue, runPump])
 
   const removeQueuedMessage = useCallback(
     (queuedId: string): void => {
-      const id = currentChatIdRef.current
+      const id = currentQueueIdRef.current
       if (id == null) return
       setQueueFor(
         id,
@@ -449,7 +466,7 @@ export function useMessageQueue({
   // the message.
   const sendQueuedMessage = useCallback(
     (queuedId: string): void => {
-      const id = currentChatIdRef.current
+      const id = currentQueueIdRef.current
       if (id == null) return
       const currentQueue = getQueue(id)
       const item = currentQueue.find((m) => m.id === queuedId)
@@ -458,7 +475,9 @@ export function useMessageQueue({
       setQueueFor(id, [item, ...currentQueue.filter((m) => m.id !== queuedId)])
       notifyGenerationCancelled(id)
       if (loadingStateRef.current !== 'idle') {
-        void cancelGenerationRef.current?.(id)
+        void cancelGenerationRef.current?.(
+          currentChatIdRef.current ?? undefined,
+        )
       }
       void runPump(id)
     },

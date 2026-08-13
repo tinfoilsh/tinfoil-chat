@@ -11,12 +11,14 @@ const {
   mockDownloadChat,
   mockLoadChatImages,
   mockApplyRemoteChat,
+  mockToast,
 } = vi.hoisted(() => ({
   mockLoadChats: vi.fn(),
   mockIsStreaming: vi.fn(),
   mockDownloadChat: vi.fn(),
   mockLoadChatImages: vi.fn(),
   mockApplyRemoteChat: vi.fn(),
+  mockToast: vi.fn(),
 }))
 
 vi.mock('@clerk/nextjs', () => ({
@@ -55,6 +57,10 @@ vi.mock('@/services/storage/indexed-db', () => ({
   indexedDBStorage: {
     applyRemoteChatIfFresh: mockApplyRemoteChat,
   },
+}))
+
+vi.mock('@/hooks/use-toast', () => ({
+  useToast: () => ({ toast: mockToast }),
 }))
 
 function createMockRecovery(
@@ -124,6 +130,105 @@ describe('useChatStorage.reloadChats', () => {
     )
 
     expect(getChat).toHaveBeenCalledWith(summary.id)
+  })
+
+  it('keeps the prior chat visible and ignores late A hydration after selecting B', async () => {
+    const prior = {
+      id: 'prior',
+      title: 'Prior',
+      messages: [
+        {
+          role: 'user' as const,
+          content: 'Still visible',
+          timestamp: new Date('2026-08-12T00:00:00.000Z'),
+        },
+      ],
+      createdAt: new Date('2026-08-12T00:00:00.000Z'),
+      isBlankChat: false,
+      isLocalOnly: false,
+    }
+    const summaryA = {
+      ...prior,
+      id: 'A',
+      title: 'A',
+      messages: [],
+      messageCount: 1,
+      isMetadataOnly: true,
+    }
+    const summaryB = { ...summaryA, id: 'B', title: 'B' }
+    const hydratedA = {
+      ...summaryA,
+      messages: prior.messages,
+      isMetadataOnly: false,
+    }
+    const hydratedB = {
+      ...summaryB,
+      messages: prior.messages,
+      isMetadataOnly: false,
+    }
+    let resolveA!: (chat: typeof hydratedA) => void
+    let resolveB!: (chat: typeof hydratedB) => void
+    mockLoadChats.mockResolvedValueOnce([prior, summaryA, summaryB])
+    vi.spyOn(chatStorage, 'getChat').mockImplementation((id) =>
+      id === 'A'
+        ? new Promise((resolve) => {
+            resolveA = resolve
+          })
+        : new Promise((resolve) => {
+            resolveB = resolve
+          }),
+    )
+    const { result } = renderHook(() => useChatStorage({ storeHistory: true }))
+    await waitFor(() => expect(result.current.isInitialLoad).toBe(false))
+    act(() => result.current.setCurrentChat(prior))
+
+    act(() => result.current.handleChatSelect('A'))
+    expect(result.current.currentChat.id).toBe('prior')
+    act(() => result.current.handleChatSelect('B'))
+    expect(result.current.currentChat.id).toBe('prior')
+
+    await act(async () => resolveB(hydratedB))
+    expect(result.current.currentChat.id).toBe('B')
+    await act(async () => resolveA(hydratedA))
+    expect(result.current.currentChat.id).toBe('B')
+    expect(result.current.chats.find(({ id }) => id === 'A')).toBe(summaryA)
+  })
+
+  it('keeps the prior chat visible and shows an error when hydration fails', async () => {
+    const prior = {
+      id: 'prior',
+      title: 'Prior',
+      messages: [
+        {
+          role: 'user' as const,
+          content: 'Still visible',
+          timestamp: new Date('2026-08-12T00:00:00.000Z'),
+        },
+      ],
+      createdAt: new Date('2026-08-12T00:00:00.000Z'),
+      isBlankChat: false,
+      isLocalOnly: false,
+    }
+    const summary = {
+      ...prior,
+      id: 'A',
+      messages: [],
+      messageCount: 1,
+      isMetadataOnly: true,
+    }
+    mockLoadChats.mockResolvedValueOnce([prior, summary])
+    vi.spyOn(chatStorage, 'getChat').mockRejectedValue(new Error('read failed'))
+    const { result } = renderHook(() => useChatStorage({ storeHistory: true }))
+    await waitFor(() => expect(result.current.isInitialLoad).toBe(false))
+    act(() => result.current.setCurrentChat(prior))
+
+    act(() => result.current.handleChatSelect('A'))
+    await waitFor(() => expect(mockToast).toHaveBeenCalled())
+
+    expect(result.current.currentChat).toMatchObject(prior)
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Failed to load chat' }),
+    )
   })
 
   it('does not overwrite a selected chat that changes during hydration', async () => {
@@ -212,7 +317,7 @@ describe('useChatStorage.reloadChats', () => {
     await act(async () => {
       await result.current.reloadChats()
     })
-    expect(result.current.currentChat.id).toBe(summary.id)
+    expect(result.current.currentChat.isBlankChat).toBe(true)
 
     await act(async () => finishHydration(hydrated))
 

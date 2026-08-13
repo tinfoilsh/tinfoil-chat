@@ -1,5 +1,6 @@
 import { useMessageQueue } from '@/components/chat/hooks/use-message-queue'
 import type { LoadingState } from '@/components/chat/types'
+import { MESSAGE_QUEUE_PREFIX } from '@/constants/storage-keys'
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -88,7 +89,7 @@ describe('useMessageQueue concurrency', () => {
   })
 
   it('dispatches the first message of a blank chat (empty string id)', async () => {
-    const handleQuery = vi.fn(() => Promise.resolve())
+    const handleQuery = vi.fn((_text: string) => Promise.resolve())
 
     const { result } = renderHook(() =>
       useMessageQueue({
@@ -112,6 +113,112 @@ describe('useMessageQueue concurrency', () => {
       undefined,
       undefined,
     )
+  })
+
+  it('keeps local and cloud blank queues isolated while dispatch is blocked', async () => {
+    const handleQuery = vi.fn((_text: string) => Promise.resolve())
+    let blocked = true
+
+    const { result, rerender } = renderHook(
+      ({ queueId, dispatchBlocked }) =>
+        useMessageQueue({
+          chatId: '',
+          queueId,
+          loadingState: 'idle' as LoadingState,
+          handleQuery,
+          isRateLimited: () => false,
+          isDispatchBlocked: () => blocked,
+          dispatchBlocked,
+        }),
+      {
+        initialProps: {
+          queueId: 'blank-local',
+          dispatchBlocked: true as boolean,
+        },
+      },
+    )
+
+    act(() => result.current.submit({ text: 'local message' }))
+    rerender({ queueId: 'blank-cloud', dispatchBlocked: true })
+    act(() => result.current.submit({ text: 'cloud message' }))
+    await flushMicrotasks()
+
+    expect(handleQuery).not.toHaveBeenCalled()
+    expect(result.current.queuedMessages.map(({ text }) => text)).toEqual([
+      'cloud message',
+    ])
+
+    blocked = false
+    rerender({ queueId: 'blank-cloud', dispatchBlocked: false })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+    expect(handleQuery.mock.calls[0][0]).toBe('cloud message')
+
+    rerender({ queueId: 'blank-local', dispatchBlocked: false })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(2)
+    expect(handleQuery.mock.calls[1][0]).toBe('local message')
+  })
+
+  it('re-keys a blank queue to the created chat id', async () => {
+    let resolveFirst!: () => void
+    const handleQuery = vi.fn((text: string) =>
+      text === 'first'
+        ? new Promise<void>((resolve) => {
+            resolveFirst = resolve
+          })
+        : Promise.resolve(),
+    )
+
+    const { result, rerender } = renderHook(
+      ({ chatId, queueId, loadingState }) =>
+        useMessageQueue({
+          chatId,
+          queueId,
+          loadingState,
+          handleQuery,
+          isRateLimited: () => false,
+        }),
+      {
+        initialProps: {
+          chatId: '',
+          queueId: 'blank-local',
+          loadingState: 'idle' as LoadingState,
+        },
+      },
+    )
+
+    act(() => {
+      result.current.submit({ text: 'first' })
+      result.current.submit({ text: 'second' })
+    })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+
+    rerender({
+      chatId: 'real-chat',
+      queueId: 'real-chat',
+      loadingState: 'loading' as LoadingState,
+    })
+    expect(result.current.queuedMessages.map(({ text }) => text)).toEqual([
+      'second',
+    ])
+    expect(
+      JSON.parse(
+        window.sessionStorage.getItem(`${MESSAGE_QUEUE_PREFIX}real-chat`) ??
+          '[]',
+      ).map(({ text }: { text: string }) => text),
+    ).toEqual(['second'])
+
+    act(() => resolveFirst())
+    rerender({
+      chatId: 'real-chat',
+      queueId: 'real-chat',
+      loadingState: 'idle' as LoadingState,
+    })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(2)
+    expect(handleQuery.mock.calls[1][0]).toBe('second')
   })
 
   it('frees the blank chat id after conversion so the next new chat can send', async () => {
