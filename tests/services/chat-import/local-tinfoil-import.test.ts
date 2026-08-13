@@ -8,6 +8,7 @@ import {
   parseLocalTinfoilExport,
 } from '@/services/chat-import/local-tinfoil-import'
 import { parseTinfoilExportBytes } from '@/services/chat-import/local-tinfoil-import-parser'
+import { createFunctionalImportWorker } from './functional-import-worker'
 
 const options = {
   generateChatId: () => 'imported-chat',
@@ -34,45 +35,8 @@ function conversation(attachments?: unknown[]) {
   ]
 }
 
-interface WorkerRequest {
-  buffer: ArrayBuffer
-  fileName: string
-  mimeType: string
-  maxArchiveBytes: number
-}
-
 const parseInWorker = vi.fn(parseTinfoilExportBytes)
-
-class FunctionalImportWorker {
-  onmessage: ((event: MessageEvent) => void) | null = null
-  onerror: ((event: ErrorEvent) => void) | null = null
-  onmessageerror: (() => void) | null = null
-
-  postMessage(message: unknown) {
-    const request = message as WorkerRequest
-    queueMicrotask(() => {
-      try {
-        const result = parseInWorker({
-          bytes: new Uint8Array(request.buffer),
-          fileName: request.fileName,
-          mimeType: request.mimeType,
-          maxArchiveBytes: request.maxArchiveBytes,
-        })
-        this.onmessage?.({ data: { ok: true, ...result } } as MessageEvent)
-      } catch (error) {
-        this.onmessage?.({
-          data: {
-            ok: false,
-            error:
-              error instanceof Error ? error.message : 'Failed to read export',
-          },
-        } as MessageEvent)
-      }
-    })
-  }
-
-  terminate() {}
-}
+const FunctionalImportWorker = createFunctionalImportWorker(parseInWorker)
 
 describe('parseLocalTinfoilExport', () => {
   beforeEach(() => {
