@@ -72,7 +72,8 @@ export class ChatStorageService {
       isLocalOnly: chatToSave.isLocalOnly === true || !isCloudSyncEnabled(),
     }
 
-    await indexedDBStorage.saveChat(storageChat)
+    const saveResult = await indexedDBStorage.saveChat(storageChat)
+    const isLocalOnly = saveResult.isLocalOnly
 
     // Emit change event after local save
     chatEvents.emit({ reason: 'save', ids: [chatToSave.id] })
@@ -85,7 +86,7 @@ export class ChatStorageService {
     if (
       !skipCloudSync &&
       !streamingTracker.isStreaming(chatToSave.id) &&
-      !storageChat.isLocalOnly
+      !isLocalOnly
     ) {
       cloudSync.backupChat(chatToSave.id).catch((error) => {
         logError('Failed to backup chat to cloud', error, {
@@ -98,7 +99,7 @@ export class ChatStorageService {
 
     return {
       ...chatToSave,
-      isLocalOnly: storageChat.isLocalOnly,
+      isLocalOnly,
       updatedAt: storageChat.updatedAt,
       createdAt:
         chatToSave.createdAt instanceof Date

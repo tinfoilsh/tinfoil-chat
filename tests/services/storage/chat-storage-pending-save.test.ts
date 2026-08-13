@@ -3,7 +3,10 @@ import { chatStorage } from '@/services/storage/chat-storage'
 import { setCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const saveChatSpy = vi.fn(async (chat: unknown) => chat)
+const saveChatSpy = vi.fn(async (chat: unknown) => ({
+  saved: true,
+  isLocalOnly: (chat as { isLocalOnly?: boolean }).isLocalOnly === true,
+}))
 const getChatSpy = vi.fn(async () => null as unknown)
 const getAllChatsSpy = vi.fn(async () => [] as unknown[])
 const resetChatTimestampsSpy = vi.fn(async () => {})
@@ -135,6 +138,16 @@ describe('chatStorage local-only classification', () => {
     const persisted = saveChatSpy.mock.calls[0][0] as Record<string, unknown>
     expect(persisted.isLocalOnly).toBe(false)
     expect(backupChatSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses the persisted local-only classification for backup and return state', async () => {
+    setCloudSyncEnabled(true)
+    saveChatSpy.mockResolvedValueOnce({ saved: true, isLocalOnly: true })
+
+    const saved = await chatStorage.saveChat(makeChat({ isLocalOnly: false }))
+
+    expect(saved.isLocalOnly).toBe(true)
+    expect(backupChatSpy).not.toHaveBeenCalled()
   })
 })
 

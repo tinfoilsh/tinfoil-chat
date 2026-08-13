@@ -36,6 +36,11 @@ export interface StoredChat extends Chat {
   clockVersion?: number
 }
 
+export interface SaveChatResult {
+  saved: boolean
+  isLocalOnly: boolean
+}
+
 interface StoredProject {
   cacheKey: string
   userId: string
@@ -552,14 +557,14 @@ export class IndexedDBStorage {
     return trackedReset
   }
 
-  async saveChat(chat: Chat): Promise<void> {
+  async saveChat(chat: Chat): Promise<SaveChatResult> {
     const chatSnapshot = snapshotChatForStorage(chat)
     return this.enqueueSave('saveChat', () =>
       this.saveChatInternal(chatSnapshot),
     )
   }
 
-  async saveExistingChat(chat: Chat): Promise<void> {
+  async saveExistingChat(chat: Chat): Promise<SaveChatResult> {
     const chatSnapshot = snapshotChatForStorage(chat)
     return this.enqueueSave('saveExistingChat', () =>
       this.saveChatInternal(chatSnapshot, { requireExisting: true }),
@@ -631,22 +636,29 @@ export class IndexedDBStorage {
       markContentChangesAsLocal?: boolean
       allowLocalOnlyChange?: boolean
     } = {},
-  ): Promise<void> {
+  ): Promise<SaveChatResult> {
     this.assertActiveSaveGeneration()
     const db = await this.ensureDB()
     this.assertActiveSaveGeneration()
 
     // Don't save blank chats to IndexedDB
     if ((chat as StoredChat).isBlankChat === true) {
-      return
+      return {
+        saved: false,
+        isLocalOnly: (chat as StoredChat).isLocalOnly === true,
+      }
     }
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([CHATS_STORE], 'readwrite')
       const store = transaction.objectStore(CHATS_STORE)
+      let result: SaveChatResult = {
+        saved: false,
+        isLocalOnly: (chat as StoredChat).isLocalOnly === true,
+      }
 
       transaction.oncomplete = () => {
-        resolve()
+        resolve(result)
       }
 
       transaction.onerror = (event) => {
@@ -683,7 +695,6 @@ export class IndexedDBStorage {
       getRequest.onsuccess = () => {
         const existingChat = getRequest.result as StoredChat | undefined
         if (options.requireExisting && !existingChat) {
-          resolve()
           return
         }
 
@@ -781,6 +792,7 @@ export class IndexedDBStorage {
             undefined,
           isLocalOnly,
         }
+        result = { saved: true, isLocalOnly }
 
         const putRequest = store.put(storedChat)
 
@@ -1371,6 +1383,23 @@ export class IndexedDBStorage {
             }
 
             const chat = cursor.value as StoredChat
+            if (!Array.isArray(chat.messages)) {
+              logError(
+                'Skipping malformed chat during pending sync migration',
+                new TypeError('Stored chat has invalid messages'),
+                {
+                  component: 'IndexedDBStorage',
+                  action: 'ensureSyncPendingIndex',
+                  metadata: { chatId: chat.id },
+                },
+              )
+              if (chat.syncPending !== 0) {
+                chat.syncPending = 0
+                cursor.update(chat)
+              }
+              cursor.continue()
+              return
+            }
             const syncPending = chatNeedsSync(chat)
             if (chat.syncPending !== syncPending) {
               chat.syncPending = syncPending

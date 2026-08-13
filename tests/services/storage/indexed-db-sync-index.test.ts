@@ -77,6 +77,10 @@ describe('IndexedDB pending sync index', () => {
         locallyModified: true,
         decryptionFailed: true,
       }),
+      storedChat('malformed', {
+        locallyModified: true,
+        messages: undefined as unknown as StoredChat['messages'],
+      }),
     ])
 
     const storage = new IndexedDBStorage()

@@ -1704,7 +1704,7 @@ export function ChatInterface({
       !isSignedIn ||
       !cloudSyncInitialized ||
       !cloudSyncSettingEnabled ||
-      !encryptionKey
+      !encryptionService.getKey()
     ) {
       setChatPagination({ isReady: false, userId: authUserId ?? undefined })
       return
@@ -1792,7 +1792,6 @@ export function ChatInterface({
     authUserId,
     cloudSyncInitialized,
     cloudSyncSettingEnabled,
-    encryptionKey,
     isProjectMode,
     activeProjectIdForSync,
     syncChats,
