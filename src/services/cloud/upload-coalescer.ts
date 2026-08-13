@@ -261,8 +261,10 @@ export class UploadCoalescer {
           this.states.delete(chatId)
         }
 
-        this.activeWorkers--
-        this.startQueuedWorkers()
+        if (workerGeneration === this.generation) {
+          this.activeWorkers--
+          this.startQueuedWorkers()
+        }
       }
     })().then(completeWorker, completeWorker)
   }
@@ -410,6 +412,7 @@ export class UploadCoalescer {
    */
   clear(): void {
     this.generation++
+    this.activeWorkers = 0
     this.queuedChatIds = []
     const cancellationError = new Error('Upload canceled after account change')
     for (const state of this.states.values()) {
