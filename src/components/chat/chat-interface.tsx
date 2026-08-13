@@ -1703,7 +1703,8 @@ export function ChatInterface({
       !isAuthLoaded ||
       !isSignedIn ||
       !cloudSyncInitialized ||
-      !cloudSyncSettingEnabled
+      !cloudSyncSettingEnabled ||
+      !encryptionService.getKey()
     ) {
       setChatPagination({ isReady: false, userId: authUserId ?? undefined })
       return

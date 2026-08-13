@@ -68,6 +68,127 @@ describe('UploadCoalescer', () => {
       expect(prepareFn).toHaveBeenCalledWith('chat-3', expect.any(String))
     })
 
+    it('bounds concurrent uploads across different chats', async () => {
+      const resolvers: Array<() => void> = []
+      let active = 0
+      let peakActive = 0
+      const attemptFn = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            active++
+            peakActive = Math.max(peakActive, active)
+            resolvers.push(() => {
+              active--
+              resolve()
+            })
+          }),
+      )
+      const coalescer = new UploadCoalescer(prepareWith(attemptFn), {
+        maxConcurrency: 2,
+      })
+
+      const uploads = ['chat-1', 'chat-2', 'chat-3', 'chat-4'].map((chatId) =>
+        coalescer.enqueueAndWait(chatId),
+      )
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(attemptFn).toHaveBeenCalledTimes(2)
+      expect(coalescer.activeUploadCount).toBe(2)
+
+      resolvers.shift()?.()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(attemptFn).toHaveBeenCalledTimes(3)
+
+      while (resolvers.length > 0) {
+        resolvers.shift()?.()
+        await vi.advanceTimersByTimeAsync(0)
+      }
+      await Promise.all(uploads)
+
+      expect(peakActive).toBe(2)
+      expect(coalescer.activeUploadCount).toBe(0)
+    })
+
+    it('waits for uploads that are queued behind the concurrency limit', async () => {
+      const resolvers: Array<() => void> = []
+      const attemptFn = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolvers.push(resolve)
+          }),
+      )
+      const coalescer = new UploadCoalescer(prepareWith(attemptFn), {
+        maxConcurrency: 1,
+      })
+      coalescer.enqueue('chat-1')
+      coalescer.enqueue('chat-2')
+
+      let completed = false
+      const waiting = coalescer.waitForUpload('chat-2').then(() => {
+        completed = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(completed).toBe(false)
+      expect(attemptFn).toHaveBeenCalledTimes(1)
+
+      resolvers.shift()?.()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(attemptFn).toHaveBeenCalledTimes(2)
+      expect(completed).toBe(false)
+
+      resolvers.shift()?.()
+      await waiting
+      expect(completed).toBe(true)
+    })
+
+    it('gives a new generation fresh slots without stale worker accounting', async () => {
+      const resolvers = new Map<string, () => void>()
+      const attemptFn = vi.fn(
+        (chatId: string) =>
+          new Promise<void>((resolve) => {
+            resolvers.set(chatId, resolve)
+          }),
+      )
+      const coalescer = new UploadCoalescer(prepareWith(attemptFn), {
+        maxConcurrency: 2,
+      })
+      coalescer.enqueue('old-chat-1')
+      coalescer.enqueue('old-chat-2')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(coalescer.activeUploadCount).toBe(2)
+
+      coalescer.clear()
+      coalescer.enqueue('new-chat-1')
+      coalescer.enqueue('new-chat-2')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(attemptFn).toHaveBeenCalledTimes(4)
+      expect(coalescer.activeUploadCount).toBe(2)
+
+      coalescer.enqueue('new-chat-3')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(attemptFn).toHaveBeenCalledTimes(4)
+
+      resolvers.get('old-chat-1')?.()
+      resolvers.get('old-chat-2')?.()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(coalescer.activeUploadCount).toBe(2)
+      expect(attemptFn).toHaveBeenCalledTimes(4)
+
+      resolvers.get('new-chat-1')?.()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(coalescer.activeUploadCount).toBe(2)
+      expect(attemptFn).toHaveBeenCalledTimes(5)
+      expect(attemptFn).toHaveBeenLastCalledWith(
+        'new-chat-3',
+        expect.any(String),
+      )
+
+      resolvers.get('new-chat-2')?.()
+      resolvers.get('new-chat-3')?.()
+      await coalescer.waitForAllUploads()
+      expect(coalescer.activeUploadCount).toBe(0)
+    })
+
     it('completes without an attempt when prepare returns null', async () => {
       const prepareFn = vi.fn().mockResolvedValue(null)
       const coalescer = new UploadCoalescer(prepareFn)
@@ -431,7 +552,7 @@ describe('UploadCoalescer', () => {
       expect(pendingIds).toHaveLength(2)
     })
 
-    it('clears all state', async () => {
+    it('clears pending state and resets active workers for the new generation', async () => {
       const attemptFn = vi.fn().mockReturnValue(new Promise(() => {}))
       const coalescer = new UploadCoalescer(prepareWith(attemptFn))
 

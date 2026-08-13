@@ -21,6 +21,7 @@ import { SyncEnclaveError } from '../sync-enclave/sync-enclave-client'
 const DEFAULT_BASE_DELAY_MS = 1000
 const DEFAULT_MAX_DELAY_MS = 8000
 const DEFAULT_MAX_RETRIES = 3
+const DEFAULT_MAX_CONCURRENCY = 3
 
 /**
  * Configuration for the upload coalescer
@@ -32,6 +33,8 @@ export interface UploadCoalescerConfig {
   maxDelayMs?: number
   /** Maximum number of retry attempts (default: 3) */
   maxRetries?: number
+  /** Maximum number of chats uploading concurrently (default: 3) */
+  maxConcurrency?: number
   /**
    * Scheduler used for back-off sleeps and jitter randomness.
    * Defaults to `realScheduler`, which uses `setTimeout` and
@@ -49,6 +52,7 @@ interface ChatUploadState {
   dirty: boolean
   /** The currently in-flight upload promise, if any */
   inFlight: Promise<void> | null
+  queued: boolean
   /** Number of consecutive failures */
   failureCount: number
   /** Last terminal upload error for this worker, if any */
@@ -108,16 +112,23 @@ export class UploadCoalescer {
   private config: Required<Omit<UploadCoalescerConfig, 'scheduler'>>
   private scheduler: RetryScheduler
   private generation = 0
+  private activeWorkers = 0
+  private queuedChatIds: string[] = []
 
   constructor(
     prepareUpload: PrepareUploadFn,
     config: UploadCoalescerConfig = {},
   ) {
     this.prepareUpload = prepareUpload
+    const maxConcurrency = config.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY
+    if (!Number.isInteger(maxConcurrency) || maxConcurrency < 1) {
+      throw new RangeError('Upload concurrency must be a positive integer')
+    }
     this.config = {
       baseDelayMs: config.baseDelayMs ?? DEFAULT_BASE_DELAY_MS,
       maxDelayMs: config.maxDelayMs ?? DEFAULT_MAX_DELAY_MS,
       maxRetries: config.maxRetries ?? DEFAULT_MAX_RETRIES,
+      maxConcurrency,
     }
     this.scheduler = config.scheduler ?? realScheduler
   }
@@ -139,6 +150,7 @@ export class UploadCoalescer {
       state = {
         dirty: false,
         inFlight: null,
+        queued: false,
         failureCount: 0,
         lastError: null,
         resultWaiters: [],
@@ -148,7 +160,30 @@ export class UploadCoalescer {
 
     state.dirty = true
 
-    if (!state.inFlight) {
+    if (!state.inFlight && !state.queued) {
+      this.scheduleWorker(chatId, state)
+    }
+  }
+
+  private scheduleWorker(chatId: string, state: ChatUploadState): void {
+    if (this.activeWorkers < this.config.maxConcurrency) {
+      this.startWorker(chatId, state)
+      return
+    }
+
+    state.queued = true
+    this.queuedChatIds.push(chatId)
+  }
+
+  private startQueuedWorkers(): void {
+    while (
+      this.activeWorkers < this.config.maxConcurrency &&
+      this.queuedChatIds.length > 0
+    ) {
+      const chatId = this.queuedChatIds.shift()
+      if (!chatId) continue
+      const state = this.states.get(chatId)
+      if (!state?.queued || !state.dirty || state.inFlight) continue
       this.startWorker(chatId, state)
     }
   }
@@ -159,66 +194,79 @@ export class UploadCoalescer {
    */
   private startWorker(chatId: string, state: ChatUploadState): void {
     const workerGeneration = this.generation
-    const workerPromise = (async () => {
-      while (state.dirty && workerGeneration === this.generation) {
-        // Clear dirty flag before upload
-        state.dirty = false
+    state.queued = false
+    this.activeWorkers++
+    let completeWorker!: () => void
+    state.inFlight = new Promise<void>((resolve) => {
+      completeWorker = resolve
+    })
+    void (async () => {
+      try {
+        while (state.dirty && workerGeneration === this.generation) {
+          // Clear dirty flag before upload
+          state.dirty = false
 
-        // Mint one idempotency key per LOGICAL write (§9.6 R1). All
-        // retries inside uploadWithRetry replay under this key so the
-        // enclave dedupes them; once we loop back because `dirty` was
-        // set during the upload, that's a new logical write and gets
-        // a fresh key on the next iteration.
-        const idempotencyKey = newIdempotencyKey()
+          // Mint one idempotency key per LOGICAL write (§9.6 R1). All
+          // retries inside uploadWithRetry replay under this key so the
+          // enclave dedupes them; once we loop back because `dirty` was
+          // set during the upload, that's a new logical write and gets
+          // a fresh key on the next iteration.
+          const idempotencyKey = newIdempotencyKey()
 
-        try {
-          await this.uploadWithRetry(chatId, idempotencyKey, workerGeneration)
-          // Success - reset failure count
-          state.failureCount = 0
-          state.lastError = null
-        } catch (error) {
-          const uploadError =
-            error instanceof Error ? error : new Error(String(error))
-          // Upload failed after all retries
-          state.failureCount++
-          state.lastError = uploadError
-          logError('Upload failed after retries', error, {
-            component: 'UploadCoalescer',
-            action: 'worker',
-            metadata: {
-              chatId,
-              failureCount: state.failureCount,
-              willRetry: state.dirty,
-            },
-          })
+          try {
+            await this.uploadWithRetry(chatId, idempotencyKey, workerGeneration)
+            // Success - reset failure count
+            state.failureCount = 0
+            state.lastError = null
+          } catch (error) {
+            const uploadError =
+              error instanceof Error ? error : new Error(String(error))
+            // Upload failed after all retries
+            state.failureCount++
+            state.lastError = uploadError
+            logError('Upload failed after retries', error, {
+              component: 'UploadCoalescer',
+              action: 'worker',
+              metadata: {
+                chatId,
+                failureCount: state.failureCount,
+                willRetry: state.dirty,
+              },
+            })
 
-          // If dirty was set during upload, we'll retry
-          // Otherwise, the failure is logged and we move on
+            // If dirty was set during upload, we'll retry
+            // Otherwise, the failure is logged and we move on
+          }
+        }
+      } catch (error) {
+        state.lastError =
+          error instanceof Error ? error : new Error(String(error))
+      } finally {
+        state.inFlight = null
+
+        const resultWaiters = state.resultWaiters.splice(0)
+        for (const waiter of resultWaiters) {
+          if (state.lastError) {
+            waiter.reject(state.lastError)
+          } else {
+            waiter.resolve()
+          }
+        }
+
+        // Clean up state if no longer needed.
+        // Only delete from the map if this worker's generation still matches.
+        // After clear(), the map may hold a new state for the same chatId
+        // that this old worker must not touch.
+        if (!state.dirty && workerGeneration === this.generation) {
+          this.states.delete(chatId)
+        }
+
+        if (workerGeneration === this.generation) {
+          this.activeWorkers--
+          this.startQueuedWorkers()
         }
       }
-
-      // Worker done - clear in-flight promise
-      state.inFlight = null
-
-      const resultWaiters = state.resultWaiters.splice(0)
-      for (const waiter of resultWaiters) {
-        if (state.lastError) {
-          waiter.reject(state.lastError)
-        } else {
-          waiter.resolve()
-        }
-      }
-
-      // Clean up state if no longer needed.
-      // Only delete from the map if this worker's generation still matches.
-      // After clear(), the map may hold a new state for the same chatId
-      // that this old worker must not touch.
-      if (!state.dirty && workerGeneration === this.generation) {
-        this.states.delete(chatId)
-      }
-    })()
-
-    state.inFlight = workerPromise
+    })().then(completeWorker, completeWorker)
   }
 
   /**
@@ -228,7 +276,7 @@ export class UploadCoalescer {
   async enqueueAndWait(chatId: string): Promise<void> {
     this.enqueue(chatId)
     const state = this.states.get(chatId)
-    if (!state?.inFlight) {
+    if (!state) {
       return
     }
 
@@ -237,11 +285,11 @@ export class UploadCoalescer {
 
   async ensureUploadAndWait(chatId: string): Promise<void> {
     const existing = this.states.get(chatId)
-    if (!existing?.inFlight) {
+    if (!existing?.inFlight && !existing?.queued) {
       this.enqueue(chatId)
     }
     const state = this.states.get(chatId)
-    if (!state?.inFlight) {
+    if (!state) {
       return
     }
 
@@ -326,7 +374,9 @@ export class UploadCoalescer {
    */
   hasPendingUpload(chatId: string): boolean {
     const state = this.states.get(chatId)
-    return state ? state.dirty || state.inFlight !== null : false
+    return state
+      ? state.dirty || state.queued || state.inFlight !== null
+      : false
   }
 
   /**
@@ -341,11 +391,7 @@ export class UploadCoalescer {
    * Get the number of active uploads.
    */
   get activeUploadCount(): number {
-    let count = 0
-    for (const state of this.states.values()) {
-      if (state.inFlight) count++
-    }
-    return count
+    return this.activeWorkers
   }
 
   /**
@@ -354,7 +400,7 @@ export class UploadCoalescer {
   getPendingChatIds(): string[] {
     const ids: string[] = []
     for (const [chatId, state] of this.states.entries()) {
-      if (state.dirty || state.inFlight) {
+      if (state.dirty || state.queued || state.inFlight) {
         ids.push(chatId)
       }
     }
@@ -366,6 +412,8 @@ export class UploadCoalescer {
    */
   clear(): void {
     this.generation++
+    this.activeWorkers = 0
+    this.queuedChatIds = []
     const cancellationError = new Error('Upload canceled after account change')
     for (const state of this.states.values()) {
       state.dirty = false
@@ -384,8 +432,8 @@ export class UploadCoalescer {
    */
   async waitForUpload(chatId: string): Promise<void> {
     const state = this.states.get(chatId)
-    if (state?.inFlight) {
-      await state.inFlight
+    if (state?.dirty || state?.queued || state?.inFlight) {
+      await this.waitForResult(state)
     }
   }
 
@@ -396,8 +444,8 @@ export class UploadCoalescer {
   async waitForAllUploads(): Promise<void> {
     const promises: Promise<void>[] = []
     for (const state of this.states.values()) {
-      if (state.inFlight) {
-        promises.push(state.inFlight)
+      if (state.dirty || state.queued || state.inFlight) {
+        promises.push(this.waitForResult(state))
       }
     }
     await Promise.all(promises)

@@ -55,18 +55,6 @@ export class ChatStorageService {
 
     const chatToSave = chat
 
-    // Check if this is a new chat (first time saving) and mark as local if intended or sync is disabled
-    const existingChat = await indexedDBStorage.getChat(chatToSave.id)
-
-    // Check if chat should be local-only
-    // 1. If it's already marked as local
-    // 2. If cloud sync is disabled globally
-    // 3. If the existing chat is already local
-    const shouldMarkAsLocal =
-      chatToSave.isLocalOnly ||
-      !isCloudSyncEnabled() ||
-      existingChat?.isLocalOnly
-
     // Save the chat. pendingSave is a transient UI flag that drives the
     // "Syncing with cloud" badge; persisting it makes the badge resurface
     // on every reload, so strip it before writing to storage.
@@ -78,10 +66,14 @@ export class ChatStorageService {
           ? chatToSave.createdAt.toISOString()
           : chatToSave.createdAt,
       updatedAt: new Date().toISOString(),
-      isLocalOnly: shouldMarkAsLocal || (existingChat?.isLocalOnly ?? false),
+      // The user's global opt-out is invariant (§9.6 R6): while cloud
+      // sync is disabled, every save classifies as local-only so the
+      // chat never enters the cloud write path.
+      isLocalOnly: chatToSave.isLocalOnly === true || !isCloudSyncEnabled(),
     }
 
-    await indexedDBStorage.saveChat(storageChat)
+    const saveResult = await indexedDBStorage.saveChat(storageChat)
+    const isLocalOnly = saveResult.isLocalOnly
 
     // Emit change event after local save
     chatEvents.emit({ reason: 'save', ids: [chatToSave.id] })
@@ -94,7 +86,7 @@ export class ChatStorageService {
     if (
       !skipCloudSync &&
       !streamingTracker.isStreaming(chatToSave.id) &&
-      !storageChat.isLocalOnly
+      !isLocalOnly
     ) {
       cloudSync.backupChat(chatToSave.id).catch((error) => {
         logError('Failed to backup chat to cloud', error, {
@@ -107,7 +99,7 @@ export class ChatStorageService {
 
     return {
       ...chatToSave,
-      isLocalOnly: storageChat.isLocalOnly,
+      isLocalOnly,
       updatedAt: storageChat.updatedAt,
       createdAt:
         chatToSave.createdAt instanceof Date
@@ -130,6 +122,7 @@ export class ChatStorageService {
     const {
       lastAccessedAt,
       locallyModified,
+      syncPending,
       syncVersion,
       decryptionFailed,
       version,
@@ -280,6 +273,7 @@ export class ChatStorageService {
       ({
         lastAccessedAt,
         locallyModified,
+        syncPending,
         syncVersion,
         decryptionFailed,
         version,
@@ -306,6 +300,7 @@ export class ChatStorageService {
     return storedChats.map(
       ({
         lastAccessedAt,
+        syncPending,
         syncVersion,
         version,
         pendingSave,
@@ -353,6 +348,12 @@ export class ChatStorageService {
     try {
       await cloudSync.deleteFromCloud(chatId)
     } catch (error) {
+      // Plain saves treat local-only as sticky, so restore the original
+      // classification explicitly before rewriting the pre-conversion row.
+      await indexedDBStorage.updateChatLocalOnly(
+        chatId,
+        existingChat.isLocalOnly === true,
+      )
       await indexedDBStorage.saveChat(existingChat)
       logError(
         'Failed to delete chat from cloud during local conversion',
