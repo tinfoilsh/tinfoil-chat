@@ -76,6 +76,7 @@ export interface AttachmentRewrite {
   clientId: string
   serverId: string
   encryptionKey: string
+  storagePayloadId?: string
 }
 
 export const DB_NAME = 'tinfoil-chat'
@@ -90,6 +91,7 @@ const MIGRATIONS_STORE = 'migrations'
 const SYNC_PENDING_MIGRATION_ID = 'sync-pending-v4'
 const ATTACHMENT_PAYLOADS_STORE = 'attachmentPayloads'
 const ATTACHMENT_PAYLOADS_CHAT_INDEX = 'chatId'
+const DUPLICATE_ATTACHMENT_PAYLOAD_MARKER = ':duplicate:'
 const ACCOUNT_CHANGE_RESET_TIMEOUT_MS = 10_000
 const ACCOUNT_CHANGE_READ_ERROR = 'IndexedDB read superseded by account change'
 const ACCOUNT_CHANGE_WRITE_ERROR =
@@ -289,13 +291,36 @@ function normalizeAttachmentPayloads(chat: Chat): {
 } {
   const payloads: StoredAttachmentPayload[] = []
   const referencedPayloadIds = new Set<string>()
+  const attachmentIdCounts = new Map<string, number>()
+  const attachmentIdOccurrences = new Map<string, number>()
+
+  for (const message of chat.messages) {
+    for (const attachment of message.attachments ?? []) {
+      attachmentIdCounts.set(
+        attachment.id,
+        (attachmentIdCounts.get(attachment.id) ?? 0) + 1,
+      )
+    }
+  }
 
   const messages = chat.messages.map((message) => ({
     ...message,
     attachments: message.attachments?.map((attachment) => {
       const storedAttachment = attachment as StoredAttachmentReference
+      const occurrence = attachmentIdOccurrences.get(attachment.id) ?? 0
+      attachmentIdOccurrences.set(attachment.id, occurrence + 1)
+      const legacyPayloadId = `${chat.id}:${attachment.id}`
+      const generatedPayloadId =
+        occurrence === 0
+          ? legacyPayloadId
+          : `${legacyPayloadId}${DUPLICATE_ATTACHMENT_PAYLOAD_MARKER}${occurrence}`
+      const referencedPayloadId = storedAttachment.storagePayloadId
       const payloadId =
-        storedAttachment.storagePayloadId ?? `${chat.id}:${attachment.id}`
+        referencedPayloadId && !referencedPayloadIds.has(referencedPayloadId)
+          ? referencedPayloadId
+          : attachmentIdCounts.get(attachment.id) === 1
+            ? legacyPayloadId
+            : generatedPayloadId
       referencedPayloadIds.add(payloadId)
       const { base64, thumbnailBase64, textContent, pages, ...metadata } =
         storedAttachment
@@ -330,15 +355,43 @@ function inheritAttachmentPayloadReferences(
   existing: StoredChat | null | undefined,
 ): Chat {
   if (!existing) return chat
-  const payloadIdByAttachmentId = new Map<string, string>()
+  type PayloadCandidate = {
+    payloadId: string
+    messageKey: string
+    attachmentKey: string
+    used: boolean
+  }
+  const candidatesByAttachmentId = new Map<string, PayloadCandidate[]>()
+
+  const messageKey = (message: Message): string => {
+    if (message.turnId) return `turn:${message.turnId}`
+    const timestamp =
+      message.timestamp instanceof Date
+        ? message.timestamp.toISOString()
+        : String(message.timestamp)
+    return `${message.role}:${timestamp}`
+  }
+  const attachmentKey = (attachment: Attachment): string =>
+    JSON.stringify([
+      attachment.type,
+      attachment.fileName,
+      attachment.mimeType ?? null,
+      attachment.fileSize ?? null,
+    ])
+
   for (const message of existing.messages) {
     for (const attachment of message.attachments ?? []) {
       const storedAttachment = attachment as StoredAttachmentReference
       if (storedAttachment.storagePayloadId) {
-        payloadIdByAttachmentId.set(
-          storedAttachment.id,
-          storedAttachment.storagePayloadId,
-        )
+        const candidates =
+          candidatesByAttachmentId.get(storedAttachment.id) ?? []
+        candidates.push({
+          payloadId: storedAttachment.storagePayloadId,
+          messageKey: messageKey(message),
+          attachmentKey: attachmentKey(storedAttachment),
+          used: false,
+        })
+        candidatesByAttachmentId.set(storedAttachment.id, candidates)
       }
     }
   }
@@ -349,7 +402,26 @@ function inheritAttachmentPayloadReferences(
       ...message,
       attachments: message.attachments?.map((attachment) => {
         if (attachmentHasPayload(attachment)) return attachment
-        const storagePayloadId = payloadIdByAttachmentId.get(attachment.id)
+        const candidates = candidatesByAttachmentId.get(attachment.id) ?? []
+        const incomingMessageKey = messageKey(message)
+        const incomingAttachmentKey = attachmentKey(attachment)
+        const candidate =
+          candidates.find(
+            (item) =>
+              !item.used &&
+              item.messageKey === incomingMessageKey &&
+              item.attachmentKey === incomingAttachmentKey,
+          ) ??
+          candidates.find(
+            (item) => !item.used && item.messageKey === incomingMessageKey,
+          ) ??
+          candidates.find(
+            (item) =>
+              !item.used && item.attachmentKey === incomingAttachmentKey,
+          ) ??
+          candidates.find((item) => !item.used)
+        if (candidate) candidate.used = true
+        const storagePayloadId = candidate?.payloadId
         return storagePayloadId
           ? { ...attachment, storagePayloadId }
           : attachment
@@ -376,7 +448,7 @@ function hydrateAttachmentPayloads(
           : undefined
         if (!payload) return metadata
         const { id, chatId, ...content } = payload
-        return { ...metadata, ...content }
+        return { ...metadata, storagePayloadId, ...content }
       }),
     })),
   }
@@ -1866,13 +1938,33 @@ export class IndexedDBStorage {
       }
 
       if (opts.rewrites.length > 0) {
-        const rewriteByClient = new Map(
-          opts.rewrites.map((r) => [r.clientId, r]),
+        const rewritesByPayloadId = new Map(
+          opts.rewrites
+            .filter((rewrite) => rewrite.storagePayloadId)
+            .map((rewrite) => [rewrite.storagePayloadId, rewrite]),
         )
+        const rewritesByClientId = new Map<string, AttachmentRewrite[]>()
+        for (const rewrite of opts.rewrites) {
+          if (rewrite.storagePayloadId) continue
+          const rewrites = rewritesByClientId.get(rewrite.clientId) ?? []
+          rewrites.push(rewrite)
+          rewritesByClientId.set(rewrite.clientId, rewrites)
+        }
+        const appliedRewrites = new Set<AttachmentRewrite>()
         for (const msg of chat.messages ?? []) {
           for (const att of msg.attachments ?? []) {
-            const rewrite = rewriteByClient.get(att.id)
+            const storedAttachment = att as StoredAttachmentReference
+            const rewriteByPayloadId = storedAttachment.storagePayloadId
+              ? rewritesByPayloadId.get(storedAttachment.storagePayloadId)
+              : undefined
+            const rewrite =
+              rewriteByPayloadId && !appliedRewrites.has(rewriteByPayloadId)
+                ? rewriteByPayloadId
+                : rewritesByClientId
+                    .get(att.id)
+                    ?.find((candidate) => !appliedRewrites.has(candidate))
             if (rewrite) {
+              appliedRewrites.add(rewrite)
               att.id = rewrite.serverId
               att.encryptionKey = rewrite.encryptionKey
             }

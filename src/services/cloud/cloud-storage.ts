@@ -1,4 +1,4 @@
-import type { Message } from '@/components/chat/types'
+import type { Attachment, Message } from '@/components/chat/types'
 import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
 import { isLocalRecoveryEnvelope } from '@/types/chat-recovery'
 import {
@@ -172,11 +172,16 @@ function stripBase64FromMessages(messages: Message[]): Message[] {
   return messages.map((msg) => ({
     ...msg,
     attachments: msg.attachments?.map((att) => {
-      if (att.type === 'image' && att.base64) {
-        const { base64: _removed, ...rest } = att
+      const { storagePayloadId: _localReference, ...withoutLocalReference } =
+        att as Attachment & { storagePayloadId?: string }
+      if (
+        withoutLocalReference.type === 'image' &&
+        withoutLocalReference.base64
+      ) {
+        const { base64: _removed, ...rest } = withoutLocalReference
         return rest
       }
-      return att
+      return withoutLocalReference
     }),
   }))
 }
@@ -344,12 +349,16 @@ export class CloudStorageService {
             idempotencyKey: attachmentIdemKey,
           })
           const clientId = att.id
+          const storagePayloadId = (
+            att as Attachment & { storagePayloadId?: string }
+          ).storagePayloadId
           att.id = enclaveID
           att.encryptionKey = att_key
           rewrites.push({
             clientId,
             serverId: enclaveID,
             encryptionKey: att_key,
+            storagePayloadId,
           })
         }
         attachmentIndex++
