@@ -81,7 +81,7 @@ describe('VerifierSidebar', () => {
     renderSidebar(onVerificationComplete)
     requestVerificationDocument()
 
-    await waitFor(() => expect(onVerificationComplete).toHaveBeenCalled())
+    expect(onVerificationComplete).toHaveBeenCalled()
     expect(onVerificationComplete).toHaveBeenCalledWith(true)
     expect(onVerificationComplete).not.toHaveBeenCalledWith(false)
     expect(mocks.getVerificationDocument).not.toHaveBeenCalled()
@@ -98,7 +98,7 @@ describe('VerifierSidebar', () => {
       expect(onVerificationComplete).toHaveBeenCalledWith(false),
     )
     expect(mocks.getVerificationDocument).not.toHaveBeenCalled()
-    expect(mocks.getCachedVerificationDocument).toHaveBeenCalledOnce()
+    expect(mocks.getCachedVerificationDocument).toHaveBeenCalledTimes(2)
   })
 
   it('keeps the retry lock through the cache fallback', async () => {

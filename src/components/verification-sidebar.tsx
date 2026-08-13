@@ -91,6 +91,14 @@ export function VerifierSidebar({
 
     let success = false
     try {
+      const cachedDoc = getCachedVerificationDocument()
+      if (cachedDoc?.securityVerified === true) {
+        setVerificationDocument(cachedDoc)
+        onVerificationUpdateRef.current?.(cachedDoc)
+        onVerificationCompleteRef.current(true)
+        return
+      }
+
       success = await attemptFetch()
 
       while (
@@ -120,10 +128,10 @@ export function VerifierSidebar({
       // Retries exhausted. A previously successful attestation may still be
       // cached (e.g. the panel was opened while offline after startup
       // verification succeeded), so don't downgrade that to a failure.
-      const cachedDoc = getCachedVerificationDocument()
-      if (cachedDoc?.securityVerified === true) {
-        setVerificationDocument(cachedDoc)
-        onVerificationUpdateRef.current?.(cachedDoc)
+      const terminalCachedDoc = getCachedVerificationDocument()
+      if (terminalCachedDoc?.securityVerified === true) {
+        setVerificationDocument(terminalCachedDoc)
+        onVerificationUpdateRef.current?.(terminalCachedDoc)
         onVerificationCompleteRef.current(true)
         return
       }
