@@ -2,11 +2,18 @@ import { PAGINATION } from '@/config'
 import {
   AUTH_ACTIVE_USER_ID,
   MIGRATION_EXHAUSTED_KEYSET_PREFIX,
+  SETTINGS_CLOUD_SYNC_ENABLED,
   SYNC_ALL_CHATS_STATUS,
+  SYNC_CHAT_DELETES_WATERMARK,
+  SYNC_CHAT_DELETION_REVISION,
   SYNC_CHAT_STATUS,
   SYNC_PROJECT_CHAT_STATUS_PREFIX,
 } from '@/constants/storage-keys'
 import { AuthTokenUnavailableError } from '@/services/auth'
+import {
+  CLOUD_SYNC_SETTING_CHANGED_EVENT,
+  isCloudSyncEnabled,
+} from '@/utils/cloud-sync-settings'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { chatEvents } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
@@ -18,7 +25,11 @@ import {
 import { decideRecovery } from '../sync-enclave/enclave-error-recovery'
 import { passkeyEvents } from '../sync-enclave/passkey-events'
 import { keyCurrent, newIdempotencyKey } from '../sync-enclave/sync-api'
-import { SyncEnclaveError } from '../sync-enclave/sync-enclave-client'
+import {
+  abortSyncEnclaveRequests,
+  resetSyncEnclaveRequestScope,
+  SyncEnclaveError,
+} from '../sync-enclave/sync-enclave-client'
 import {
   hasPrimaryKey,
   migrationKeySetFingerprint,
@@ -74,6 +85,29 @@ export class SyncInProgressError extends Error {
   }
 }
 
+export class CloudSyncDisabledError extends Error {
+  constructor() {
+    super('Cloud synchronization is disabled')
+    this.name = 'CloudSyncDisabledError'
+  }
+}
+
+export class CloudSyncCoordinationUnavailableError extends Error {
+  constructor() {
+    super('Cross-tab cloud synchronization coordination is unavailable')
+    this.name = 'CloudSyncCoordinationUnavailableError'
+  }
+}
+
+export class CloudSyncLifecycleCanceledError extends Error {
+  readonly code = 'CLOUD_SYNC_LIFECYCLE_CANCELED'
+
+  constructor(public readonly reason: 'disabled' | 'account-reset') {
+    super('Cloud synchronization was canceled')
+    this.name = 'CloudSyncLifecycleCanceledError'
+  }
+}
+
 export interface PaginatedChatsResult {
   chats: StoredChat[]
   hasMore: boolean
@@ -93,6 +127,10 @@ const UPLOAD_MAX_RETRIES = 3
 const REMOTE_LIST_MAX_ATTEMPTS = 2
 const UPLOADS_SKIPPED_UNRECONCILED_DELETIONS_ERROR =
   'Skipped uploading local changes: remote deletions could not be reconciled'
+export const CROSS_TAB_SYNC_LOCK = 'tinfoil-cloud-sync'
+export const CROSS_TAB_SYNC_LOCK_OPTIONS = {
+  mode: 'exclusive',
+} as const
 const isStreaming = (id: string) => streamingTracker.isStreaming(id)
 
 export class CloudSyncService {
@@ -101,6 +139,9 @@ export class CloudSyncService {
   private uploadCoalescer: UploadCoalescer
   private streamingCallbacks: Set<string> = new Set()
   private accountGeneration = 0
+  private lockAcquisitionController = new AbortController()
+  private crossTabReloadFrame: number | null = null
+  private cloudSyncEnabled = isCloudSyncEnabled()
   /**
    * Set once per session after the first successful syncAllChats so
    * the enclave-driven legacy-blob migration (§8.7.2 trigger 1) runs
@@ -127,12 +168,24 @@ export class CloudSyncService {
     )
     // Listen for storage changes from other tabs to invalidate sync status cache
     if (typeof window !== 'undefined') {
+      window.addEventListener(CLOUD_SYNC_SETTING_CHANGED_EVENT, () => {
+        this.handleCloudSyncSettingChange()
+      })
       window.addEventListener('storage', (e) => {
-        if (e.key === SYNC_CHAT_STATUS) {
+        if (e.key === SETTINGS_CLOUD_SYNC_ENABLED) {
+          this.handleCloudSyncSettingChange()
+        } else if (
+          e.key === SYNC_CHAT_DELETES_WATERMARK ||
+          e.key === SYNC_CHAT_DELETION_REVISION
+        ) {
+          this.queueCrossTabReload()
+        } else if (e.key === SYNC_CHAT_STATUS) {
           // Another tab updated sync status, invalidate our cache
           this.chatSyncCache.invalidate()
+          this.queueCrossTabReload()
         } else if (e.key === SYNC_ALL_CHATS_STATUS) {
           this.allChatsSyncCache.invalidate()
+          this.queueCrossTabReload()
         } else if (e.key?.startsWith(SYNC_PROJECT_CHAT_STATUS_PREFIX)) {
           // Another tab updated project sync status, invalidate that project's cache
           const projectId = e.key.slice(SYNC_PROJECT_CHAT_STATUS_PREFIX.length)
@@ -140,9 +193,39 @@ export class CloudSyncService {
           if (existingCache) {
             existingCache.invalidate()
           }
+          this.queueCrossTabReload()
         }
       })
     }
+  }
+
+  private handleCloudSyncSettingChange(): void {
+    const enabled = isCloudSyncEnabled()
+    if (this.cloudSyncEnabled && !enabled) {
+      this.invalidateForCloudSyncDisable()
+    } else if (!this.cloudSyncEnabled && enabled) {
+      this.lockAcquisitionController = new AbortController()
+      resetSyncEnclaveRequestScope('cloud-sync')
+    }
+    this.cloudSyncEnabled = enabled
+  }
+
+  private invalidateForCloudSyncDisable(): void {
+    this.accountGeneration++
+    this.uploadCoalescer.clear()
+    this.streamingCallbacks.clear()
+    this.legacyMigrationKicked = false
+    this.cancelSyncLifecycle('disabled')
+    if (this.crossTabReloadFrame !== null) {
+      cancelAnimationFrame(this.crossTabReloadFrame)
+      this.crossTabReloadFrame = null
+    }
+  }
+
+  private cancelSyncLifecycle(reason: 'disabled' | 'account-reset'): void {
+    const cancellation = new CloudSyncLifecycleCanceledError(reason)
+    this.lockAcquisitionController.abort(cancellation)
+    abortSyncEnclaveRequests('cloud-sync')
   }
 
   private getProjectSyncCache(
@@ -156,14 +239,29 @@ export class CloudSyncService {
     return cache
   }
 
+  private queueCrossTabReload(): void {
+    if (this.crossTabReloadFrame !== null) return
+    this.crossTabReloadFrame = requestAnimationFrame(() => {
+      this.crossTabReloadFrame = null
+      chatEvents.emit({ reason: 'sync', ids: [] })
+    })
+  }
+
   private isCurrentGeneration(generation: number): boolean {
     return generation === this.accountGeneration
   }
 
   resetForAccountChange(): void {
     this.accountGeneration++
+    this.cancelSyncLifecycle('account-reset')
+    this.lockAcquisitionController = new AbortController()
+    resetSyncEnclaveRequestScope('cloud-sync')
     this.uploadCoalescer.clear()
     this.streamingCallbacks.clear()
+    if (this.crossTabReloadFrame !== null) {
+      cancelAnimationFrame(this.crossTabReloadFrame)
+      this.crossTabReloadFrame = null
+    }
     resetAlternativesFinalizationState()
     this.clearSyncStatus()
     // The deletes watermark is scoped to the account's tombstone history,
@@ -178,10 +276,16 @@ export class CloudSyncService {
 
   /**
    * Execute a function with sync lock protection.
-   * Only one sync operation can run at a time.
-   * Throws if a sync is already in progress.
+   * Only one sync operation can run at a time across all tabs.
+   * Throws SyncInProgressError if a sync is already in progress in this
+   * tab, or if waiting for another tab's sync times out.
    */
   private async withSyncLock<T>(fn: () => Promise<T>): Promise<T> {
+    // A sync already running (or queued) in this tab keeps the
+    // pre-cross-tab contract: throw immediately so callers can
+    // waitForCurrentSync() and retry. Web Locks are not reentrant, so
+    // this check must come before the lock request to avoid the same
+    // tab queueing on itself.
     if (this.syncLock) {
       logInfo('[CloudSync] Sync already in progress, skipping', {
         component: 'CloudSync',
@@ -190,6 +294,46 @@ export class CloudSyncService {
       throw new SyncInProgressError()
     }
 
+    const generation = this.accountGeneration
+    const lockSignal = this.lockAcquisitionController.signal
+    const runIfCurrent = () => {
+      if (!isCloudSyncEnabled() || !this.isCurrentGeneration(generation)) {
+        throw new CloudSyncDisabledError()
+      }
+      return fn()
+    }
+
+    if (typeof window === 'undefined') {
+      return this.trackSync(runIfCurrent)
+    }
+    if (typeof navigator === 'undefined' || !navigator.locks) {
+      throw new CloudSyncCoordinationUnavailableError()
+    }
+
+    // Queue for the cross-tab lock instead of skipping so callers that
+    // need a real result (initial sync pagination, manual deep sync,
+    // post-eviction resync) retain their intent while another tab syncs.
+    // trackSync wraps the wait as well, so waitForCurrentSync() covers
+    // queued attempts.
+    return this.trackSync(async () => {
+      try {
+        return await navigator.locks.request(
+          CROSS_TAB_SYNC_LOCK,
+          { ...CROSS_TAB_SYNC_LOCK_OPTIONS, signal: lockSignal },
+          runIfCurrent,
+        )
+      } catch (error) {
+        if (lockSignal.aborted) {
+          throw lockSignal.reason instanceof Error
+            ? lockSignal.reason
+            : new CloudSyncLifecycleCanceledError('disabled')
+        }
+        throw error
+      }
+    })
+  }
+
+  private async trackSync<T>(fn: () => Promise<T>): Promise<T> {
     let resolve: () => void
     this.syncLock = new Promise<void>((r) => {
       resolve = r
@@ -958,9 +1102,9 @@ export class CloudSyncService {
     error: unknown,
   ): Promise<void> {
     if (!this.isCurrentGeneration(generation)) return
-    // Silently fail if no auth token set
+    // Keep the chat dirty and let bulk sync report the skipped upload.
     if (error instanceof AuthTokenUnavailableError) {
-      return
+      throw error
     }
     // §9.6 R4 — surface the typed decision and ACT on the codes
     // that have a defined client-side recovery (§C5). For STALE_BLOB
@@ -1687,6 +1831,10 @@ export class CloudSyncService {
    * @param projectId - Optional project ID. If provided, syncs project chats.
    */
   async smartSync(projectId?: string): Promise<SyncResult> {
+    return this.withSyncLock(() => this.doSmartSync(projectId))
+  }
+
+  private async doSmartSync(projectId?: string): Promise<SyncResult> {
     const generation = this.accountGeneration
     // Kick the legacy-blob migration before any sync work runs.
     // Previously this only fired at the end of a successful
@@ -1697,13 +1845,8 @@ export class CloudSyncService {
     // every smartSync entry is safe.
     void this.kickLegacyBlobMigration()
 
-    // Note: smartSync doesn't need its own lock because it delegates to
-    // syncChangedChats/syncAllChats/syncProjectChats which have their own locks
-    if (this.syncLock) {
-      throw new SyncInProgressError()
-    }
     if (!projectId && needsRecoveryHistorySync()) {
-      return this.syncAllChats({ deep: true })
+      return this.doSyncAllChats({ deep: true })
     }
 
     const status = await this.checkSyncStatus(projectId)
@@ -1757,11 +1900,13 @@ export class CloudSyncService {
 
     if (cachedStatus?.lastUpdated && status.reason !== 'count_changed') {
       return projectId
-        ? this.syncProjectChatsChanged(projectId)
-        : this.syncChangedChats()
+        ? this.doSyncProjectChatsChanged(projectId)
+        : this.doSyncChangedChats()
     }
 
-    return projectId ? this.syncProjectChats(projectId) : this.syncAllChats()
+    return projectId
+      ? this.doSyncProjectChats(projectId)
+      : this.doSyncAllChats()
   }
 
   // Check if currently syncing
@@ -1950,49 +2095,104 @@ export class CloudSyncService {
       batchSize?: number
     } = {},
   ): Promise<number> {
+    return this.withSyncLock(() => this.doRetryDecryptionWithNewKey(options))
+  }
+
+  private async doRetryDecryptionWithNewKey(
+    options: {
+      onProgress?: (current: number, total: number) => void
+      batchSize?: number
+    } = {},
+  ): Promise<number> {
+    const generation = this.accountGeneration
     const { onProgress } = options
     const batchSize = Math.max(1, Math.floor(options.batchSize || 5))
 
     const allChats = await indexedDBStorage.getAllChats()
+    if (!this.isCurrentGeneration(generation)) return 0
     const failed = allChats.filter((chat) => chat.decryptionFailed)
     if (failed.length === 0) return 0
 
-    for (let i = 0; i < failed.length; i++) {
-      try {
-        await indexedDBStorage.deleteChat(failed[i].id)
-      } catch (error) {
-        logError(`Failed to evict placeholder chat ${failed[i].id}`, error, {
-          component: 'CloudSync',
-          action: 'retryDecryptionWithNewKey',
-        })
-      }
-      if ((i + 1) % batchSize === 0 || i === failed.length - 1) {
-        onProgress?.(i + 1, failed.length)
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      }
-    }
-
-    // The just-evicted chats still exist on the server, so the cached
-    // sync-status snapshot would match remote and `smartSync` would
-    // no-op. Drop the cache before resyncing so the next pass takes
-    // the full-sync path and repopulates them.
-    this.invalidateChatSyncCaches()
+    const deletedPlaceholders: StoredChat[] = []
 
     try {
-      await this.smartSync()
+      for (let i = 0; i < failed.length; i++) {
+        try {
+          await indexedDBStorage.deleteChat(failed[i].id)
+          deletedPlaceholders.push(failed[i])
+        } catch (error) {
+          logError(`Failed to evict placeholder chat ${failed[i].id}`, error, {
+            component: 'CloudSync',
+            action: 'retryDecryptionWithNewKey',
+          })
+        }
+        if (!this.isCurrentGeneration(generation)) return 0
+        if ((i + 1) % batchSize === 0 || i === failed.length - 1) {
+          onProgress?.(i + 1, failed.length)
+          await new Promise((resolve) => setTimeout(resolve, 0))
+        }
+      }
+
+      // The just-evicted chats still exist on the server, so the cached
+      // sync-status snapshot would match remote and `smartSync` would
+      // no-op. Drop the cache before resyncing so the next pass takes
+      // the full-sync path and repopulates them.
+      this.invalidateChatSyncCaches()
+
+      await this.doSyncAllChats({ deep: true }, generation)
     } catch (error) {
       logError('Resync after eviction failed', error, {
         component: 'CloudSync',
         action: 'retryDecryptionWithNewKey',
       })
       return 0
+    } finally {
+      if (deletedPlaceholders.length > 0) {
+        this.invalidateChatSyncCaches()
+        await this.restoreFailedDecryptionPlaceholders(deletedPlaceholders)
+      }
     }
 
-    const remaining = (await indexedDBStorage.getAllChats()).filter(
-      (chat) => chat.decryptionFailed,
-    ).length
+    if (!this.isCurrentGeneration(generation)) return 0
+    const restoredChats = await indexedDBStorage.getAllChats()
+    if (!this.isCurrentGeneration(generation)) return 0
+    const restoredById = new Map(restoredChats.map((chat) => [chat.id, chat]))
+    const recovered = failed.filter((placeholder) => {
+      const restored = restoredById.get(placeholder.id)
+      return restored !== undefined && !restored.decryptionFailed
+    }).length
 
-    return Math.max(0, failed.length - remaining)
+    return recovered
+  }
+
+  private async restoreFailedDecryptionPlaceholders(
+    placeholders: StoredChat[],
+  ): Promise<void> {
+    let restoredAny = false
+    for (const placeholder of placeholders) {
+      if (deletedChatsTracker.isDeleted(placeholder.id)) {
+        continue
+      }
+      try {
+        const existing = await indexedDBStorage.getChat(placeholder.id)
+        if (!existing) {
+          await indexedDBStorage.restoreDecryptionPlaceholder(placeholder)
+          restoredAny = true
+        }
+      } catch (error) {
+        logError(
+          `Failed to restore placeholder chat ${placeholder.id}`,
+          error,
+          {
+            component: 'CloudSync',
+            action: 'retryDecryptionWithNewKey.restorePlaceholder',
+          },
+        )
+      }
+    }
+    if (restoredAny) {
+      this.invalidateChatSyncCaches()
+    }
   }
 
   // Fetch a page of remote chats, decrypt, persist to IndexedDB, and return pagination info

@@ -1,15 +1,26 @@
 import {
+  SETTINGS_CLOUD_SYNC_ENABLED,
   SYNC_CHAT_DELETES_WATERMARK,
+  SYNC_CHAT_DELETION_REVISION,
   SYNC_CHAT_STATUS,
   SYNC_PROJECT_CHAT_STATUS_PREFIX,
 } from '@/constants/storage-keys'
-import { CloudSyncService } from '@/services/cloud/cloud-sync'
+import { AuthTokenUnavailableError } from '@/services/auth'
+import {
+  CloudSyncCoordinationUnavailableError,
+  CloudSyncDisabledError,
+  CloudSyncLifecycleCanceledError,
+  CloudSyncService,
+  CROSS_TAB_SYNC_LOCK,
+  SyncInProgressError,
+} from '@/services/cloud/cloud-sync'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import {
   SyncEnclaveError,
   SyncNetworkError,
 } from '@/services/sync-enclave/sync-enclave-client'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setCloudSyncEnabled } from '@/utils/cloud-sync-settings'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockGetAllChats = vi.fn()
 const mockGetCloudChatCount = vi.fn()
@@ -20,6 +31,7 @@ const mockGetChatSyncMetadata = vi.fn()
 const mockGetChat = vi.fn()
 const mockSaveChat = vi.fn()
 const mockSaveExistingChat = vi.fn()
+const mockRestoreDecryptionPlaceholder = vi.fn()
 const mockMarkAsSynced = vi.fn()
 const mockFinalizeUpload = vi.fn()
 const mockApplyRemoteChatIfFresh = vi.fn()
@@ -90,6 +102,8 @@ vi.mock('@/services/storage/indexed-db', () => ({
       mockGetUnsyncedChatMetadata(...args),
     saveChat: (...args: any[]) => mockSaveChat(...args),
     saveExistingChat: (...args: any[]) => mockSaveExistingChat(...args),
+    restoreDecryptionPlaceholder: (...args: any[]) =>
+      mockRestoreDecryptionPlaceholder(...args),
     markAsSynced: (...args: any[]) => mockMarkAsSynced(...args),
     finalizeUpload: (...args: any[]) => mockFinalizeUpload(...args),
     applyRemoteChatIfFresh: (...args: any[]) =>
@@ -217,10 +231,21 @@ vi.mock('@/services/cloud/legacy-chat-eviction', () => ({
 describe('CloudSyncService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal('navigator', {
+      locks: {
+        request: async (
+          _name: string,
+          _options: LockOptions,
+          callback: (lock: Lock) => Promise<unknown>,
+        ) => callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' }),
+      },
+    })
+    localStorage.setItem(SETTINGS_CLOUD_SYNC_ENABLED, 'true')
     localStorage.removeItem(SYNC_CHAT_STATUS)
     localStorage.removeItem(SYNC_CHAT_DELETES_WATERMARK)
     mockSaveChat.mockResolvedValue(undefined)
     mockSaveExistingChat.mockResolvedValue(undefined)
+    mockRestoreDecryptionPlaceholder.mockResolvedValue(undefined)
     mockMarkAsSynced.mockResolvedValue(undefined)
     mockFinalizeUpload.mockResolvedValue(undefined)
     mockApplyRemoteChatIfFresh.mockResolvedValue({ applied: true })
@@ -296,6 +321,331 @@ describe('CloudSyncService', () => {
       reconciled: true,
       failed: false,
     })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('coordinates sync ownership through the Web Locks API', async () => {
+    const request = vi.fn(
+      async (
+        _name: string,
+        _options: LockOptions,
+        callback: (lock: Lock) => Promise<string>,
+      ) => callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' }),
+    )
+    vi.stubGlobal('navigator', { locks: { request } })
+    const service = new CloudSyncService()
+
+    await expect(
+      (service as any).withSyncLock(async () => 'synced'),
+    ).resolves.toBe('synced')
+    expect(request).toHaveBeenCalledWith(
+      CROSS_TAB_SYNC_LOCK,
+      { mode: 'exclusive', signal: expect.any(AbortSignal) },
+      expect.any(Function),
+    )
+  })
+
+  it('waits for the Web Lock held by another tab, then syncs', async () => {
+    let grantLock!: () => void
+    const lockReleased = new Promise<void>((resolve) => {
+      grantLock = resolve
+    })
+    const request = vi.fn(
+      async (
+        _name: string,
+        _options: LockOptions,
+        callback: (lock: Lock) => Promise<string>,
+      ) => {
+        await lockReleased
+        return callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' })
+      },
+    )
+    vi.stubGlobal('navigator', { locks: { request } })
+    const service = new CloudSyncService()
+
+    const fn = vi.fn(async () => 'synced')
+    const pending = (service as any).withSyncLock(fn) as Promise<string>
+    await Promise.resolve()
+    expect(fn).not.toHaveBeenCalled()
+
+    grantLock()
+    await expect(pending).resolves.toBe('synced')
+  })
+
+  it('preserves a queued deep sync and its pagination result', async () => {
+    let grantLock!: () => void
+    const leaderFinished = new Promise<void>((resolve) => {
+      grantLock = resolve
+    })
+    const request = vi.fn(
+      async (
+        _name: string,
+        _options: LockOptions,
+        callback: (lock: Lock) => Promise<unknown>,
+      ) => {
+        await leaderFinished
+        return callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' })
+      },
+    )
+    vi.stubGlobal('navigator', { locks: { request } })
+    mockNeedsRecoveryHistorySync.mockReturnValue(true)
+    mockGetUnsyncedChatMetadata.mockResolvedValue([])
+    mockGetAllChats.mockResolvedValue([])
+    mockGetChatSyncStatus.mockResolvedValue({
+      count: 2,
+      lastUpdated: '2026-08-12T00:00:00.000Z',
+    })
+    mockListChats
+      .mockResolvedValueOnce({
+        conversations: [{ id: 'first', syncVersion: 1 }],
+        hasMore: true,
+        nextContinuationToken: 'next',
+      })
+      .mockResolvedValueOnce({
+        conversations: [{ id: 'second', syncVersion: 1 }],
+        hasMore: false,
+      })
+    mockIngestRemoteChats.mockResolvedValue({
+      downloaded: 1,
+      errors: [],
+      savedIds: ['saved'],
+    })
+    const service = new CloudSyncService()
+
+    const pending = service.smartSync()
+    await Promise.resolve()
+    expect(mockListChats).not.toHaveBeenCalled()
+
+    grantLock()
+    await expect(pending).resolves.toMatchObject({ downloaded: 2 })
+    expect(mockListChats).toHaveBeenCalledTimes(2)
+    expect(mockListChats.mock.calls[1]?.[0]?.continuationToken).toBe('next')
+  })
+
+  it('throws SyncInProgressError for a reentrant sync in the same tab', async () => {
+    const request = vi.fn(
+      async (
+        _name: string,
+        _options: LockOptions,
+        callback: (lock: Lock) => Promise<string>,
+      ) => callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' }),
+    )
+    vi.stubGlobal('navigator', { locks: { request } })
+    const service = new CloudSyncService()
+
+    let finishFirst!: () => void
+    const first = (service as any).withSyncLock(
+      () =>
+        new Promise<string>((resolve) => {
+          finishFirst = () => resolve('first')
+        }),
+    ) as Promise<string>
+    await vi.waitFor(() => expect(request).toHaveBeenCalled())
+
+    await expect(
+      (service as any).withSyncLock(async () => 'second'),
+    ).rejects.toBeInstanceOf(SyncInProgressError)
+
+    finishFirst()
+    await expect(first).resolves.toBe('first')
+  })
+
+  it('fails before sync work when Web Locks are unavailable', async () => {
+    vi.stubGlobal('navigator', {})
+    const service = new CloudSyncService()
+    const sync = vi.fn(async () => 'synced')
+
+    await expect((service as any).withSyncLock(sync)).rejects.toBeInstanceOf(
+      CloudSyncCoordinationUnavailableError,
+    )
+    expect(sync).not.toHaveBeenCalled()
+    expect(service.syncing).toBe(false)
+  })
+
+  it('handles non-browser sync callers without requiring Web Locks', async () => {
+    const service = new CloudSyncService()
+    vi.stubGlobal('window', undefined)
+
+    await expect(
+      (service as any).withSyncLock(async () => 'synced'),
+    ).rejects.toBeInstanceOf(CloudSyncDisabledError)
+  })
+
+  it('releases tracked state when the Web Locks request is rejected', async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValue(
+        new DOMException('Document inactive', 'InvalidStateError'),
+      )
+    vi.stubGlobal('navigator', { locks: { request } })
+    const service = new CloudSyncService()
+
+    await expect(
+      (service as any).withSyncLock(async () => 'never'),
+    ).rejects.toMatchObject({ name: 'InvalidStateError' })
+    expect(service.syncing).toBe(false)
+
+    vi.stubGlobal('navigator', {})
+    await expect(
+      (service as any).withSyncLock(async () => 'fallback'),
+    ).rejects.toBeInstanceOf(CloudSyncCoordinationUnavailableError)
+    expect(service.syncing).toBe(false)
+  })
+
+  it('cancels a never-granted lock on opt-out and syncs after re-enable', async () => {
+    const request = vi.fn(
+      (
+        _name: string,
+        options: LockOptions,
+        callback: (lock: Lock) => Promise<unknown>,
+      ) =>
+        request.mock.calls.length === 1
+          ? new Promise((_resolve, reject) => {
+              options.signal?.addEventListener('abort', () =>
+                reject(new DOMException('Canceled', 'AbortError')),
+              )
+            })
+          : callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' }),
+    )
+    vi.stubGlobal('navigator', { locks: { request } })
+    const service = new CloudSyncService()
+    const pending = service.smartSync()
+
+    setCloudSyncEnabled(false)
+    await expect(pending).rejects.toBeInstanceOf(
+      CloudSyncLifecycleCanceledError,
+    )
+    setCloudSyncEnabled(true)
+
+    await expect(service.smartSync()).resolves.toMatchObject({
+      uploaded: 0,
+      downloaded: 0,
+    })
+  })
+
+  it('cancels a queued lock when the account resets', async () => {
+    const request = vi.fn(
+      (_name: string, options: LockOptions) =>
+        new Promise((_resolve, reject) => {
+          options.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Canceled', 'AbortError')),
+          )
+        }),
+    )
+    vi.stubGlobal('navigator', { locks: { request } })
+    const service = new CloudSyncService()
+    const pending = service.smartSync()
+
+    service.resetForAccountChange()
+
+    await expect(pending).rejects.toMatchObject({
+      name: 'CloudSyncLifecycleCanceledError',
+      code: 'CLOUD_SYNC_LIFECYCLE_CANCELED',
+      reason: 'account-reset',
+    })
+    expect(service.syncing).toBe(false)
+  })
+
+  it('cancels queued work after another tab disables cloud sync', async () => {
+    let grantLock!: () => void
+    const leaderFinished = new Promise<void>((resolve) => {
+      grantLock = resolve
+    })
+    const request = vi.fn(
+      async (
+        _name: string,
+        _options: LockOptions,
+        callback: (lock: Lock) => Promise<unknown>,
+      ) => {
+        await leaderFinished
+        return callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' })
+      },
+    )
+    vi.stubGlobal('navigator', { locks: { request } })
+    const service = new CloudSyncService()
+    const pending = service.smartSync()
+
+    localStorage.setItem(SETTINGS_CLOUD_SYNC_ENABLED, 'false')
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: SETTINGS_CLOUD_SYNC_ENABLED }),
+    )
+    grantLock()
+
+    await expect(pending).rejects.toBeInstanceOf(
+      CloudSyncLifecycleCanceledError,
+    )
+    expect(mockIsAuthenticated).not.toHaveBeenCalled()
+  })
+
+  it('does not ingest a remote response after cloud sync is disabled', async () => {
+    let finishList:
+      | ((value: {
+          conversations: Array<{ id: string; content: string }>
+          hasMore: boolean
+        }) => void)
+      | undefined
+    mockGetUnsyncedChatMetadata.mockResolvedValue([])
+    mockGetAllChats.mockResolvedValue([])
+    mockListChats.mockReturnValue(
+      new Promise((resolve) => {
+        finishList = resolve
+      }),
+    )
+    const service = new CloudSyncService()
+    const sync = service.syncAllChats()
+    await vi.waitFor(() => expect(mockListChats).toHaveBeenCalledOnce())
+
+    setCloudSyncEnabled(false)
+    finishList?.({
+      conversations: [{ id: 'remote-after-opt-out', content: 'plaintext' }],
+      hasMore: false,
+    })
+
+    await expect(sync).resolves.toMatchObject({ downloaded: 0 })
+    expect(mockIngestRemoteChats).not.toHaveBeenCalled()
+  })
+
+  it('coalesces cross-tab storage updates into one chat refresh', async () => {
+    let publishFrame!: FrameRequestCallback
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        publishFrame = callback
+        return 1
+      }),
+    )
+    const service = new CloudSyncService()
+
+    ;(service as any).queueCrossTabReload()
+    ;(service as any).queueCrossTabReload()
+    expect(mockChatEventsEmit).not.toHaveBeenCalled()
+    publishFrame(performance.now())
+
+    expect(mockChatEventsEmit).toHaveBeenCalledTimes(1)
+    expect(mockChatEventsEmit).toHaveBeenCalledWith({ reason: 'sync', ids: [] })
+  })
+
+  it('refreshes follower chat state when another tab publishes a deletion', () => {
+    let publishFrame!: FrameRequestCallback
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        publishFrame = callback
+        return 1
+      }),
+    )
+    new CloudSyncService()
+
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: SYNC_CHAT_DELETION_REVISION }),
+    )
+    expect(mockChatEventsEmit).not.toHaveBeenCalled()
+    publishFrame(performance.now())
+
+    expect(mockChatEventsEmit).toHaveBeenCalledWith({ reason: 'sync', ids: [] })
   })
 
   describe('backupChat', () => {
@@ -687,6 +1037,32 @@ describe('CloudSyncService', () => {
       expect(result.errors).toHaveLength(1)
       expect(mockFinalizeUpload).not.toHaveBeenCalled()
     })
+
+    it('does not count an unavailable auth token as uploaded', async () => {
+      const chat = {
+        id: 'auth-pending-chat',
+        title: 'Unsynced',
+        messages: [{ role: 'user', content: 'hi' }],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        isBlankChat: false,
+        isLocalOnly: false,
+        locallyModified: true,
+        syncVersion: 1,
+      }
+      mockGetUnsyncedChatMetadata.mockResolvedValue([chat])
+      mockGetChat.mockResolvedValue(chat)
+      mockUploadChat.mockRejectedValue(
+        new AuthTokenUnavailableError('not-initialized'),
+      )
+
+      const result = await new CloudSyncService().backupUnsyncedChats()
+
+      expect(result.uploaded).toBe(0)
+      expect(result.errors).toHaveLength(1)
+      expect(mockUploadChat).toHaveBeenCalledOnce()
+      expect(mockFinalizeUpload).not.toHaveBeenCalled()
+    })
   })
 
   describe('checkSyncStatus', () => {
@@ -1005,6 +1381,106 @@ describe('CloudSyncService', () => {
       await sync
 
       expect(mockMarkRecoveryHistoryReady).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('retryDecryptionWithNewKey', () => {
+    const failedOne = {
+      id: 'failed-one',
+      title: 'Failed one',
+      messages: [],
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+      decryptionFailed: true,
+      isLocalOnly: false,
+    }
+    const failedTwo = { ...failedOne, id: 'failed-two', title: 'Failed two' }
+
+    it('waits for ownership, deep-syncs, and counts only restored IDs', async () => {
+      let grantLock!: () => void
+      const leaderFinished = new Promise<void>((resolve) => {
+        grantLock = resolve
+      })
+      const request = vi.fn(
+        async (
+          _name: string,
+          _options: LockOptions,
+          callback: (lock: Lock) => Promise<unknown>,
+        ) => {
+          await leaderFinished
+          return callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' })
+        },
+      )
+      vi.stubGlobal('navigator', { locks: { request } })
+      mockGetAllChats
+        .mockResolvedValueOnce([failedOne, failedTwo])
+        .mockResolvedValueOnce([
+          {
+            ...failedOne,
+            decryptionFailed: false,
+            messages: [{ role: 'user' }],
+          },
+        ])
+      mockGetChat.mockImplementation(async (id: string) =>
+        id === failedOne.id
+          ? {
+              ...failedOne,
+              decryptionFailed: false,
+              messages: [{ role: 'user' }],
+            }
+          : null,
+      )
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
+      mockListChats
+        .mockResolvedValueOnce({
+          conversations: [{ id: 'failed-one', content: 'first' }],
+          hasMore: true,
+          nextContinuationToken: 'older',
+        })
+        .mockResolvedValueOnce({
+          conversations: [{ id: 'failed-two', content: 'second' }],
+          hasMore: false,
+        })
+      const service = new CloudSyncService()
+
+      const retry = service.retryDecryptionWithNewKey()
+      await Promise.resolve()
+      expect(mockDeleteChat).not.toHaveBeenCalled()
+      grantLock()
+
+      await expect(retry).resolves.toBe(1)
+      expect(mockDeleteChat).toHaveBeenCalledTimes(2)
+      expect(mockListChats).toHaveBeenCalledTimes(2)
+      expect(mockListChats.mock.calls[1]?.[0]?.continuationToken).toBe('older')
+      expect(mockRestoreDecryptionPlaceholder).toHaveBeenCalledWith(failedTwo)
+    })
+
+    it('restores placeholders and reports zero when the deep pull fails', async () => {
+      mockGetAllChats.mockResolvedValueOnce([failedOne])
+      mockGetChat.mockResolvedValue(null)
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
+      mockListChats.mockRejectedValue(new SyncNetworkError())
+      const service = new CloudSyncService()
+
+      await expect(service.retryDecryptionWithNewKey()).resolves.toBe(0)
+
+      expect(mockListChats).toHaveBeenCalledTimes(2)
+      expect(mockRestoreDecryptionPlaceholder).toHaveBeenCalledWith(failedOne)
+    })
+
+    it('restores an evicted placeholder when opt-out invalidates the generation', async () => {
+      mockGetAllChats.mockResolvedValueOnce([failedOne])
+      mockGetChat.mockResolvedValue(null)
+      mockDeleteChat.mockImplementationOnce(async () => {
+        setCloudSyncEnabled(false)
+      })
+      const service = new CloudSyncService()
+
+      await expect(service.retryDecryptionWithNewKey()).resolves.toBe(0)
+
+      expect(mockRestoreDecryptionPlaceholder).toHaveBeenCalledWith(failedOne)
+      expect(localStorage.getItem(SYNC_CHAT_STATUS)).toBeNull()
+      expect(mockListChats).not.toHaveBeenCalled()
     })
   })
 

@@ -31,6 +31,11 @@ export const SYNC_ENCLAVE_URL =
 export const SYNC_ENCLAVE_REPO =
   process.env.NEXT_PUBLIC_SYNC_ENCLAVE_REPO || 'tinfoilsh/confidential-sync'
 
+export const SYNC_ENCLAVE_TIMEOUTS = {
+  READY_MS: 30000,
+  REQUEST_MS: 30000,
+} as const
+
 // Pagination settings
 export const PAGINATION = {
   CHATS_PER_PAGE: 20,

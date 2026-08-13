@@ -361,11 +361,7 @@ export interface SearchReindexStatusResponse {
 export type ImportSource = 'chatgpt' | 'claude' | 'tinfoil'
 
 export type ImportJobStatus =
-  | 'idle'
-  | 'staging'
-  | 'running'
-  | 'completed'
-  | 'failed'
+  'idle' | 'staging' | 'running' | 'completed' | 'failed'
 
 export interface ImportCreateRequest {
   source: ImportSource
@@ -486,27 +482,37 @@ function b64ToBytes(s: string): Uint8Array {
 
 export async function push(req: PushRequest): Promise<PushResponse> {
   const client = await getSyncEnclaveClient()
-  return client.post<PushResponse>('/v1/sync/push', {
-    scope: req.scope,
-    id: req.id ?? '',
-    key: req.keyB64,
-    plaintext: bytesToB64(req.plaintext),
-    if_match: req.ifMatch,
-    idempotency_key: req.idempotencyKey,
-    metadata: req.metadata,
-  })
+  return client.post<PushResponse>(
+    '/v1/sync/push',
+    {
+      scope: req.scope,
+      id: req.id ?? '',
+      key: req.keyB64,
+      plaintext: bytesToB64(req.plaintext),
+      if_match: req.ifMatch,
+      idempotency_key: req.idempotencyKey,
+      metadata: req.metadata,
+    },
+    undefined,
+    { requestScope: 'cloud-sync' },
+  )
 }
 
 export async function pull(req: PullRequest): Promise<PullResponse> {
   const client = await getSyncEnclaveClient()
-  const resp = await client.post<PullResponse>('/v1/sync/pull', {
-    scope: req.scope,
-    ids: req.ids,
-    all: req.all,
-    cursor: req.cursor,
-    limit: req.limit,
-    keys: req.keys,
-  })
+  const resp = await client.post<PullResponse>(
+    '/v1/sync/pull',
+    {
+      scope: req.scope,
+      ids: req.ids,
+      all: req.all,
+      cursor: req.cursor,
+      limit: req.limit,
+      keys: req.keys,
+    },
+    undefined,
+    { requestScope: 'cloud-sync' },
+  )
   // Go marshals an empty slice as JSON null, which would crash every
   // downstream `for (const item of resp.items)` consumer. Force a
   // stable [] at the boundary so callers can iterate without guards.
@@ -533,13 +539,18 @@ export async function listStatus(
   req: ListStatusRequest,
 ): Promise<ListStatusResponse> {
   const client = await getSyncEnclaveClient()
-  const resp = await client.post<ListStatusResponse>('/v1/sync/list-status', {
-    scope: req.scope,
-    cursor: req.cursor,
-    limit: req.limit,
-    project_id: req.projectId,
-    direction: req.direction,
-  })
+  const resp = await client.post<ListStatusResponse>(
+    '/v1/sync/list-status',
+    {
+      scope: req.scope,
+      cursor: req.cursor,
+      limit: req.limit,
+      project_id: req.projectId,
+      direction: req.direction,
+    },
+    undefined,
+    { requestScope: 'cloud-sync' },
+  )
   // Both arrays land as JSON null when the server has nothing to
   // report for the page; normalize so iteration in cloud-storage /
   // project-storage / profile-sync stays branchless.
@@ -552,13 +563,18 @@ export async function listStatus(
 
 export async function deleteRow(req: DeleteRequest): Promise<OKResponse> {
   const client = await getSyncEnclaveClient()
-  return client.post<OKResponse>('/v1/sync/delete', {
-    scope: req.scope,
-    id: req.id,
-    if_match: req.ifMatch,
-    idempotency_key: req.idempotencyKey,
-    key: req.keyB64,
-  })
+  return client.post<OKResponse>(
+    '/v1/sync/delete',
+    {
+      scope: req.scope,
+      id: req.id,
+      if_match: req.ifMatch,
+      idempotency_key: req.idempotencyKey,
+      key: req.keyB64,
+    },
+    undefined,
+    { requestScope: 'cloud-sync' },
+  )
 }
 
 export async function registerKey(
@@ -768,11 +784,16 @@ export async function attachmentPut(
   req: AttachmentPutRequest,
 ): Promise<AttachmentPutResponse> {
   const client = await getSyncEnclaveClient()
-  return client.post<AttachmentPutResponse>('/v1/attachment/put', {
-    chat_id: req.chatId,
-    plaintext: bytesToB64(req.plaintext),
-    idempotency_key: req.idempotencyKey,
-  })
+  return client.post<AttachmentPutResponse>(
+    '/v1/attachment/put',
+    {
+      chat_id: req.chatId,
+      plaintext: bytesToB64(req.plaintext),
+      idempotency_key: req.idempotencyKey,
+    },
+    undefined,
+    { requestScope: 'cloud-sync' },
+  )
 }
 
 /** Fetch an attachment through the sync enclave; returns raw bytes. */
@@ -780,10 +801,15 @@ export async function attachmentGet(
   req: AttachmentGetRequest,
 ): Promise<Uint8Array> {
   const client = await getSyncEnclaveClient()
-  const resp = await client.post<AttachmentGetResponse>('/v1/attachment/get', {
-    id: req.id,
-    att_key: req.attKeyB64,
-  })
+  const resp = await client.post<AttachmentGetResponse>(
+    '/v1/attachment/get',
+    {
+      id: req.id,
+      att_key: req.attKeyB64,
+    },
+    undefined,
+    { requestScope: 'cloud-sync' },
+  )
   return b64ToBytes(resp.plaintext)
 }
 
@@ -818,9 +844,14 @@ export async function attachmentDelete(req: {
   id: string
 }): Promise<OKResponse> {
   const client = await getSyncEnclaveClient()
-  return client.post<OKResponse>('/v1/attachment/delete', {
-    id: req.id,
-  })
+  return client.post<OKResponse>(
+    '/v1/attachment/delete',
+    {
+      id: req.id,
+    },
+    undefined,
+    { requestScope: 'cloud-sync' },
+  )
 }
 
 /* -------------------------------------------------------------------------- */

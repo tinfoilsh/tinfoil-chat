@@ -9,6 +9,7 @@
  */
 
 import { logError, logInfo } from '@/utils/error-handling'
+import { AuthTokenUnavailableError } from '../auth'
 import { decideRecovery } from '../sync-enclave/enclave-error-recovery'
 import {
   computeBackoffDelay,
@@ -453,6 +454,9 @@ export class UploadCoalescer {
 }
 
 function shouldRetryUploadError(error: Error): boolean {
+  if (error instanceof AuthTokenUnavailableError) {
+    return false
+  }
   const decision = decideRecovery(error)
   if (decision.action.type === 'retry') {
     return true
