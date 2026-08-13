@@ -12,8 +12,8 @@
  * State model:
  *  - `gate` is the account-wide condition. `action-required` (key
  *    problems, blocked account) outranks `paused` (attestation /
- *    network trouble that retries itself); a paused report never
- *    downgrades an action-required gate.
+ *    network / auth trouble that retries itself); a paused report
+ *    never downgrades an action-required gate.
  *  - `failedChats` tracks per-chat terminal upload failures; an
  *    entry clears when that chat finally uploads or is deleted.
  *  - `lastSyncedAt` is the wall-clock time of the last completed
@@ -23,7 +23,7 @@
  * so React consumers can use `useSyncExternalStore`.
  */
 
-export type SyncPausedReason = 'attestation' | 'network'
+export type SyncPausedReason = 'attestation' | 'network' | 'auth'
 
 export type SyncActionReason =
   'key-recovery' | 'key-mismatch' | 'key-conflict' | 'account-blocked'

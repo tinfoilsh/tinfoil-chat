@@ -1,5 +1,6 @@
 import { SYNC_ENCLAVE_REPO, SYNC_ENCLAVE_URL } from '@/config'
 import { authTokenManager } from '@/services/auth'
+import { reportSyncPaused } from '@/services/cloud/sync-health'
 import { logError, logInfo } from '@/utils/error-handling'
 import { SecureClient } from 'tinfoil'
 
@@ -138,7 +139,14 @@ export class SyncEnclaveClient {
       token = await authTokenManager.refreshToken(token as string)
       resp = await send(token)
       if (resp.status === 401) {
-        authTokenManager.handlePersistentAuthFailure()
+        // A 401 that survives a token refresh is usually a server-side
+        // condition (enclave JWKS staleness after a signing-key
+        // rotation, clock skew) rather than a revoked session, so it
+        // must never force a sign-out. Pause sync and surface it; the
+        // periodic sync retries and clears the gate on success. A
+        // genuinely ended Clerk session is detected by Clerk itself
+        // and handled by the sign-out cleanup path.
+        reportSyncPaused('auth')
         throw new SyncPersistentAuthError()
       }
     }

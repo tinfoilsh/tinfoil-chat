@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   enclavePull: vi.fn(),
   enclavePush: vi.fn(),
+  enclaveListStatus: vi.fn(),
   pullItemPlaintext: vi.fn(),
 }))
 
@@ -22,7 +23,7 @@ vi.mock('@/services/cloud/cek-encoding', () => ({
 
 vi.mock('@/services/sync-enclave/sync-api', () => ({
   deleteRow: vi.fn(),
-  listStatus: vi.fn(),
+  listStatus: mocks.enclaveListStatus,
   pull: mocks.enclavePull,
   push: mocks.enclavePush,
   newIdempotencyKey: () => 'idempotency-key',
@@ -89,6 +90,79 @@ describe('ProjectStorageService documents', () => {
     expect(documents.get('doc-1')?.sizeBytes).toBe(
       new TextEncoder().encode(content).length,
     )
+  })
+
+  it('deduplicates documents listed on multiple pages', async () => {
+    const storage = new ProjectStorageService()
+    // Simulates a row whose updated_at was bumped mid-walk (enclave
+    // rewrap-on-pull), so the same id appears on two pages.
+    mocks.enclaveListStatus
+      .mockResolvedValueOnce({
+        updates: [
+          {
+            id: 'project-1/doc-1',
+            etag: '1',
+            updated_at: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'project-1/doc-2',
+            etag: '1',
+            updated_at: '2026-01-01T00:00:01.000Z',
+          },
+        ],
+        next_cursor: 'page-2',
+      })
+      .mockResolvedValueOnce({
+        updates: [
+          {
+            id: 'project-1/doc-1',
+            etag: '2',
+            updated_at: '2026-01-01T00:00:02.000Z',
+          },
+          // Stale copy arriving after the fresher page-1 row: the
+          // freshest copy must win, not the last occurrence.
+          {
+            id: 'project-1/doc-2',
+            etag: '0',
+            updated_at: '2025-12-31T00:00:00.000Z',
+          },
+        ],
+        next_cursor: undefined,
+      })
+
+    const { documents } = await storage.listDocuments('project-1')
+
+    // The freshest copy of each row wins, ordered by updated_at.
+    expect(
+      documents.map((doc) => ({ id: doc.id, updatedAt: doc.updatedAt })),
+    ).toEqual([
+      { id: 'doc-2', updatedAt: '2026-01-01T00:00:01.000Z' },
+      { id: 'doc-1', updatedAt: '2026-01-01T00:00:02.000Z' },
+    ])
+  })
+
+  it('excludes other projects\u2019 documents from the listing', async () => {
+    const storage = new ProjectStorageService()
+    mocks.enclaveListStatus.mockResolvedValueOnce({
+      updates: [
+        {
+          id: 'project-1/doc-1',
+          etag: '1',
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'project-2/doc-9',
+          etag: '1',
+          updated_at: '2026-01-01T00:00:01.000Z',
+        },
+      ],
+      next_cursor: undefined,
+    })
+
+    const { documents } = await storage.listDocuments('project-1')
+
+    expect(documents).toHaveLength(1)
+    expect(documents[0]).toMatchObject({ id: 'doc-1', projectId: 'project-1' })
   })
 
   it('marks failed pulls as unavailable documents', async () => {

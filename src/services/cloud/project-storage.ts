@@ -784,7 +784,14 @@ export class ProjectStorageService {
     projectId: string,
     _options?: { includeContent?: boolean },
   ): Promise<ProjectDocumentListResponse> {
-    const documents: ProjectDocumentListResponse['documents'] = []
+    // Deduplicate by id: list-status walks the whole scope ordered by
+    // updated_at, so a row whose updated_at is bumped mid-walk (e.g.
+    // the enclave's rewrap-on-pull) or that straddles a page boundary
+    // can be returned twice. Keep the freshest copy of each row.
+    const documentsById = new Map<
+      string,
+      ProjectDocumentListResponse['documents'][number]
+    >()
     let cursor: string | undefined
     do {
       const status = await enclaveListStatus({
@@ -792,13 +799,21 @@ export class ProjectStorageService {
         cursor,
         limit: 500,
       })
-      documents.push(
-        ...status.updates
-          .filter((update) => update.id.startsWith(`${projectId}/`))
-          .map(projectDocumentListItemFromStatus),
-      )
+      for (const update of status.updates) {
+        if (!update.id.startsWith(`${projectId}/`)) continue
+        const document = projectDocumentListItemFromStatus(update)
+        const existing = documentsById.get(document.id)
+        if (!existing || document.updatedAt >= existing.updatedAt) {
+          documentsById.set(document.id, document)
+        }
+      }
       cursor = status.next_cursor
     } while (cursor)
+    // Replacing a Map value keeps its original insertion position, so
+    // re-sort to preserve the updated_at ordering of the walk.
+    const documents = Array.from(documentsById.values()).sort((a, b) =>
+      a.updatedAt < b.updatedAt ? -1 : a.updatedAt > b.updatedAt ? 1 : 0,
+    )
     return { documents }
   }
 

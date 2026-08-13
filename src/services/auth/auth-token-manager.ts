@@ -1,5 +1,3 @@
-import { logError } from '@/utils/error-handling'
-
 interface TokenReadOptions {
   skipCache?: boolean
 }
@@ -32,8 +30,6 @@ export class AuthTokenManager {
   private getToken: TokenGetter | null = null
   private initResolvers: Array<() => void> = []
   private refreshByRejectedToken = new Map<string, Promise<string>>()
-  private persistentAuthHandler: (() => Promise<void>) | null = null
-  private persistentAuthHandlerPromise: Promise<void> | null = null
   private generation = 0
 
   initialize(getToken: TokenGetter) {
@@ -109,40 +105,6 @@ export class AuthTokenManager {
     })
     this.refreshByRejectedToken.set(rejectedToken, refresh)
     return refresh
-  }
-
-  registerPersistentAuthHandler(handler: () => Promise<void>): () => void {
-    this.persistentAuthHandler = handler
-    return () => {
-      if (this.persistentAuthHandler === handler) {
-        this.persistentAuthHandler = null
-      }
-    }
-  }
-
-  handlePersistentAuthFailure(): Promise<void> {
-    if (this.persistentAuthHandlerPromise)
-      return this.persistentAuthHandlerPromise
-    if (!this.persistentAuthHandler) return Promise.resolve()
-
-    const handler = this.persistentAuthHandler
-    const promise = Promise.resolve()
-      .then(handler)
-      .catch((error) => {
-        logError(
-          'Failed to sign out after persistent authentication failure',
-          error,
-          {
-            component: 'AuthTokenManager',
-            action: 'handlePersistentAuthFailure',
-          },
-        )
-      })
-      .finally(() => {
-        this.persistentAuthHandlerPromise = null
-      })
-    this.persistentAuthHandlerPromise = promise
-    return promise
   }
 
   reset(): void {

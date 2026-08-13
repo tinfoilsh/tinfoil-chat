@@ -22,7 +22,7 @@ import {
 } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { hasPasskeyBackup } from '@/utils/signout-cleanup'
-import { useAuth, useClerk } from '@clerk/nextjs'
+import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 export interface CloudSyncState {
@@ -47,7 +47,6 @@ type CloudKeyActivationMode = 'recoverExisting' | 'explicitStartFresh'
 
 export function useCloudSync(options?: UseCloudSyncOptions) {
   const { getToken, isSignedIn } = useAuth()
-  const { signOut } = useClerk()
   const [state, setState] = useState<CloudSyncState>({
     syncing: false,
     lastSyncTime: null,
@@ -71,11 +70,6 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
       isMountedRef.current = false
     }
   }, [])
-
-  useEffect(
-    () => authTokenManager.registerPersistentAuthHandler(() => signOut()),
-    [signOut],
-  )
 
   // Listen for fallback key additions and trigger retry decryption
   useEffect(() => {
