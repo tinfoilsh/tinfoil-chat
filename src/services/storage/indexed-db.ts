@@ -105,22 +105,6 @@ function deserializeStoredChat(chat: StoredChat): StoredChat {
   } as StoredChat
 }
 
-function deserializeStoredChatOrNull(
-  chat: StoredChat,
-  action: string,
-): StoredChat | null {
-  try {
-    return deserializeStoredChat(chat)
-  } catch (error) {
-    logError('Skipping malformed stored chat', error, {
-      component: 'IndexedDBStorage',
-      action,
-      metadata: { chatId: chat.id },
-    })
-    return null
-  }
-}
-
 /**
  * Computes a stable fingerprint for a chat's meaningful content.
  * Used to decide if a chat is "locally modified" (and should be re-uploaded).
@@ -831,8 +815,12 @@ export class IndexedDBStorage {
       const request = store.get(id)
 
       request.onsuccess = () => {
-        const chat = request.result as StoredChat | undefined
-        resolve(chat ? deserializeStoredChatOrNull(chat, 'getChat') : null)
+        try {
+          const chat = request.result as StoredChat | undefined
+          resolve(chat ? deserializeStoredChat(chat) : null)
+        } catch (error) {
+          reject(error)
+        }
       }
       request.onerror = () => reject(new Error('Failed to get chat'))
     })
@@ -1174,12 +1162,12 @@ export class IndexedDBStorage {
         request.onsuccess = (event) => {
           const cursor = (event.target as IDBRequest).result
           if (cursor) {
-            const chat = deserializeStoredChatOrNull(
-              cursor.value as StoredChat,
-              'getAllChats',
-            )
-            if (chat) chats.push(chat)
-            cursor.continue()
+            try {
+              chats.push(deserializeStoredChat(cursor.value as StoredChat))
+              cursor.continue()
+            } catch (error) {
+              reject(error)
+            }
           } else {
             resolve(chats)
           }
@@ -1344,15 +1332,11 @@ export class IndexedDBStorage {
         const request = store.index(CHATS_SYNC_PENDING_INDEX).getAll(1)
 
         request.onsuccess = () => {
-          resolve(
-            (request.result as StoredChat[]).flatMap((chat) => {
-              const deserialized = deserializeStoredChatOrNull(
-                chat,
-                'getUnsyncedChats',
-              )
-              return deserialized ? [deserialized] : []
-            }),
-          )
+          try {
+            resolve((request.result as StoredChat[]).map(deserializeStoredChat))
+          } catch (error) {
+            reject(error)
+          }
         }
         request.onerror = () =>
           reject(new Error('Failed to get unsynced chats'))
@@ -1399,7 +1383,12 @@ export class IndexedDBStorage {
             }
 
             const chat = cursor.value as StoredChat
-            if (!Array.isArray(chat.messages)) {
+            if (
+              !Array.isArray(chat.messages) ||
+              chat.messages.some(
+                (message) => message === null || typeof message !== 'object',
+              )
+            ) {
               logError(
                 'Skipping malformed chat during pending sync migration',
                 new TypeError('Stored chat has invalid messages'),

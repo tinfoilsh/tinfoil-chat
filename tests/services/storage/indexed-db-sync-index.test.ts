@@ -81,6 +81,10 @@ describe('IndexedDB pending sync index', () => {
         locallyModified: true,
         messages: undefined as unknown as StoredChat['messages'],
       }),
+      storedChat('malformed-message', {
+        locallyModified: true,
+        messages: [null] as unknown as StoredChat['messages'],
+      }),
     ])
 
     const storage = new IndexedDBStorage()
@@ -90,9 +94,6 @@ describe('IndexedDB pending sync index', () => {
       'dirty',
       'never-synced',
     ])
-    const allChats = await storage.getAllChats()
-    expect(allChats.map((chat) => chat.id)).not.toContain('malformed')
-    expect(allChats.map((chat) => chat.id)).toContain('dirty')
 
     const upgraded = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION)
