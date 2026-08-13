@@ -392,7 +392,7 @@ describe('CloudSyncService', () => {
     )
     vi.stubGlobal('navigator', { locks: { request } })
     mockNeedsRecoveryHistorySync.mockReturnValue(true)
-    mockGetUnsyncedChats.mockResolvedValue([])
+    mockGetUnsyncedChatMetadata.mockResolvedValue([])
     mockGetAllChats.mockResolvedValue([])
     mockGetChatSyncStatus.mockResolvedValue({
       count: 2,
@@ -587,7 +587,7 @@ describe('CloudSyncService', () => {
           hasMore: boolean
         }) => void)
       | undefined
-    mockGetUnsyncedChats.mockResolvedValue([])
+    mockGetUnsyncedChatMetadata.mockResolvedValue([])
     mockGetAllChats.mockResolvedValue([])
     mockListChats.mockReturnValue(
       new Promise((resolve) => {
@@ -1050,7 +1050,7 @@ describe('CloudSyncService', () => {
         locallyModified: true,
         syncVersion: 1,
       }
-      mockGetUnsyncedChats.mockResolvedValue([chat])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([chat])
       mockGetChat.mockResolvedValue(chat)
       mockUploadChat.mockRejectedValue(
         new AuthTokenUnavailableError('not-initialized'),
@@ -1414,7 +1414,6 @@ describe('CloudSyncService', () => {
       vi.stubGlobal('navigator', { locks: { request } })
       mockGetAllChats
         .mockResolvedValueOnce([failedOne, failedTwo])
-        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([
           {
             ...failedOne,
@@ -1431,7 +1430,7 @@ describe('CloudSyncService', () => {
             }
           : null,
       )
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockListChats
         .mockResolvedValueOnce({
           conversations: [{ id: 'failed-one', content: 'first' }],
@@ -1459,7 +1458,7 @@ describe('CloudSyncService', () => {
     it('restores placeholders and reports zero when the deep pull fails', async () => {
       mockGetAllChats.mockResolvedValueOnce([failedOne])
       mockGetChat.mockResolvedValue(null)
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockListChats.mockRejectedValue(new SyncNetworkError())
       const service = new CloudSyncService()
 
