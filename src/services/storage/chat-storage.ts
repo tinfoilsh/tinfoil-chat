@@ -281,7 +281,12 @@ export class ChatStorageService {
     cloudDeleted: number
     notificationSent: boolean
   }> {
+    // Capture the guard before any await so the whole operation —
+    // ID snapshot, cloud delete, and local wipe — is pinned to the
+    // account that initiated it.
+    const guard = cloudSync.createAccountOperationGuard()
     await this.initialize()
+    guard.assertCurrent()
 
     // Snapshot local IDs up front so we know what to mark as deleted in the
     // tracker after a successful wipe, but don't mark anything yet — if the
@@ -289,13 +294,13 @@ export class ChatStorageService {
     // tombstone chats that still exist on the server and lose them on the
     // next pull.
     const localIds = await indexedDBStorage.getAllChatIds()
+    guard.assertCurrent()
 
     // Attempt the cloud bulk-delete first. If it fails, surface the error
     // and skip both the tracker update and the local wipe so the user can
     // retry without partial-deletion side effects.
     let cloudDeleted = 0
     let notificationSent = false
-    const guard = cloudSync.createAccountOperationGuard()
     if (await cloudStorage.isAuthenticated()) {
       try {
         guard.assertCurrent()
