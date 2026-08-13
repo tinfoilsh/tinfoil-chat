@@ -21,6 +21,7 @@ const {
   sendChatStreamMock,
   sessionGetAllChatsMock,
   sessionSaveMock,
+  sessionSaveDraftMock,
   pendingStreams,
   streamControllers,
   streamingChats,
@@ -60,6 +61,7 @@ const {
   sendChatStreamMock: vi.fn(),
   sessionGetAllChatsMock: vi.fn(() => [] as Chat[]),
   sessionSaveMock: vi.fn(),
+  sessionSaveDraftMock: vi.fn(),
   pendingStreams: new Set<string>(),
   streamControllers: new Map<string, AbortController>(),
   streamingChats: new Set<string>(),
@@ -175,6 +177,8 @@ vi.mock('@/services/storage/session-storage', () => ({
   sessionChatStorage: {
     getAllChats: sessionGetAllChatsMock,
     saveChat: sessionSaveMock,
+    saveStreamingDraft: sessionSaveDraftMock,
+    clearStreamingDraft: vi.fn(),
   },
 }))
 
@@ -366,7 +370,7 @@ describe('useChatMessaging stopped streams', () => {
 
     stream.send({ choices: [{ delta: { content: 'Partial answer' } }] })
     await vi.waitFor(() =>
-      expect(sessionSaveMock).toHaveBeenLastCalledWith(
+      expect(sessionSaveDraftMock).toHaveBeenLastCalledWith(
         expect.objectContaining({
           messages: expect.arrayContaining([
             expect.objectContaining({
@@ -383,7 +387,7 @@ describe('useChatMessaging stopped streams', () => {
       await query
     })
 
-    expect(sessionSaveMock).toHaveBeenLastCalledWith(
+    expect(sessionSaveDraftMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         messages: expect.arrayContaining([
           expect.objectContaining({

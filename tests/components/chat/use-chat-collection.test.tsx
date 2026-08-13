@@ -7,7 +7,11 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/services/storage/session-storage', () => ({
-  sessionChatStorage: { saveChat: vi.fn() },
+  sessionChatStorage: {
+    saveChat: vi.fn(),
+    saveStreamingDraft: vi.fn(),
+    clearStreamingDraft: vi.fn(),
+  },
 }))
 
 vi.mock('@/services/storage/chat-storage', () => ({
@@ -191,7 +195,7 @@ describe('useChatCollection', () => {
   })
 
   it('persists guest chats during streaming updates', () => {
-    vi.mocked(sessionChatStorage.saveChat).mockClear()
+    vi.mocked(sessionChatStorage.saveStreamingDraft).mockClear()
     const chat = createChat()
     const partialMessage: Message = {
       role: 'assistant',
@@ -208,7 +212,7 @@ describe('useChatCollection', () => {
       skipIndexedDBSave: true,
     })
 
-    expect(sessionChatStorage.saveChat).toHaveBeenCalledWith(
+    expect(sessionChatStorage.saveStreamingDraft).toHaveBeenCalledWith(
       expect.objectContaining({ messages: [partialMessage] }),
     )
   })

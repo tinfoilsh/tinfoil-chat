@@ -99,6 +99,8 @@ vi.mock('@/services/storage/chat-storage', () => ({
 vi.mock('@/services/storage/session-storage', () => ({
   sessionChatStorage: {
     saveChat: vi.fn(),
+    saveStreamingDraft: vi.fn(),
+    clearStreamingDraft: vi.fn(),
   },
 }))
 

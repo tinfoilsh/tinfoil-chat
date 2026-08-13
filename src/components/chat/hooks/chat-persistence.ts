@@ -97,10 +97,12 @@ export function createUpdateChatWithHistoryCheck({
     )
 
     if (updatedChat.isTemporary) {
+      sessionChatStorage.clearStreamingDraft(chatId)
       return
     }
 
     if (storeHistory) {
+      sessionChatStorage.clearStreamingDraft(chatId)
       const shouldSkipCloudSync =
         skipCloudSync ||
         updatedChat.isLocalOnly ||
@@ -176,7 +178,11 @@ export function createUpdateChatWithHistoryCheck({
           )
         })
     } else {
-      sessionChatStorage.saveChat(updatedChat)
+      if (skipIndexedDBSave) {
+        sessionChatStorage.saveStreamingDraft(updatedChat)
+      } else {
+        sessionChatStorage.saveChat(updatedChat)
+      }
     }
   }
 }
