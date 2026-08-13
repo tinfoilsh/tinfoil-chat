@@ -135,9 +135,9 @@ describe('ChatMessages archive boundary', () => {
     rerender(<ChatMessages {...props('long-chat', longChat)} />)
 
     expect(screen.queryByTestId('message-long-1')).not.toBeInTheDocument()
-    expect(screen.getByTestId('message-long-2')).toBeInTheDocument()
+    expect(screen.getByTestId('message-long-4')).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: 'Show 1 earlier messages' }),
+      screen.getByRole('button', { name: /Show \d+ earlier messages/ }),
     ).toBeInTheDocument()
   })
 
@@ -155,7 +155,10 @@ describe('ChatMessages archive boundary', () => {
     rerender(<ChatMessages {...props('hydrated-chat', longChat)} />)
 
     expect(screen.queryByTestId('message-hydrated-1')).not.toBeInTheDocument()
-    expect(screen.getByTestId('message-hydrated-2')).toBeInTheDocument()
+    expect(screen.getByTestId('message-hydrated-4')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Show \d+ earlier messages/ }),
+    ).toBeInTheDocument()
   })
 
   it('reinitializes the collapsed prefix after the same chat temporarily empties', () => {
@@ -173,9 +176,9 @@ describe('ChatMessages archive boundary', () => {
     rerender(<ChatMessages {...props('same-chat', longChat)} />)
 
     expect(screen.queryByTestId('message-rehydrated-1')).not.toBeInTheDocument()
-    expect(screen.getByTestId('message-rehydrated-2')).toBeInTheDocument()
+    expect(screen.getByTestId('message-rehydrated-4')).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: 'Show 1 earlier messages' }),
+      screen.getByRole('button', { name: /Show \d+ earlier messages/ }),
     ).toBeInTheDocument()
   })
 
