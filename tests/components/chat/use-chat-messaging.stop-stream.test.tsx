@@ -1170,6 +1170,7 @@ describe('useChatMessaging stopped streams', () => {
     recoveryAvailableState.available = true
     let finishRecoveryCompletion!: () => void
     const idleWhileFinalizing: boolean[] = []
+    const readyForNextMessage = vi.fn()
     completeLiveChatRecoveryMock.mockImplementationOnce(
       (...args: unknown[]) => {
         idleWhileFinalizing.push(
@@ -1223,7 +1224,14 @@ describe('useChatMessaging stopped streams', () => {
 
     let query!: Promise<unknown>
     act(() => {
-      query = result.current.messaging.handleQuery('Prompt') as Promise<unknown>
+      query = result.current.messaging.handleQuery(
+        'Prompt',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        readyForNextMessage,
+      ) as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
     stream.send({ choices: [{ delta: { content: 'Complete answer' } }] })
@@ -1238,6 +1246,7 @@ describe('useChatMessaging stopped streams', () => {
     // The stop button/spinner must revert as soon as the stream ends, not
     // after the recovery finalization round-trips settle.
     expect(idleWhileFinalizing).toEqual([true])
+    expect(readyForNextMessage).toHaveBeenCalledOnce()
 
     await act(async () => {
       finishRecoveryCompletion()

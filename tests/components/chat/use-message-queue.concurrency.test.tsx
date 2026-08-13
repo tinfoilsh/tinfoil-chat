@@ -94,6 +94,7 @@ describe('useMessageQueue concurrency', () => {
       undefined,
       undefined,
       undefined,
+      expect.any(Function),
     )
 
     // Chat A is now streaming; switch to a different, idle chat B.
@@ -114,6 +115,7 @@ describe('useMessageQueue concurrency', () => {
       undefined,
       undefined,
       undefined,
+      expect.any(Function),
     )
 
     resolveA?.()
@@ -143,6 +145,7 @@ describe('useMessageQueue concurrency', () => {
       undefined,
       undefined,
       undefined,
+      expect.any(Function),
     )
   })
 
@@ -424,6 +427,7 @@ describe('useMessageQueue concurrency', () => {
       undefined,
       undefined,
       undefined,
+      expect.any(Function),
     )
 
     resolveA?.()
@@ -461,6 +465,7 @@ describe('useMessageQueue concurrency', () => {
       undefined,
       undefined,
       undefined,
+      expect.any(Function),
     )
 
     act(() => {
@@ -475,9 +480,62 @@ describe('useMessageQueue concurrency', () => {
       undefined,
       undefined,
       undefined,
+      expect.any(Function),
     )
 
     resolvers[1]?.()
+  })
+
+  it('dispatches the next message when the completed response becomes interactive', async () => {
+    const resolvers: Array<() => void> = []
+    const readyCallbacks: Array<() => void> = []
+    const handleQuery = vi.fn(
+      (
+        _text: string,
+        _attachments: unknown,
+        _systemPromptOverride: unknown,
+        _baseMessages: unknown,
+        _quote: unknown,
+        onReadyForNextMessage?: () => void,
+      ) => {
+        if (onReadyForNextMessage) readyCallbacks.push(onReadyForNextMessage)
+        return new Promise<void>((resolve) => {
+          resolvers.push(resolve)
+        })
+      },
+    )
+
+    const { result, rerender } = renderHook(
+      ({ loadingState }) =>
+        useMessageQueue({
+          chatId: 'chat-a',
+          loadingState,
+          handleQuery,
+          isRateLimited: () => false,
+        }),
+      { initialProps: { loadingState: 'idle' as LoadingState } },
+    )
+
+    act(() => result.current.submit({ text: 'first' }))
+    await flushMicrotasks()
+    rerender({ loadingState: 'loading' as LoadingState })
+    act(() => result.current.submit({ text: 'second' }))
+    await flushMicrotasks()
+
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+    expect(result.current.queuedMessages.map(({ text }) => text)).toEqual([
+      'second',
+    ])
+
+    rerender({ loadingState: 'idle' as LoadingState })
+    act(() => readyCallbacks[0]?.())
+    await flushMicrotasks()
+
+    expect(handleQuery).toHaveBeenCalledTimes(2)
+    expect(handleQuery.mock.calls[1][0]).toBe('second')
+    expect(result.current.queuedMessages).toEqual([])
+
+    resolvers.forEach((resolve) => resolve())
   })
 
   it('parks a queued message when switching away and resumes on return', async () => {
@@ -521,6 +579,7 @@ describe('useMessageQueue concurrency', () => {
       undefined,
       undefined,
       undefined,
+      expect.any(Function),
     )
   })
 
@@ -560,6 +619,7 @@ describe('useMessageQueue concurrency', () => {
       undefined,
       undefined,
       undefined,
+      expect.any(Function),
     )
   })
 
@@ -601,6 +661,7 @@ describe('useMessageQueue concurrency', () => {
       undefined,
       undefined,
       undefined,
+      expect.any(Function),
     )
   })
 
@@ -715,6 +776,7 @@ describe('useMessageQueue concurrency', () => {
       undefined,
       undefined,
       'quoted',
+      expect.any(Function),
     ])
     expect(handleQuery.mock.calls[2][0]).toBe('C')
     expect(result.current.queuedMessages).toEqual([])
@@ -817,6 +879,7 @@ describe('useMessageQueue concurrency', () => {
       undefined,
       undefined,
       undefined,
+      expect.any(Function),
     )
     expect(result.current.queuedMessages).toEqual([])
   })
