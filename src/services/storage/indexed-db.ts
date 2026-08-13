@@ -42,6 +42,18 @@ export interface StoredChat extends Chat {
   clockVersion?: number
 }
 
+export interface ChatSyncMetadata {
+  id: string
+  messageCount: number
+  projectId?: string
+  decryptionFailed?: boolean
+  locallyModified?: boolean
+  syncedAt?: number
+  updatedAt: string
+  isLocalOnly?: boolean
+  isBlankChat?: boolean
+}
+
 export interface SaveChatResult {
   saved: boolean
   isLocalOnly: boolean
@@ -134,6 +146,12 @@ const ACCOUNT_CHANGE_RESET_TIMEOUT_MS = 10_000
 const ACCOUNT_CHANGE_READ_ERROR = 'IndexedDB read superseded by account change'
 const ACCOUNT_CHANGE_WRITE_ERROR =
   'IndexedDB write superseded by account change'
+const CHAT_SYNC_BOOLEAN_FIELDS = [
+  'decryptionFailed',
+  'locallyModified',
+  'isLocalOnly',
+  'isBlankChat',
+] as const
 let isUpgradeBlocked = false
 const textEncoder = new TextEncoder()
 
@@ -157,6 +175,55 @@ function deserializeStoredChat(chat: StoredChat): StoredChat {
       timestamp: message.timestamp ? new Date(message.timestamp) : new Date(),
     })),
   } as StoredChat
+}
+
+function toChatSyncMetadata(chat: unknown): ChatSyncMetadata {
+  if (!chat || typeof chat !== 'object') {
+    throw new Error('Stored chat has invalid sync metadata')
+  }
+
+  const rawChat = chat as Record<string, unknown>
+  if (typeof rawChat.id !== 'string' || rawChat.id.trim().length === 0) {
+    throw new Error('Stored chat has invalid sync metadata: id')
+  }
+  if (!Array.isArray(rawChat.messages)) {
+    throw new Error('Stored chat has invalid sync metadata: messages')
+  }
+  if (
+    typeof rawChat.updatedAt !== 'string' ||
+    rawChat.updatedAt.trim().length === 0
+  ) {
+    throw new Error('Stored chat has invalid sync metadata: updatedAt')
+  }
+  if (
+    rawChat.projectId !== undefined &&
+    typeof rawChat.projectId !== 'string'
+  ) {
+    throw new Error('Stored chat has invalid sync metadata: projectId')
+  }
+  if (
+    rawChat.syncedAt !== undefined &&
+    (typeof rawChat.syncedAt !== 'number' || !Number.isFinite(rawChat.syncedAt))
+  ) {
+    throw new Error('Stored chat has invalid sync metadata: syncedAt')
+  }
+  for (const field of CHAT_SYNC_BOOLEAN_FIELDS) {
+    if (rawChat[field] !== undefined && typeof rawChat[field] !== 'boolean') {
+      throw new Error(`Stored chat has invalid sync metadata: ${field}`)
+    }
+  }
+
+  return {
+    id: rawChat.id,
+    messageCount: rawChat.messages.length,
+    projectId: rawChat.projectId as string | undefined,
+    decryptionFailed: rawChat.decryptionFailed as boolean | undefined,
+    locallyModified: rawChat.locallyModified as boolean | undefined,
+    syncedAt: rawChat.syncedAt as number | undefined,
+    updatedAt: rawChat.updatedAt,
+    isLocalOnly: rawChat.isLocalOnly as boolean | undefined,
+    isBlankChat: rawChat.isBlankChat as boolean | undefined,
+  }
 }
 
 /**
@@ -1743,49 +1810,71 @@ export class IndexedDBStorage {
         const request = store.openCursor(null, 'next') // Ascending order on reverse timestamp = most recent first
 
         const chats: StoredChat[] = []
-        let payloads: StoredAttachmentPayload[] = []
-        const payloadRequest = transaction
+        const payloadIndex = transaction
           .objectStore(ATTACHMENT_PAYLOADS_STORE)
-          .getAll()
-        payloadRequest.onsuccess = () => {
-          payloads = payloadRequest.result as StoredAttachmentPayload[]
-        }
-        payloadRequest.onerror = () =>
-          reject(new Error('Failed to get attachment payloads'))
+          .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
 
         request.onsuccess = (event) => {
-          const cursor = (event.target as IDBRequest).result
-          if (cursor) {
+          const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>)
+            .result
+          if (!cursor) return
+
+          const rawChat = cursor.value as StoredChat
+          const payloadRequest = payloadIndex.getAll(
+            IDBKeyRange.only(rawChat.id),
+          )
+          payloadRequest.onsuccess = () => {
             try {
-              chats.push(deserializeStoredChat(cursor.value as StoredChat))
+              const chat = deserializeStoredChat(rawChat)
+              chats.push(
+                hydrateAttachmentPayloads(
+                  chat,
+                  payloadRequest.result as StoredAttachmentPayload[],
+                ),
+              )
               cursor.continue()
             } catch (error) {
               reject(error)
             }
           }
+          payloadRequest.onerror = () =>
+            reject(new Error('Failed to get attachment payloads'))
         }
 
         request.onerror = () => reject(new Error('Failed to get all chats'))
-        transaction.oncomplete = () => {
+        transaction.oncomplete = () => resolve(chats)
+        transaction.onerror = () => reject(new Error('Failed to get all chats'))
+        transaction.onabort = () =>
+          reject(new Error('Get all chats transaction aborted'))
+      }),
+    )
+  }
+
+  async getChatSyncMetadata(): Promise<ChatSyncMetadata[]> {
+    await this.waitForSaveQueue()
+    const db = await this.ensureDB()
+
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readonly')
+        const request = transaction.objectStore(CHATS_STORE).openCursor()
+        const metadata: ChatSyncMetadata[] = []
+
+        request.onsuccess = () => {
           try {
-            const payloadsByChat = new Map<string, StoredAttachmentPayload[]>()
-            for (const payload of payloads) {
-              const chatPayloads = payloadsByChat.get(payload.chatId)
-              if (chatPayloads) chatPayloads.push(payload)
-              else payloadsByChat.set(payload.chatId, [payload])
+            const cursor = request.result
+            if (!cursor) {
+              resolve(metadata)
+              return
             }
-            resolve(
-              chats.map((chat) =>
-                hydrateAttachmentPayloads(
-                  chat,
-                  payloadsByChat.get(chat.id) ?? [],
-                ),
-              ),
-            )
+            metadata.push(toChatSyncMetadata(cursor.value))
+            cursor.continue()
           } catch (error) {
             reject(error)
           }
         }
+        request.onerror = () =>
+          reject(new Error('Failed to get chat sync metadata'))
       }),
     )
   }
@@ -1946,7 +2035,7 @@ export class IndexedDBStorage {
     return hydrated.filter((chat): chat is StoredChat => chat !== null)
   }
 
-  async getUnsyncedChatMetadata(): Promise<StoredChat[]> {
+  async getUnsyncedChatMetadata(): Promise<ChatSyncMetadata[]> {
     await this.ensureSyncPendingIndex()
     await this.waitForSaveQueue()
     const db = await this.ensureDB()
@@ -1955,11 +2044,20 @@ export class IndexedDBStorage {
       new Promise((resolve, reject) => {
         const transaction = db.transaction([CHATS_STORE], 'readonly')
         const store = transaction.objectStore(CHATS_STORE)
-        const request = store.index(CHATS_SYNC_PENDING_INDEX).getAll(1)
+        const request = store
+          .index(CHATS_SYNC_PENDING_INDEX)
+          .openCursor(IDBKeyRange.only(1))
+        const metadata: ChatSyncMetadata[] = []
 
         request.onsuccess = () => {
           try {
-            resolve((request.result as StoredChat[]).map(deserializeStoredChat))
+            const cursor = request.result
+            if (!cursor) {
+              resolve(metadata)
+              return
+            }
+            metadata.push(toChatSyncMetadata(cursor.value))
+            cursor.continue()
           } catch (error) {
             reject(error)
           }

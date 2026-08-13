@@ -6,7 +6,10 @@
  * can be uploaded, downloaded, or retried for decryption.
  */
 
-import type { StoredChat } from '@/services/storage/indexed-db'
+import type {
+  ChatSyncMetadata,
+  StoredChat,
+} from '@/services/storage/indexed-db'
 import type { EditClock } from './edit-clock'
 
 export function trustedChatClock(
@@ -39,6 +42,7 @@ export function trustedChatClock(
  * - isLocalOnly === true (user explicitly chose local storage)
  * - isBlankChat === true (empty placeholder chat)
  * - decryptionFailed === true (would overwrite server data with placeholder)
+ * - no messages (malformed or stale persisted chat, not an intentional blank)
  * - currently streaming (incomplete data)
  *
  * @param chat The chat to check
@@ -46,7 +50,19 @@ export function trustedChatClock(
  * @returns true if the chat can be uploaded
  */
 export function isUploadableChat(
-  chat: StoredChat,
+  chat:
+    | Pick<
+        ChatSyncMetadata,
+        | 'id'
+        | 'messageCount'
+        | 'isLocalOnly'
+        | 'isBlankChat'
+        | 'decryptionFailed'
+      >
+    | Pick<
+        StoredChat,
+        'id' | 'messages' | 'isLocalOnly' | 'isBlankChat' | 'decryptionFailed'
+      >,
   isStreaming?: (chatId: string) => boolean,
 ): boolean {
   if (chat.isLocalOnly === true) {
@@ -58,6 +74,12 @@ export function isUploadableChat(
   }
 
   if (chat.decryptionFailed === true) {
+    return false
+  }
+
+  const messageCount =
+    'messages' in chat ? chat.messages.length : chat.messageCount
+  if (messageCount === 0) {
     return false
   }
 
@@ -82,7 +104,13 @@ export function isUploadableChat(
  */
 export function shouldIngestRemoteChat(
   remote: { id: string; updatedAt?: string | null },
-  local: StoredChat | null | undefined,
+  local:
+    | Pick<
+        ChatSyncMetadata,
+        'decryptionFailed' | 'locallyModified' | 'syncedAt'
+      >
+    | null
+    | undefined,
 ): boolean {
   // If no local chat exists, always ingest
   if (!local) {

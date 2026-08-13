@@ -1179,7 +1179,7 @@ export class CloudSyncService {
     if (!this.isCurrentGeneration(generation)) return result
 
     try {
-      const unsyncedChats = await indexedDBStorage.getUnsyncedChats()
+      const unsyncedChats = await indexedDBStorage.getUnsyncedChatMetadata()
       if (!this.isCurrentGeneration(generation)) return result
 
       // Debug logging
@@ -1387,7 +1387,7 @@ export class CloudSyncService {
         },
       })
 
-      const localChats = await indexedDBStorage.getAllChats()
+      const localChats = await indexedDBStorage.getChatSyncMetadata()
 
       const localChatMap = new Map(localChats.map((c) => [c.id, c]))
 
@@ -2063,7 +2063,7 @@ export class CloudSyncService {
     }
 
     try {
-      const localChats = await indexedDBStorage.getAllChats()
+      const localChats = await indexedDBStorage.getChatSyncMetadata()
       const localChatMap = new Map(localChats.map((c) => [c.id, c]))
 
       let hasMore = true
@@ -2182,7 +2182,7 @@ export class CloudSyncService {
 
     try {
       // First, backup any unsynced local project chats
-      const unsyncedChats = await indexedDBStorage.getUnsyncedChats()
+      const unsyncedChats = await indexedDBStorage.getUnsyncedChatMetadata()
       if (!this.isCurrentGeneration(generation)) return result
       const projectChatsToSync = unsyncedChats.filter(
         (chat) =>

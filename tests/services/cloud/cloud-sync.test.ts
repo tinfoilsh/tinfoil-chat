@@ -15,7 +15,8 @@ const mockGetAllChats = vi.fn()
 const mockGetCloudChatCount = vi.fn()
 const mockGetProjectChatCount = vi.fn()
 const mockIsChatHistoryAuthoritative = vi.fn()
-const mockGetUnsyncedChats = vi.fn()
+const mockGetUnsyncedChatMetadata = vi.fn()
+const mockGetChatSyncMetadata = vi.fn()
 const mockGetChat = vi.fn()
 const mockSaveChat = vi.fn()
 const mockSaveExistingChat = vi.fn()
@@ -80,12 +81,13 @@ vi.mock('@/services/storage/indexed-db', () => ({
   chatContentFingerprint: (chat: unknown) => JSON.stringify(chat),
   indexedDBStorage: {
     getAllChats: (...args: any[]) => mockGetAllChats(...args),
+    getChatSyncMetadata: (...args: any[]) => mockGetChatSyncMetadata(...args),
     getCloudChatCount: (...args: any[]) => mockGetCloudChatCount(...args),
     getProjectChatCount: (...args: any[]) => mockGetProjectChatCount(...args),
     isChatHistoryAuthoritative: (...args: any[]) =>
       mockIsChatHistoryAuthoritative(...args),
-    getUnsyncedChats: (...args: any[]) => mockGetUnsyncedChats(...args),
-    getUnsyncedChatMetadata: (...args: any[]) => mockGetUnsyncedChats(...args),
+    getUnsyncedChatMetadata: (...args: any[]) =>
+      mockGetUnsyncedChatMetadata(...args),
     saveChat: (...args: any[]) => mockSaveChat(...args),
     saveExistingChat: (...args: any[]) => mockSaveExistingChat(...args),
     markAsSynced: (...args: any[]) => mockMarkAsSynced(...args),
@@ -225,6 +227,8 @@ describe('CloudSyncService', () => {
     mockRebaseSyncVersion.mockResolvedValue(undefined)
     mockResetSyncMetadataForAllChats.mockResolvedValue(undefined)
     mockDeleteChat.mockResolvedValue(undefined)
+    mockGetUnsyncedChatMetadata.mockResolvedValue([])
+    mockGetChatSyncMetadata.mockResolvedValue([])
     mockGetKey.mockReturnValue(null)
     mockIsChatHistoryAuthoritative.mockResolvedValue(true)
     mockKeyCurrent.mockResolvedValue({ key_id: null })
@@ -574,10 +578,11 @@ describe('CloudSyncService', () => {
         isBlankChat: false,
         isLocalOnly: false,
         decryptionFailed: false,
+        messageCount: 1,
         syncVersion: 3,
       }
 
-      mockGetUnsyncedChats.mockResolvedValue([
+      mockGetUnsyncedChatMetadata.mockResolvedValue([
         { ...good, id: 'local-only', isLocalOnly: true },
         { ...good, id: 'blank', isBlankChat: true },
         { ...good, id: 'failed', decryptionFailed: true },
@@ -596,11 +601,33 @@ describe('CloudSyncService', () => {
       const result = await service.backupUnsyncedChats()
 
       expect(mockUploadChat).toHaveBeenCalledTimes(1)
+      expect(mockGetUnsyncedChatMetadata).toHaveBeenCalledOnce()
+      expect(mockGetChat).toHaveBeenCalledTimes(1)
       expect(mockUploadChat.mock.calls[0]?.[0]?.id).toBe('cloud-1')
       expect(mockFinalizeUpload).toHaveBeenCalledWith(
         expect.objectContaining({ chatId: 'cloud-1', syncVersion: 4 }),
       )
       expect(result.uploaded).toBe(1)
+      expect(result.errors).toEqual([])
+    })
+
+    it('does not enqueue an empty metadata chat for upload', async () => {
+      mockGetUnsyncedChatMetadata.mockResolvedValue([
+        {
+          id: 'empty-chat',
+          messageCount: 0,
+          updatedAt: '2024-01-01T00:00:00.000Z',
+          isBlankChat: false,
+          isLocalOnly: false,
+          decryptionFailed: false,
+        },
+      ])
+
+      const result = await new CloudSyncService().backupUnsyncedChats()
+
+      expect(mockGetChat).not.toHaveBeenCalled()
+      expect(mockUploadChat).not.toHaveBeenCalled()
+      expect(result.uploaded).toBe(0)
       expect(result.errors).toEqual([])
     })
 
@@ -614,9 +641,10 @@ describe('CloudSyncService', () => {
         isBlankChat: false,
         isLocalOnly: false,
         locallyModified: true,
+        messageCount: 1,
         syncVersion: 1,
       }
-      mockGetUnsyncedChats.mockResolvedValue([chat])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([chat])
       mockGetChat.mockResolvedValue(chat)
       mockUploadChat.mockRejectedValue(
         new SyncEnclaveError('missing', 404, 'NOT_FOUND'),
@@ -644,9 +672,10 @@ describe('CloudSyncService', () => {
         isBlankChat: false,
         isLocalOnly: false,
         locallyModified: true,
+        messageCount: 1,
         syncVersion: 1,
       }
-      mockGetUnsyncedChats.mockResolvedValue([chat])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([chat])
       mockGetChat.mockResolvedValue(chat)
       mockUploadChat.mockRejectedValue(
         new SyncEnclaveError('forbidden', 403, 'FORBIDDEN'),
@@ -668,15 +697,35 @@ describe('CloudSyncService', () => {
       const status = await service.checkSyncStatus()
 
       expect(status).toEqual({ needsSync: false, reason: 'no_changes' })
-      expect(mockGetUnsyncedChats).not.toHaveBeenCalled()
+      expect(mockGetUnsyncedChatMetadata).not.toHaveBeenCalled()
     })
 
     it('returns local_changes when there are unsynced non-local chats', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([
-        { id: 'local-only', isLocalOnly: true, isBlankChat: false },
-        { id: 'blank', isLocalOnly: false, isBlankChat: true },
-        { id: 'streaming', isLocalOnly: false, isBlankChat: false },
-        { id: 'good', isLocalOnly: false, isBlankChat: false },
+      mockGetUnsyncedChatMetadata.mockResolvedValue([
+        {
+          id: 'local-only',
+          messageCount: 1,
+          isLocalOnly: true,
+          isBlankChat: false,
+        },
+        {
+          id: 'blank',
+          messageCount: 1,
+          isLocalOnly: false,
+          isBlankChat: true,
+        },
+        {
+          id: 'streaming',
+          messageCount: 1,
+          isLocalOnly: false,
+          isBlankChat: false,
+        },
+        {
+          id: 'good',
+          messageCount: 1,
+          isLocalOnly: false,
+          isBlankChat: false,
+        },
       ])
       mockIsStreaming.mockImplementation((id: string) => id === 'streaming')
 
@@ -688,7 +737,7 @@ describe('CloudSyncService', () => {
     })
 
     it('returns count_changed when there is no cached status', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetChatSyncStatus.mockResolvedValue({
         count: 5,
         lastUpdated: '2024-01-01T00:00:00.000Z',
@@ -704,7 +753,7 @@ describe('CloudSyncService', () => {
     })
 
     it('returns no_changes when cached status matches remote status and there are no local changes', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetChatSyncStatus.mockResolvedValue({
         count: 5,
         lastUpdated: '2024-01-01T00:00:00.000Z',
@@ -728,7 +777,7 @@ describe('CloudSyncService', () => {
     })
 
     it('forces a full pull when the live local chat count has dropped below the cached snapshot', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetChatSyncStatus.mockResolvedValue({
         count: 1873,
         lastUpdated: '2026-05-25T18:04:30.182Z',
@@ -753,7 +802,7 @@ describe('CloudSyncService', () => {
     })
 
     it('stays at no_changes when remote and live local counts both match the cached snapshot', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetChatSyncStatus.mockResolvedValue({
         count: 1873,
         lastUpdated: '2026-05-25T18:04:30.182Z',
@@ -777,7 +826,7 @@ describe('CloudSyncService', () => {
     })
 
     it('falls back to remote-only comparison when the snapshot predates the localCount field', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetChatSyncStatus.mockResolvedValue({
         count: 12,
         lastUpdated: '2024-01-01T00:00:00.000Z',
@@ -801,7 +850,7 @@ describe('CloudSyncService', () => {
 
     it('restores missing cached project chats when remote status is unchanged', async () => {
       const projectId = 'project-with-missing-chat'
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetProjectChatsSyncStatus.mockResolvedValue({
         count: 3,
         lastUpdated: '2026-08-11T12:00:00.000Z',
@@ -827,9 +876,10 @@ describe('CloudSyncService', () => {
     })
 
     it('filters out project chats when checking non-project sync status', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([
+      mockGetUnsyncedChatMetadata.mockResolvedValue([
         {
           id: 'project-chat',
+          messageCount: 1,
           projectId: 'proj-123',
           isLocalOnly: false,
           isBlankChat: false,
@@ -844,14 +894,20 @@ describe('CloudSyncService', () => {
     })
 
     it('only considers project chats when projectId is provided', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([
+      mockGetUnsyncedChatMetadata.mockResolvedValue([
         {
           id: 'project-chat',
+          messageCount: 1,
           projectId: 'proj-123',
           isLocalOnly: false,
           isBlankChat: false,
         },
-        { id: 'regular-chat', isLocalOnly: false, isBlankChat: false },
+        {
+          id: 'regular-chat',
+          messageCount: 1,
+          isLocalOnly: false,
+          isBlankChat: false,
+        },
       ])
 
       const service = new CloudSyncService()
@@ -862,7 +918,7 @@ describe('CloudSyncService', () => {
     })
 
     it('returns error when getChatSyncStatus throws', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetChatSyncStatus.mockRejectedValue(new Error('Network error'))
 
       const service = new CloudSyncService()
@@ -875,7 +931,7 @@ describe('CloudSyncService', () => {
   describe('smartSync recovery history finalization', () => {
     it('deep-syncs every remote chat before marking history ready', async () => {
       mockNeedsRecoveryHistorySync.mockReturnValue(true)
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockGetChatSyncStatus.mockResolvedValue({
         count: 2,
@@ -906,7 +962,7 @@ describe('CloudSyncService', () => {
 
     it('does not mark history ready when the remote snapshot changes', async () => {
       mockNeedsRecoveryHistorySync.mockReturnValue(true)
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockGetChatSyncStatus
         .mockResolvedValueOnce({
@@ -931,7 +987,7 @@ describe('CloudSyncService', () => {
     it('does not mark recovery history ready after an account reset', async () => {
       let resolveAuthoritative: ((value: boolean) => void) | undefined
       mockNeedsRecoveryHistorySync.mockReturnValue(true)
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockIsChatHistoryAuthoritative.mockReturnValue(
         new Promise<boolean>((resolve) => {
@@ -953,8 +1009,36 @@ describe('CloudSyncService', () => {
   })
 
   describe('syncAllChats', () => {
+    it('builds the ingest map from lightweight sync metadata', async () => {
+      const metadata = {
+        id: 'local-chat',
+        projectId: 'project-1',
+        decryptionFailed: false,
+        locallyModified: false,
+        syncedAt: Date.parse('2026-01-01T00:00:00.000Z'),
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
+      mockGetChatSyncMetadata.mockResolvedValue([metadata])
+      mockListChats.mockResolvedValue({
+        conversations: [{ id: 'local-chat' }],
+        hasMore: false,
+      })
+
+      await new CloudSyncService().syncAllChats()
+
+      expect(mockGetChatSyncMetadata).toHaveBeenCalledOnce()
+      expect(mockGetAllChats).not.toHaveBeenCalled()
+      expect(mockIngestRemoteChats).toHaveBeenCalledWith(
+        [{ id: 'local-chat' }],
+        expect.objectContaining({
+          localChatMap: new Map([['local-chat', metadata]]),
+        }),
+      )
+    })
+
     it('runs the deletion reconciliation pass even without cached sync status', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats.mockResolvedValue({ conversations: [], hasMore: false })
 
@@ -981,7 +1065,7 @@ describe('CloudSyncService', () => {
       // Uploading before deletions reconcile could resurrect chats that
       // were deleted on another device, so the upload leg is skipped
       // while downloads still proceed.
-      expect(mockGetUnsyncedChats).not.toHaveBeenCalled()
+      expect(mockGetUnsyncedChatMetadata).not.toHaveBeenCalled()
       expect(mockUploadChat).not.toHaveBeenCalled()
       expect(mockListChats).toHaveBeenCalled()
       expect(result.uploaded).toBe(0)
@@ -1021,7 +1105,7 @@ describe('CloudSyncService', () => {
     })
 
     it('retries listing remote chats before succeeding', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats
         .mockRejectedValueOnce(new SyncNetworkError())
@@ -1038,7 +1122,7 @@ describe('CloudSyncService', () => {
     })
 
     it('throws when remote chat listing still fails after retry', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockListChats.mockRejectedValue(new SyncNetworkError())
 
       const service = new CloudSyncService()
@@ -1051,7 +1135,7 @@ describe('CloudSyncService', () => {
 
     it('fetches only the first page for a default (non-deep) full sync', async () => {
       mockNeedsRecoveryHistorySync.mockReturnValue(true)
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats.mockResolvedValue({
         conversations: [{ id: 'c1' }],
@@ -1071,7 +1155,7 @@ describe('CloudSyncService', () => {
     })
 
     it('pages through every remote chat when a deep sync is requested', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats
         .mockResolvedValueOnce({
@@ -1109,7 +1193,7 @@ describe('CloudSyncService', () => {
     })
 
     it('stops deep paging when a page returns no continuation token', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats.mockResolvedValue({
         conversations: [{ id: 'only' }],
@@ -1123,7 +1207,7 @@ describe('CloudSyncService', () => {
     })
 
     it('does not repopulate sync status after an account change', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats.mockResolvedValue({ conversations: [], hasMore: false })
       mockGetChatSyncStatus.mockResolvedValue({
@@ -1152,7 +1236,7 @@ describe('CloudSyncService', () => {
     })
 
     it('does not report a stale sync as healthy', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats.mockResolvedValue({ conversations: [], hasMore: false })
       mockGetCloudChatCount.mockResolvedValue(0)
@@ -1178,7 +1262,7 @@ describe('CloudSyncService', () => {
     })
 
     it('defers the legacy blob migration until the local key is the registered current key', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats.mockResolvedValue({
         conversations: [],
@@ -1230,7 +1314,7 @@ describe('CloudSyncService', () => {
     })
 
     it('does not finalize a previous account migration', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats.mockResolvedValue({ conversations: [], hasMore: false })
       mockGetKey.mockReturnValue('key_local')
@@ -1272,7 +1356,7 @@ describe('CloudSyncService', () => {
     })
 
     it('adopts the local key so legacy data can migrate without a passkey', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats.mockResolvedValue({ conversations: [], hasMore: false })
       const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -1305,7 +1389,7 @@ describe('CloudSyncService', () => {
     })
 
     it('adopts the local key even when remote rows are sealed under another key', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats.mockResolvedValue({ conversations: [], hasMore: false })
       const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -1333,7 +1417,7 @@ describe('CloudSyncService', () => {
     })
 
     it('attaches an initial bundle when a cached PRF matches a stored credential', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats.mockResolvedValue({ conversations: [], hasMore: false })
       const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -1374,7 +1458,7 @@ describe('CloudSyncService', () => {
     })
 
     it('adopts bundleless when the cached PRF credential is not on the account', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats.mockResolvedValue({ conversations: [], hasMore: false })
       const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -1407,7 +1491,7 @@ describe('CloudSyncService', () => {
     })
 
     it('still adopts the key when bundle building fails', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats.mockResolvedValue({ conversations: [], hasMore: false })
       const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -1437,7 +1521,7 @@ describe('CloudSyncService', () => {
     })
 
     it('does not adopt the local key when the server reports no legacy data', async () => {
-      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetUnsyncedChatMetadata.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats.mockResolvedValue({ conversations: [], hasMore: false })
       const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -1460,6 +1544,33 @@ describe('CloudSyncService', () => {
   })
 
   describe('syncProjectChats', () => {
+    it('preserves project scope from lightweight local metadata', async () => {
+      const metadata = {
+        id: 'project-chat',
+        projectId: 'project-1',
+        decryptionFailed: false,
+        locallyModified: false,
+        syncedAt: 0,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }
+      mockGetChatSyncMetadata.mockResolvedValue([metadata])
+      mockListProjectChats.mockResolvedValue({
+        chats: [{ id: 'project-chat' }],
+        hasMore: false,
+      })
+
+      await new CloudSyncService().syncProjectChats('project-1')
+
+      expect(mockGetAllChats).not.toHaveBeenCalled()
+      expect(mockIngestRemoteChats).toHaveBeenCalledWith(
+        [{ id: 'project-chat' }],
+        expect.objectContaining({
+          localChatMap: new Map([['project-chat', metadata]]),
+          projectId: 'project-1',
+        }),
+      )
+    })
+
     it('retries listing project chats before succeeding', async () => {
       mockNeedsRecoveryHistorySync.mockReturnValue(true)
       mockGetAllChats.mockResolvedValue([])
@@ -1882,19 +1993,26 @@ describe('CloudSyncService', () => {
       isBlankChat: false,
       isLocalOnly: false,
       decryptionFailed: false,
+      messageCount: 1,
       syncVersion: 1,
     }
 
     describe('backupUnsyncedChats filtering', () => {
       it('uploads only eligible chats from a mixed batch', async () => {
-        mockGetUnsyncedChats.mockResolvedValue([
+        mockGetUnsyncedChatMetadata.mockResolvedValue([
           // Eligible
           { ...uploadableChat, id: 'eligible-1' },
           { ...uploadableChat, id: 'eligible-2' },
 
           // Not eligible - various reasons
           { ...uploadableChat, id: 'local-only', isLocalOnly: true },
-          { ...uploadableChat, id: 'blank', isBlankChat: true, messages: [] },
+          {
+            ...uploadableChat,
+            id: 'blank',
+            isBlankChat: true,
+            messageCount: 0,
+            messages: [],
+          },
           { ...uploadableChat, id: 'decrypt-failed', decryptionFailed: true },
           { ...uploadableChat, id: 'streaming' },
         ])
@@ -1909,7 +2027,7 @@ describe('CloudSyncService', () => {
       })
 
       it('handles empty unsynced chats list', async () => {
-        mockGetUnsyncedChats.mockResolvedValue([])
+        mockGetUnsyncedChatMetadata.mockResolvedValue([])
 
         const service = new CloudSyncService()
         const result = await service.backupUnsyncedChats()
@@ -1919,7 +2037,7 @@ describe('CloudSyncService', () => {
       })
 
       it('handles all chats being ineligible', async () => {
-        mockGetUnsyncedChats.mockResolvedValue([
+        mockGetUnsyncedChatMetadata.mockResolvedValue([
           { ...uploadableChat, id: 'local-1', isLocalOnly: true },
           { ...uploadableChat, id: 'local-2', isLocalOnly: true },
           { ...uploadableChat, id: 'blank-1', isBlankChat: true },
@@ -1935,7 +2053,7 @@ describe('CloudSyncService', () => {
 
     describe('Project chat filtering', () => {
       it('filters by projectId when checking project sync status', async () => {
-        mockGetUnsyncedChats.mockResolvedValue([
+        mockGetUnsyncedChatMetadata.mockResolvedValue([
           { ...uploadableChat, id: 'project-a-chat', projectId: 'project-a' },
           { ...uploadableChat, id: 'project-b-chat', projectId: 'project-b' },
           { ...uploadableChat, id: 'no-project-chat' },
@@ -1954,7 +2072,7 @@ describe('CloudSyncService', () => {
       })
 
       it('excludes project chats when checking regular sync status', async () => {
-        mockGetUnsyncedChats.mockResolvedValue([
+        mockGetUnsyncedChatMetadata.mockResolvedValue([
           { ...uploadableChat, id: 'project-chat', projectId: 'some-project' },
         ])
 

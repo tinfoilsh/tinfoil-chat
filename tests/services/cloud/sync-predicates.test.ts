@@ -7,6 +7,7 @@
  * - isLocalOnly !== true
  * - isBlankChat !== true
  * - decryptionFailed !== true
+ * - has at least one message
  * - not currently streaming
  */
 
@@ -71,7 +72,7 @@ describe('Sync Predicates', () => {
       expect(isUploadableChat(baseChat, isStreaming)).toBe(true)
     })
 
-    it('handles undefined/missing optional fields', () => {
+    it('returns false for full chats without messages', () => {
       const minimalChat = {
         id: 'minimal',
         title: 'Minimal',
@@ -81,7 +82,29 @@ describe('Sync Predicates', () => {
         lastAccessedAt: Date.now(),
         // No optional fields set
       } as StoredChat
-      expect(isUploadableChat(minimalChat)).toBe(true)
+      expect(isUploadableChat(minimalChat)).toBe(false)
+    })
+
+    it('uses full chat messages instead of an incidental message count', () => {
+      const staleFullChat = {
+        ...baseChat,
+        messages: [],
+        messageCount: 4,
+      }
+
+      expect(isUploadableChat(staleFullChat)).toBe(false)
+    })
+
+    it('returns false for metadata with no messages', () => {
+      expect(
+        isUploadableChat({
+          id: 'empty-metadata',
+          messageCount: 0,
+          isLocalOnly: false,
+          isBlankChat: false,
+          decryptionFailed: false,
+        }),
+      ).toBe(false)
     })
 
     it('handles false vs undefined for boolean flags', () => {
@@ -99,6 +122,23 @@ describe('Sync Predicates', () => {
     // Note: The predicate compares remote.updatedAt with local.syncedAt
     // (not local.updatedAt) because syncedAt represents when we last
     // got data from the server
+
+    it('makes the same decision from lightweight sync metadata', () => {
+      const remote = {
+        id: 'test-chat-1',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+      }
+      const metadata = {
+        id: 'test-chat-1',
+        projectId: 'project-1',
+        decryptionFailed: false,
+        locallyModified: false,
+        syncedAt: new Date('2024-01-01T00:00:00.000Z').getTime(),
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      }
+
+      expect(shouldIngestRemoteChat(remote, metadata)).toBe(true)
+    })
 
     it('returns true when no local chat exists', () => {
       const remote = {

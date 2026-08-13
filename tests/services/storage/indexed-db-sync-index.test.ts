@@ -119,6 +119,7 @@ function blockChatTransaction(
 
 describe('IndexedDB pending sync index', () => {
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
@@ -323,6 +324,173 @@ describe('IndexedDB pending sync index', () => {
     })
     expect(payloadCount).toBe(0)
     db.close()
+  })
+
+  it('hydrates all chats in key order with chat-scoped payload reads', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    for (const id of ['chat-b', 'chat-a']) {
+      await storage.saveChat(
+        storedChat(id, {
+          messages: [
+            {
+              role: 'user',
+              content: id,
+              timestamp: new Date('2026-08-12T00:00:00.000Z'),
+              attachments: [
+                {
+                  id: `${id}-attachment`,
+                  type: 'document',
+                  fileName: `${id}.txt`,
+                  textContent: `${id}-payload`,
+                },
+              ],
+            },
+          ],
+        }),
+      )
+    }
+
+    const db = (storage as any).db as IDBDatabase
+    const transaction = db.transaction('attachmentPayloads')
+    const payloadStore = transaction.objectStore('attachmentPayloads')
+    const storeGetAll = vi.spyOn(Object.getPrototypeOf(payloadStore), 'getAll')
+    const payloadIndex = payloadStore.index('chatId')
+    const indexGetAll = vi.spyOn(Object.getPrototypeOf(payloadIndex), 'getAll')
+
+    const chats = await storage.getAllChats()
+
+    expect(storeGetAll).not.toHaveBeenCalled()
+    expect(indexGetAll).toHaveBeenCalledTimes(2)
+    expect(
+      indexGetAll.mock.calls.map(([range]) => (range as IDBKeyRange).lower),
+    ).toEqual(['chat-a', 'chat-b'])
+    expect(chats.map((chat) => chat.id)).toEqual(['chat-a', 'chat-b'])
+    expect(
+      chats.map((chat) => chat.messages[0].attachments?.[0].textContent),
+    ).toEqual(['chat-a-payload', 'chat-b-payload'])
+  })
+
+  it('requests each chat payload only after the previous read resolves', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    const payloadText = 'payload'.repeat(8_000)
+    for (const id of ['chat-a', 'chat-b', 'chat-c']) {
+      await storage.saveChat(
+        storedChat(id, {
+          messages: [
+            {
+              role: 'user',
+              content: id,
+              timestamp: new Date('2026-08-12T00:00:00.000Z'),
+              attachments: [
+                {
+                  id: `${id}-attachment`,
+                  type: 'document',
+                  fileName: `${id}.txt`,
+                  textContent: `${id}-${payloadText}`,
+                },
+              ],
+            },
+          ],
+        }),
+      )
+    }
+
+    const db = (storage as any).db as IDBDatabase
+    const payloadIndex = db
+      .transaction('attachmentPayloads')
+      .objectStore('attachmentPayloads')
+      .index('chatId')
+    const events: string[] = []
+    const originalGetAll = Object.getPrototypeOf(payloadIndex).getAll
+    const getAllSpy = vi
+      .spyOn(Object.getPrototypeOf(payloadIndex), 'getAll')
+      .mockImplementation(function (this: IDBIndex, ...args: unknown[]) {
+        const query = args[0] as IDBValidKey | IDBKeyRange
+        const chatId = (query as IDBKeyRange).lower as string
+        events.push(`requested:${chatId}`)
+        const request = originalGetAll.call(this, query)
+        request.addEventListener('success', () => {
+          events.push(`resolved:${chatId}`)
+        })
+        return request
+      })
+
+    const chats = await storage.getAllChats()
+
+    expect(getAllSpy).toHaveBeenCalledTimes(3)
+    expect(events).toEqual([
+      'requested:chat-a',
+      'resolved:chat-a',
+      'requested:chat-b',
+      'resolved:chat-b',
+      'requested:chat-c',
+      'resolved:chat-c',
+    ])
+    expect(chats.map((chat) => chat.id)).toEqual(['chat-a', 'chat-b', 'chat-c'])
+  })
+
+  it('derives sync message counts without copying messages into metadata', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat(
+      storedChat('metadata-count', {
+        messages: [
+          {
+            role: 'user',
+            content: 'Count me',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+          },
+        ],
+      }),
+    )
+
+    const metadata = await storage.getChatSyncMetadata()
+
+    expect(metadata).toEqual([
+      expect.objectContaining({ id: 'metadata-count', messageCount: 1 }),
+    ])
+    expect(metadata[0]).not.toHaveProperty('messages')
+  })
+
+  it('rejects malformed all-chat sync metadata', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    const db = (storage as any).db as IDBDatabase
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('chats', 'readwrite')
+      transaction.objectStore('chats').put({
+        ...storedChat('invalid-project'),
+        projectId: 42,
+      })
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+    })
+
+    await expect(storage.getChatSyncMetadata()).rejects.toThrow(
+      'Stored chat has invalid sync metadata: projectId',
+    )
+  })
+
+  it('rejects malformed unsynced sync metadata', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    const db = (storage as any).db as IDBDatabase
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('chats', 'readwrite')
+      transaction.objectStore('chats').put({
+        ...storedChat('invalid-messages'),
+        messages: null,
+        syncPending: 1,
+      })
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+    })
+
+    await expect(storage.getUnsyncedChatMetadata()).rejects.toThrow(
+      'Stored chat has invalid sync metadata: messages',
+    )
   })
 
   it('fails reads when a local attachment payload row is missing', async () => {
