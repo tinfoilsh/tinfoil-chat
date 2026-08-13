@@ -494,20 +494,22 @@ describe('IndexedDB pending sync index', () => {
       }),
     )
 
+    await storage.getChatSummaries()
     const db = (storage as any).db as IDBDatabase
-    await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction('chats', 'readwrite')
-      const store = transaction.objectStore('chats')
-      const request = store.get('pending-recovery')
-      request.onsuccess = () => {
-        store.put({
-          ...(request.result as StoredChat),
-          messages: undefined,
-        })
-      }
-      request.onerror = () => reject(request.error)
-      transaction.oncomplete = () => resolve()
-      transaction.onerror = () => reject(transaction.error)
+    const chatStore = db.transaction('chats').objectStore('chats')
+    const storePrototype = Object.getPrototypeOf(chatStore)
+    const originalOpenCursor = storePrototype.openCursor
+    const cursorStoreNames: string[] = []
+    vi.spyOn(storePrototype, 'openCursor').mockImplementation(function (
+      this: IDBObjectStore,
+      ...args: unknown[]
+    ) {
+      cursorStoreNames.push(this.name)
+      const [query, direction] = args as [
+        IDBValidKey | IDBKeyRange | null | undefined,
+        IDBCursorDirection | undefined,
+      ]
+      return originalOpenCursor.call(this, query, direction)
     })
 
     await expect(storage.getPendingChatRecoveries()).resolves.toEqual([
@@ -519,6 +521,12 @@ describe('IndexedDB pending sync index', () => {
     await expect(storage.hasPendingChatRecoveries()).resolves.toBe(true)
     await expect(storage.getCloudChatCount()).resolves.toBe(1)
     await expect(storage.getProjectChatCount('project-1')).resolves.toBe(1)
+    expect(cursorStoreNames).toEqual([
+      'chatSummaries',
+      'chatSummaries',
+      'chatSummaries',
+      'chatSummaries',
+    ])
   })
 
   it('rejects malformed all-chat sync metadata', async () => {
