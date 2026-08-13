@@ -190,6 +190,134 @@ describe('useChatStorage.reloadChats', () => {
     expect(result.current.currentChat.isBlankChat).toBe(false)
   })
 
+  it('moves the selected local chat into the cloud collection after reload', async () => {
+    const { result } = renderHook(() =>
+      useChatStorage({
+        storeHistory: true,
+      }),
+    )
+
+    await waitFor(() => {
+      expect(result.current.isInitialLoad).toBe(false)
+    })
+
+    const current = {
+      id: 'chat-1',
+      title: 'Moved chat',
+      messages: [
+        { role: 'user', content: 'Current message', timestamp: new Date() },
+      ],
+      createdAt: new Date(),
+      isBlankChat: false,
+      isLocalOnly: true,
+    }
+    await act(async () => {
+      result.current.setCurrentChat(current as any)
+    })
+    mockLoadChats.mockResolvedValue([
+      {
+        ...current,
+        messages: [],
+        isLocalOnly: false,
+      },
+    ])
+
+    await act(async () => {
+      await result.current.reloadChats()
+    })
+
+    expect(result.current.currentChat.isLocalOnly).toBe(false)
+    expect(result.current.currentChat.messages).toEqual(current.messages)
+    expect(result.current.chats.find((chat) => chat.id === current.id)).toBe(
+      result.current.currentChat,
+    )
+  })
+
+  it('moves the selected cloud chat into the local collection after reload', async () => {
+    const { result } = renderHook(() =>
+      useChatStorage({
+        storeHistory: true,
+      }),
+    )
+
+    await waitFor(() => {
+      expect(result.current.isInitialLoad).toBe(false)
+    })
+
+    const current = {
+      id: 'chat-1',
+      title: 'Moved chat',
+      messages: [],
+      createdAt: new Date(),
+      isBlankChat: false,
+      isLocalOnly: false,
+      projectId: 'project-1',
+    }
+    await act(async () => {
+      result.current.setCurrentChat(current as any)
+    })
+    mockLoadChats.mockResolvedValue([
+      {
+        ...current,
+        isLocalOnly: true,
+        projectId: undefined,
+      },
+    ])
+
+    await act(async () => {
+      await result.current.reloadChats()
+    })
+
+    expect(result.current.currentChat.isLocalOnly).toBe(true)
+    expect(result.current.currentChat.projectId).toBeUndefined()
+    expect(result.current.chats.find((chat) => chat.id === current.id)).toBe(
+      result.current.currentChat,
+    )
+  })
+
+  it('updates the selected chat location during a streaming recovery reload', async () => {
+    const { result } = renderHook(() =>
+      useChatStorage({
+        storeHistory: true,
+      }),
+    )
+
+    await waitFor(() => {
+      expect(result.current.isInitialLoad).toBe(false)
+    })
+
+    const current = {
+      id: 'chat-1',
+      title: 'Moved chat',
+      messages: [
+        { role: 'user', content: 'Streaming message', timestamp: new Date() },
+      ],
+      createdAt: new Date(),
+      isBlankChat: false,
+      isLocalOnly: true,
+    }
+    await act(async () => {
+      result.current.setCurrentChat(current as any)
+    })
+    mockIsStreaming.mockReturnValue(true)
+    mockLoadChats.mockResolvedValue([
+      {
+        ...current,
+        messages: [],
+        isLocalOnly: false,
+      },
+    ])
+
+    act(() => {
+      chatEvents.emit({ reason: 'recovery', ids: [current.id] })
+    })
+
+    await waitFor(() => {
+      expect(result.current.currentChat.isLocalOnly).toBe(false)
+    })
+    expect(result.current.currentChat.messages).toEqual(current.messages)
+  })
+
   it('applies idChanges to currentChat before reloading', async () => {
     const { result } = renderHook(() =>
       useChatStorage({
