@@ -317,4 +317,249 @@ describe('IndexedDB pending sync index', () => {
     expect(hydrated?.messages[0].attachments?.[0].base64).toBe(base64)
     db.close()
   })
+
+  it('keeps duplicate attachment ids bound to their original payloads', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    const firstBase64 = 'first-base64'
+    const secondBase64 = 'second-base64'
+    await storage.saveChat(
+      storedChat('duplicate-attachments', {
+        messages: [
+          {
+            role: 'user',
+            content: 'First message',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'legacy-attachment',
+                type: 'document',
+                fileName: 'first.pdf',
+                base64: firstBase64,
+                textContent: 'First text',
+                pages: [
+                  {
+                    page: 1,
+                    text: 'First page',
+                    image: firstBase64,
+                    is_scanned: true,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            role: 'user',
+            content: 'Second message',
+            timestamp: new Date('2026-08-12T00:00:01.000Z'),
+            attachments: [
+              {
+                id: 'legacy-attachment',
+                type: 'document',
+                fileName: 'second.pdf',
+                base64: secondBase64,
+                textContent: 'Second text',
+                pages: [
+                  {
+                    page: 1,
+                    text: 'Second page',
+                    image: secondBase64,
+                    is_scanned: true,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    )
+
+    const original = await storage.getChat('duplicate-attachments')
+    if (!original) throw new Error('Expected stored chat')
+    expect(
+      original.messages.map((message) => message.attachments?.[0].textContent),
+    ).toEqual(['First text', 'Second text'])
+    const originalPayloadIds = original.messages.map(
+      (message) =>
+        (
+          message.attachments?.[0] as
+            | ({ storagePayloadId?: string } & Record<string, unknown>)
+            | undefined
+        )?.storagePayloadId,
+    )
+    expect(new Set(originalPayloadIds).size).toBe(2)
+
+    await storage.saveChat({ ...original, title: 'Second save' })
+    const secondSave = await storage.getChat('duplicate-attachments')
+    if (!secondSave) throw new Error('Expected stored chat')
+    await storage.saveChat({
+      ...secondSave,
+      messages: [...secondSave.messages].reverse(),
+    })
+
+    const reordered = await storage.getChat('duplicate-attachments')
+    expect(
+      reordered?.messages.map(
+        (message) => message.attachments?.[0].textContent,
+      ),
+    ).toEqual(['Second text', 'First text'])
+    expect(reordered?.messages[0].attachments?.[0].pages?.[0].image).toBe(
+      secondBase64,
+    )
+
+    await storage.applyRemoteChatIfFresh({
+      chat: {
+        ...storedChat('duplicate-attachments'),
+        messages: [
+          {
+            role: 'user',
+            content: 'First message updated remotely',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'legacy-attachment',
+                type: 'document',
+                fileName: 'first.pdf',
+              },
+            ],
+          },
+          {
+            role: 'user',
+            content: 'Second message updated remotely',
+            timestamp: new Date('2026-08-12T00:00:01.000Z'),
+            attachments: [
+              {
+                id: 'legacy-attachment',
+                type: 'document',
+                fileName: 'second.pdf',
+              },
+            ],
+          },
+        ],
+      },
+      syncVersion: 2,
+      expectedLocalUpdatedAt: undefined,
+    })
+
+    const remotelyUpdated = await storage.getChat('duplicate-attachments')
+    expect(
+      remotelyUpdated?.messages.map(
+        (message) => message.attachments?.[0].textContent,
+      ),
+    ).toEqual(['First text', 'Second text'])
+
+    if (!remotelyUpdated) throw new Error('Expected stored chat')
+    const exportStyleCopy = storedChat('duplicate-export-copy', {
+      messages: remotelyUpdated.messages.map((message) => ({
+        ...message,
+        attachments: message.attachments?.map((attachment) => {
+          const { storagePayloadId: _storagePayloadId, ...exported } =
+            attachment as typeof attachment & { storagePayloadId?: string }
+          return exported
+        }),
+      })),
+    })
+    await storage.saveChat(exportStyleCopy)
+    expect(
+      (await storage.getChat('duplicate-export-copy'))?.messages.map(
+        (message) => ({
+          base64: message.attachments?.[0].base64,
+          text: message.attachments?.[0].textContent,
+          page: message.attachments?.[0].pages?.[0].text,
+        }),
+      ),
+    ).toEqual([
+      { base64: firstBase64, text: 'First text', page: 'First page' },
+      { base64: secondBase64, text: 'Second text', page: 'Second page' },
+    ])
+
+    remotelyUpdated.messages[0].attachments = []
+    await storage.saveChat(remotelyUpdated)
+    const afterRemoval = await storage.getChat('duplicate-attachments')
+    expect(afterRemoval?.messages[0].attachments).toEqual([])
+    expect(afterRemoval?.messages[1].attachments?.[0].textContent).toBe(
+      'Second text',
+    )
+  })
+
+  it('finalizes duplicate client ids using their payload identities', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat(
+      storedChat('duplicate-rewrites', {
+        messages: [
+          {
+            role: 'user',
+            content: 'First',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'client-id',
+                type: 'image',
+                fileName: 'first.png',
+                base64: 'first-image',
+              },
+            ],
+          },
+          {
+            role: 'user',
+            content: 'Second',
+            timestamp: new Date('2026-08-12T00:00:01.000Z'),
+            attachments: [
+              {
+                id: 'client-id',
+                type: 'image',
+                fileName: 'second.png',
+                base64: 'second-image',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    const uploaded = await storage.getChat('duplicate-rewrites')
+    if (!uploaded) throw new Error('Expected stored chat')
+    const firstPayloadId = (
+      uploaded.messages[0].attachments?.[0] as {
+        storagePayloadId?: string
+      }
+    ).storagePayloadId
+    const secondPayloadId = (
+      uploaded.messages[1].attachments?.[0] as {
+        storagePayloadId?: string
+      }
+    ).storagePayloadId
+
+    await storage.finalizeUpload({
+      chatId: uploaded.id,
+      rewrites: [
+        {
+          clientId: 'client-id',
+          serverId: 'server-second',
+          encryptionKey: 'key-second',
+          storagePayloadId: secondPayloadId,
+        },
+        {
+          clientId: 'client-id',
+          serverId: 'server-first',
+          encryptionKey: 'key-first',
+          storagePayloadId: firstPayloadId,
+        },
+      ],
+      preUploadUpdatedAt: uploaded.updatedAt,
+      syncVersion: 2,
+    })
+
+    const finalized = await storage.getChat(uploaded.id)
+    expect(
+      finalized?.messages.map((message) => ({
+        id: message.attachments?.[0].id,
+        key: message.attachments?.[0].encryptionKey,
+        base64: message.attachments?.[0].base64,
+      })),
+    ).toEqual([
+      { id: 'server-first', key: 'key-first', base64: 'first-image' },
+      { id: 'server-second', key: 'key-second', base64: 'second-image' },
+    ])
+  })
 })

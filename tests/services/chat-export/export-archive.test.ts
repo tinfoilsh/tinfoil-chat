@@ -6,6 +6,7 @@ import {
   buildChatExport,
   sanitizeFilename,
 } from '@/services/chat-export/export-archive'
+import { parseLocalTinfoilExport } from '@/services/chat-import/local-tinfoil-import'
 
 function chat(overrides: Partial<Chat>): Chat {
   return {
@@ -226,6 +227,77 @@ describe('buildChatExport', () => {
     expect(conversations[0].chat_messages[0].attachments[1].exportPath).toBe(
       'attachments/id/pic-2.png',
     )
+  })
+
+  it('round-trips duplicate attachment ids without swapping bytes', async () => {
+    const firstBytes = new Uint8Array([1, 2, 3])
+    const secondBytes = new Uint8Array([4, 5, 6])
+    const result = await buildChatExport(
+      [
+        chat({
+          messages: [
+            {
+              role: 'user',
+              content: 'first',
+              timestamp: new Date('2023-11-14T22:13:21.000Z'),
+              attachments: [
+                {
+                  id: 'legacy-image',
+                  type: 'image',
+                  fileName: 'first.png',
+                },
+              ],
+            },
+            {
+              role: 'user',
+              content: 'second',
+              timestamp: new Date('2023-11-14T22:13:22.000Z'),
+              attachments: [
+                {
+                  id: 'legacy-image',
+                  type: 'image',
+                  fileName: 'second.png',
+                },
+              ],
+            },
+          ],
+        }),
+      ],
+      async (attachment) =>
+        attachment.fileName === 'first.png' ? firstBytes : secondBytes,
+    )
+    const imported = await parseLocalTinfoilExport(
+      new File(
+        [new Uint8Array(result.data as Uint8Array)],
+        'tinfoil-chats.zip',
+        {
+          type: 'application/zip',
+        },
+      ),
+      {
+        generateChatId: () => 'imported-chat',
+        isCloudSyncEnabled: false,
+      },
+    )
+
+    expect(
+      imported[0].messages.map((message) => ({
+        id: message.attachments?.[0].id,
+        fileName: message.attachments?.[0].fileName,
+        base64: message.attachments?.[0].base64,
+      })),
+    ).toEqual([
+      {
+        id: 'legacy-image',
+        fileName: 'first.png',
+        base64: 'AQID',
+      },
+      {
+        id: 'legacy-image',
+        fileName: 'second.png',
+        base64: 'BAUG',
+      },
+    ])
   })
 })
 

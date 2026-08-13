@@ -204,6 +204,47 @@ describe('CloudStorageService auth readiness', () => {
     expect(mockAttachmentPut.mock.calls[1][0].idempotencyKey).toBe(firstKey)
   })
 
+  it('returns local payload identity without including it in cloud plaintext', async () => {
+    const service = new CloudStorageService()
+    const result = await service.uploadChat(
+      {
+        id: 'chat-1',
+        title: 'Local chat',
+        messages: [
+          {
+            role: 'user',
+            content: 'hi',
+            attachments: [
+              {
+                id: 'local-att',
+                type: 'image',
+                fileName: 'image.png',
+                base64: 'AQID',
+                storagePayloadId: 'local-payload-reference',
+              },
+            ],
+          },
+        ],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        lastAccessedAt: 0,
+      } as any,
+      { idempotencyKey: 'upload-idem-1' },
+    )
+
+    expect(result.rewrites).toEqual([
+      expect.objectContaining({
+        clientId: 'local-att',
+        storagePayloadId: 'local-payload-reference',
+      }),
+    ])
+    const plaintext = new TextDecoder().decode(
+      mockEnclavePush.mock.calls[0][0].plaintext,
+    )
+    expect(plaintext).not.toContain('storagePayloadId')
+    expect(plaintext).not.toContain('local-payload-reference')
+  })
+
   it('does not re-upload attachments that already have enclave keys', async () => {
     const service = new CloudStorageService()
     const chat = {
