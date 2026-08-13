@@ -1,5 +1,7 @@
 import {
+  getCachedVerificationDocument,
   getVerificationDocument,
+  invalidateSessionCache,
   resetTinfoilClient,
   TinfoilClientInitializationTimeoutError,
 } from '@/services/inference/tinfoil-client'
@@ -116,5 +118,21 @@ describe('tinfoil client initialization', () => {
     await vi.advanceTimersByTimeAsync(20_000)
 
     await timeoutRejection
+  })
+
+  it('exposes verification only from the current cache generation', async () => {
+    expect(getCachedVerificationDocument()).toBeNull()
+
+    const document = await getVerificationDocument()
+    expect(getCachedVerificationDocument()).toBe(document)
+
+    invalidateSessionCache()
+    expect(getCachedVerificationDocument()).toBeNull()
+
+    await getVerificationDocument()
+    expect(getCachedVerificationDocument()).toEqual({ securityVerified: true })
+
+    resetTinfoilClient()
+    expect(getCachedVerificationDocument()).toBeNull()
   })
 })

@@ -1,4 +1,7 @@
-import { getVerificationDocument } from '@/services/inference/tinfoil-client'
+import {
+  getCachedVerificationDocument,
+  getVerificationDocument,
+} from '@/services/inference/tinfoil-client'
 import { logError, logInfo } from '@/utils/error-handling'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -112,28 +115,22 @@ export function VerifierSidebar({
         await delay(backoffDelay)
         success = await attemptFetch()
       }
-    } finally {
-      isRetryingRef.current = false
-    }
+      if (success) return
 
-    if (success) return
-
-    // Retries exhausted. A previously successful attestation may still be
-    // cached (e.g. the panel was opened while offline after startup
-    // verification succeeded), and getVerificationDocument returns it
-    // without network work — don't downgrade that to a failure.
-    try {
-      const cachedDoc = await getVerificationDocument()
+      // Retries exhausted. A previously successful attestation may still be
+      // cached (e.g. the panel was opened while offline after startup
+      // verification succeeded), so don't downgrade that to a failure.
+      const cachedDoc = getCachedVerificationDocument()
       if (cachedDoc?.securityVerified === true) {
         setVerificationDocument(cachedDoc)
         onVerificationUpdateRef.current?.(cachedDoc)
         onVerificationCompleteRef.current(true)
         return
       }
-    } catch {
-      // No cached verification available; report the failure below.
+      onVerificationCompleteRef.current(false)
+    } finally {
+      isRetryingRef.current = false
     }
-    onVerificationCompleteRef.current(false)
   }, [])
 
   useEffect(() => {

@@ -3,10 +3,12 @@ import { act, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  getCachedVerificationDocument: vi.fn(),
   getVerificationDocument: vi.fn(),
 }))
 
 vi.mock('@/services/inference/tinfoil-client', () => ({
+  getCachedVerificationDocument: mocks.getCachedVerificationDocument,
   getVerificationDocument: mocks.getVerificationDocument,
 }))
 
@@ -57,6 +59,8 @@ describe('VerifierSidebar', () => {
   let onLineSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
+    mocks.getCachedVerificationDocument.mockReset()
+    mocks.getCachedVerificationDocument.mockReturnValue(null)
     mocks.getVerificationDocument.mockReset()
     onLineSpy = vi.spyOn(window.navigator, 'onLine', 'get')
   })
@@ -69,7 +73,9 @@ describe('VerifierSidebar', () => {
     // Offline: retry attempts short-circuit, but the cached attestation from
     // startup verification is still available without network work.
     onLineSpy.mockReturnValue(false)
-    mocks.getVerificationDocument.mockResolvedValue({ securityVerified: true })
+    mocks.getCachedVerificationDocument.mockReturnValue({
+      securityVerified: true,
+    })
     const onVerificationComplete = vi.fn()
 
     renderSidebar(onVerificationComplete)
@@ -78,13 +84,11 @@ describe('VerifierSidebar', () => {
     await waitFor(() => expect(onVerificationComplete).toHaveBeenCalled())
     expect(onVerificationComplete).toHaveBeenCalledWith(true)
     expect(onVerificationComplete).not.toHaveBeenCalledWith(false)
+    expect(mocks.getVerificationDocument).not.toHaveBeenCalled()
   })
 
-  it('reports failure on exhaustion when no verification is cached', async () => {
-    onLineSpy.mockReturnValue(true)
-    mocks.getVerificationDocument.mockRejectedValue(
-      new Error('attestation unavailable'),
-    )
+  it('reports offline exhaustion without starting initialization', async () => {
+    onLineSpy.mockReturnValue(false)
     const onVerificationComplete = vi.fn()
 
     renderSidebar(onVerificationComplete)
@@ -93,5 +97,26 @@ describe('VerifierSidebar', () => {
     await waitFor(() =>
       expect(onVerificationComplete).toHaveBeenCalledWith(false),
     )
+    expect(mocks.getVerificationDocument).not.toHaveBeenCalled()
+    expect(mocks.getCachedVerificationDocument).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the retry lock through the cache fallback', async () => {
+    onLineSpy.mockReturnValue(true)
+    mocks.getVerificationDocument.mockResolvedValue(null)
+    mocks.getCachedVerificationDocument.mockImplementation(() => {
+      requestVerificationDocument()
+      return null
+    })
+    const onVerificationComplete = vi.fn()
+
+    renderSidebar(onVerificationComplete)
+    requestVerificationDocument()
+
+    await waitFor(() =>
+      expect(onVerificationComplete).toHaveBeenCalledWith(false),
+    )
+    expect(mocks.getVerificationDocument).toHaveBeenCalledOnce()
+    expect(onVerificationComplete).toHaveBeenCalledOnce()
   })
 })

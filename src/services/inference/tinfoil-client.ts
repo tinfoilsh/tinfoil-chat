@@ -43,6 +43,8 @@ let remainingBeforeRequest: number | null = null
 let refreshInFlight: Promise<void> | null = null
 let sessionCacheGeneration = 0
 let initializationInFlight: InitializationTask | null = null
+let cachedVerificationDocument: VerificationDocument | null = null
+let cachedVerificationDocumentGeneration: number | null = null
 
 class SessionCacheInvalidatedError extends Error {}
 
@@ -451,6 +453,8 @@ export function resetTinfoilClient(): void {
   cachedRateLimit = null
   remainingBeforeRequest = null
   refreshInFlight = null
+  cachedVerificationDocument = null
+  cachedVerificationDocumentGeneration = null
 }
 
 export function invalidateSessionCache(): void {
@@ -461,6 +465,8 @@ export function invalidateSessionCache(): void {
   cachedSessionTokenExpiresAt = null
   cachedSessionTokenWasAuthenticated = false
   remainingBeforeRequest = null
+  cachedVerificationDocument = null
+  cachedVerificationDocumentGeneration = null
   if (cachedRateLimit !== null) {
     cachedRateLimit = null
     dispatchRateLimitUpdate()
@@ -675,7 +681,18 @@ async function ensureInitialized(): Promise<void> {
  */
 export async function getVerificationDocument(): Promise<VerificationDocument | null> {
   await ensureInitialized()
-  return secureClient ? secureClient.getVerificationDocument() : null
+  const document = secureClient ? secureClient.getVerificationDocument() : null
+  if (document) {
+    cachedVerificationDocument = document
+    cachedVerificationDocumentGeneration = sessionCacheGeneration
+  }
+  return document
+}
+
+export function getCachedVerificationDocument(): VerificationDocument | null {
+  return cachedVerificationDocumentGeneration === sessionCacheGeneration
+    ? cachedVerificationDocument
+    : null
 }
 
 async function getRawClient(): Promise<OpenAI> {
