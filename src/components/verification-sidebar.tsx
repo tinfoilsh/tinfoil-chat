@@ -1,4 +1,7 @@
-import { getVerificationDocument } from '@/services/inference/tinfoil-client'
+import {
+  getCachedVerificationDocument,
+  getVerificationDocument,
+} from '@/services/inference/tinfoil-client'
 import { logError, logInfo } from '@/utils/error-handling'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -18,8 +21,6 @@ function delay(ms: number): Promise<void> {
 type VerifierSidebarProps = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
-  verificationComplete: boolean
-  verificationSuccess?: boolean
   onVerificationComplete: (success: boolean) => void
   onVerificationUpdate?: (state: any) => void
   isDarkMode: boolean
@@ -29,8 +30,6 @@ type VerifierSidebarProps = {
 export function VerifierSidebar({
   isOpen,
   setIsOpen,
-  verificationComplete,
-  verificationSuccess,
   onVerificationComplete,
   onVerificationUpdate,
   isDarkMode,
@@ -90,32 +89,56 @@ export function VerifierSidebar({
       }
     }
 
-    let success = await attemptFetch()
+    let success = false
+    try {
+      const cachedDoc = getCachedVerificationDocument()
+      if (cachedDoc?.securityVerified === true) {
+        setVerificationDocument(cachedDoc)
+        onVerificationUpdateRef.current?.(cachedDoc)
+        onVerificationCompleteRef.current(true)
+        return
+      }
 
-    while (
-      !success &&
-      retryCountRef.current < CONSTANTS.VERIFICATION_MAX_RETRIES
-    ) {
-      retryCountRef.current++
-      const backoffDelay =
-        CONSTANTS.VERIFICATION_RETRY_DELAY_MS *
-        Math.pow(1.5, retryCountRef.current - 1)
-
-      logInfo('Retrying verification fetch', {
-        component: 'VerifierSidebar',
-        action: 'fetchVerificationDocument',
-        metadata: {
-          attempt: retryCountRef.current,
-          maxRetries: CONSTANTS.VERIFICATION_MAX_RETRIES,
-          delayMs: backoffDelay,
-        },
-      })
-
-      await delay(backoffDelay)
       success = await attemptFetch()
-    }
 
-    isRetryingRef.current = false
+      while (
+        !success &&
+        retryCountRef.current < CONSTANTS.VERIFICATION_MAX_RETRIES
+      ) {
+        retryCountRef.current++
+        const backoffDelay =
+          CONSTANTS.VERIFICATION_RETRY_DELAY_MS *
+          Math.pow(1.5, retryCountRef.current - 1)
+
+        logInfo('Retrying verification fetch', {
+          component: 'VerifierSidebar',
+          action: 'fetchVerificationDocument',
+          metadata: {
+            attempt: retryCountRef.current,
+            maxRetries: CONSTANTS.VERIFICATION_MAX_RETRIES,
+            delayMs: backoffDelay,
+          },
+        })
+
+        await delay(backoffDelay)
+        success = await attemptFetch()
+      }
+      if (success) return
+
+      // Retries exhausted. A previously successful attestation may still be
+      // cached (e.g. the panel was opened while offline after startup
+      // verification succeeded), so don't downgrade that to a failure.
+      const terminalCachedDoc = getCachedVerificationDocument()
+      if (terminalCachedDoc?.securityVerified === true) {
+        setVerificationDocument(terminalCachedDoc)
+        onVerificationUpdateRef.current?.(terminalCachedDoc)
+        onVerificationCompleteRef.current(true)
+        return
+      }
+      onVerificationCompleteRef.current(false)
+    } finally {
+      isRetryingRef.current = false
+    }
   }, [])
 
   useEffect(() => {

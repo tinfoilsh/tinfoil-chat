@@ -1,5 +1,5 @@
 import { toast } from '@/hooks/use-toast'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 const LIGHT_THEME_TOKENS: Record<string, string> = {
   '--content-primary': '221 39.3% 11%',
@@ -24,6 +24,8 @@ const MONO_TAGS = new Set(['CODE', 'PRE', 'KBD', 'SAMP'])
 interface UseChatPrintOptions {
   printRef: React.RefObject<HTMLDivElement | null>
   enabled?: boolean
+  prepare?: () => Promise<void>
+  cleanup?: () => void
 }
 
 interface UseChatPrintReturn {
@@ -34,26 +36,34 @@ interface UseChatPrintReturn {
 export function useChatPrint({
   printRef,
   enabled = true,
+  prepare,
+  cleanup,
 }: UseChatPrintOptions): UseChatPrintReturn {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
+  const isGeneratingPdfRef = useRef(false)
 
   const triggerPrint = useCallback(async () => {
-    if (!printRef.current || isGeneratingPdf) return
+    if (isGeneratingPdfRef.current) return
 
+    isGeneratingPdfRef.current = true
     setIsGeneratingPdf(true)
-    const element = printRef.current
-    const wrapper = createPrintableWrapper(element.scrollWidth)
-    const clone = element.cloneNode(true) as HTMLElement
-
-    clone.classList.remove('hidden')
-    clone.removeAttribute('aria-hidden')
-    applyLightThemeTokens(clone)
-    applyPdfFonts(clone)
-    expandOverflowingContainers(clone)
-    wrapper.appendChild(clone)
-    document.body.appendChild(wrapper)
+    let wrapper: HTMLDivElement | null = null
 
     try {
+      await prepare?.()
+      const element = printRef.current
+      if (!element) throw new Error('Printable chat is unavailable')
+
+      wrapper = createPrintableWrapper(element.scrollWidth)
+      const clone = element.cloneNode(true) as HTMLElement
+      clone.classList.remove('hidden')
+      clone.removeAttribute('aria-hidden')
+      applyLightThemeTokens(clone)
+      applyPdfFonts(clone)
+      expandOverflowingContainers(clone)
+      wrapper.appendChild(clone)
+      document.body.appendChild(wrapper)
+
       // Wait for any web fonts to finish loading before html2canvas measures
       // glyphs, otherwise the rasterizer uses pre-computed Aeonik metrics
       // against fallback glyphs and produces kerning artifacts.
@@ -123,10 +133,12 @@ export function useChatPrint({
     } catch {
       toast({ title: 'Failed to generate PDF', variant: 'destructive' })
     } finally {
-      wrapper.remove()
+      wrapper?.remove()
+      cleanup?.()
+      isGeneratingPdfRef.current = false
       setIsGeneratingPdf(false)
     }
-  }, [printRef, isGeneratingPdf])
+  }, [cleanup, prepare, printRef])
 
   useEffect(() => {
     if (!enabled) return

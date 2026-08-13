@@ -1,3 +1,4 @@
+import { acquireInteractionLock } from '@/utils/interaction-lock'
 import {
   getSignoutProgressState,
   subscribeToSignoutProgress,
@@ -33,16 +34,12 @@ export function SignoutProgressOverlay() {
   useEffect(() => {
     if (!overlayPresent) return
     const overlay = overlayRef.current
-    const inerted: Element[] = []
-    for (const el of Array.from(document.body.children)) {
-      if (overlay && el.contains(overlay)) continue
-      if (el.hasAttribute('inert')) continue
-      el.setAttribute('inert', '')
-      inerted.push(el)
-    }
-    return () => {
-      for (const el of inerted) el.removeAttribute('inert')
-    }
+    const backgroundElements = Array.from(document.body.children).filter(
+      (element): element is HTMLElement =>
+        element instanceof HTMLElement &&
+        !(overlay && element.contains(overlay)),
+    )
+    return acquireInteractionLock(backgroundElements, { ariaHidden: true })
   }, [overlayPresent])
 
   if (typeof document === 'undefined') return null

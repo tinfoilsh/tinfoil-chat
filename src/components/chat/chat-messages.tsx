@@ -10,7 +10,16 @@ import {
   resolveContextWindowTokens,
 } from '@/utils/token-estimation'
 import 'katex/dist/katex.min.css'
-import React, { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { CONSTANTS } from './constants'
 import { ensureTimeline } from './ensure-timeline'
 import type { ReasoningEffort } from './hooks/use-reasoning-effort'
@@ -316,10 +325,41 @@ export function ChatMessages({
   const prevShowScrollButtonRef = React.useRef(showScrollButton)
   const messageCountWhenSpacerSetRef = React.useRef<number | null>(null)
   const printRef = useRef<HTMLDivElement>(null)
+  const printReadyResolverRef = useRef<(() => void) | null>(null)
+  const [printRequested, setPrintRequested] = useState(false)
+
+  const preparePrint = useCallback(async () => {
+    await new Promise<void>((resolve) => {
+      printReadyResolverRef.current = resolve
+      setPrintRequested(true)
+    })
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!printRequested) return
+    printReadyResolverRef.current?.()
+    printReadyResolverRef.current = null
+  }, [printRequested])
+
+  useEffect(() => {
+    const resolver = printReadyResolverRef
+    return () => {
+      resolver.current?.()
+      resolver.current = null
+    }
+  }, [])
+
+  const cleanupPrint = useCallback(() => {
+    printReadyResolverRef.current?.()
+    printReadyResolverRef.current = null
+    setPrintRequested(false)
+  }, [])
 
   useChatPrint({
     printRef,
     enabled: messages.length > 0,
+    prepare: preparePrint,
+    cleanup: cleanupPrint,
   })
 
   // Show spacer when user sends a new message
@@ -630,7 +670,9 @@ export function ChatMessages({
             aria-hidden="true"
           />
         )}
-        <PrintableChat messages={messages} printRef={printRef} />
+        {printRequested && (
+          <PrintableChat messages={messages} printRef={printRef} />
+        )}
       </div>
     </ImageGalleryProvider>
   )

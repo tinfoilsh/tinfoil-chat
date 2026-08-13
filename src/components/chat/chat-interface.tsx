@@ -629,6 +629,9 @@ export function ChatInterface({
 
   // State for tracking verification document
   const [verificationDocument, setVerificationDocument] = useState<any>(null)
+  const [verificationStatus, setVerificationStatus] = useState<
+    'pending' | 'verified' | 'failed'
+  >('pending')
 
   const userEmail = user?.primaryEmailAddress?.emailAddress || ''
 
@@ -881,8 +884,6 @@ export function ChatInterface({
     themeMode,
     isInitialLoad,
     isThinking,
-    verificationComplete,
-    verificationSuccess,
     isWaitingForResponse,
     isStreaming,
     streamError,
@@ -898,8 +899,6 @@ export function ChatInterface({
     setInput,
     setIsSidebarOpen,
     setIsInitialLoad,
-    setVerificationComplete,
-    setVerificationSuccess,
     setChats,
     setCurrentChat,
 
@@ -1201,28 +1200,37 @@ export function ChatInterface({
 
   // Initialize tinfoil client once when page loads
   useEffect(() => {
+    let active = true
     const initTinfoil = async () => {
       try {
         const { getVerificationDocument } =
           await import('@/services/inference/tinfoil-client')
         const doc = await getVerificationDocument()
-        if (doc) {
+        if (active && doc) {
           setVerificationDocument(doc)
-          // Set verification status based on document
-          if (doc.securityVerified !== undefined) {
-            setVerificationComplete(true)
-            setVerificationSuccess(doc.securityVerified)
-          }
+          setVerificationStatus(
+            doc.securityVerified === true
+              ? 'verified'
+              : doc.securityVerified === false
+                ? 'failed'
+                : 'pending',
+          )
+        } else if (active) {
+          setVerificationStatus('failed')
         }
       } catch (error) {
         logError('Failed to initialize tinfoil client', error, {
           component: 'ChatInterface',
           action: 'initTinfoil',
         })
+        if (active) setVerificationStatus('failed')
       }
     }
-    initTinfoil()
-  }, [setVerificationComplete, setVerificationSuccess])
+    void initTinfoil()
+    return () => {
+      active = false
+    }
+  }, [])
 
   // Sync rate limit info from tinfoil-client via custom events
   useEffect(() => {
@@ -3319,12 +3327,12 @@ export function ChatInterface({
               }
               aria-pressed={isVerifierSidebarOpen}
             >
-              {!verificationComplete ? (
+              {verificationStatus === 'pending' ? (
                 <>
                   <PiSpinner className="h-4 w-4 animate-spin" />
                   <span className="text-sm leading-none">Verifying...</span>
                 </>
-              ) : verificationSuccess ? (
+              ) : verificationStatus === 'verified' ? (
                 <>
                   <BiSolidLock className="h-4 w-4 text-brand-accent-dark dark:text-brand-accent-light" />
                   <span className="text-sm leading-none text-brand-accent-dark dark:text-brand-accent-light">
@@ -3457,12 +3465,6 @@ export function ChatInterface({
                 updateChatTitle={updateChatTitle}
                 deleteChat={deleteChat}
                 isClient={isClient}
-                verificationComplete={verificationComplete}
-                verificationSuccess={verificationSuccess}
-                onVerificationComplete={(success) => {
-                  setVerificationComplete(true)
-                  setVerificationSuccess(success)
-                }}
                 isPremium={isPremium}
                 onEncryptionKeyClick={
                   isSignedIn ? handleOpenEncryptionKeyModal : undefined
@@ -3518,12 +3520,9 @@ export function ChatInterface({
       <VerifierSidebarLazy
         isOpen={isVerifierSidebarOpen}
         setIsOpen={handleSetVerifierSidebarOpen}
-        verificationComplete={verificationComplete}
-        verificationSuccess={verificationSuccess}
-        onVerificationComplete={(success) => {
-          setVerificationComplete(true)
-          setVerificationSuccess(success)
-        }}
+        onVerificationComplete={(success) =>
+          setVerificationStatus(success ? 'verified' : 'failed')
+        }
         onVerificationUpdate={setVerificationDocument}
         isDarkMode={isDarkMode}
         isClient={isClient}

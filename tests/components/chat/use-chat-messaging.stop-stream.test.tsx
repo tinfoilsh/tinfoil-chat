@@ -21,6 +21,7 @@ const {
   sendChatStreamMock,
   sessionGetAllChatsMock,
   sessionSaveMock,
+  sessionSaveDraftMock,
   pendingStreams,
   streamControllers,
   streamingChats,
@@ -60,6 +61,7 @@ const {
   sendChatStreamMock: vi.fn(),
   sessionGetAllChatsMock: vi.fn(() => [] as Chat[]),
   sessionSaveMock: vi.fn(),
+  sessionSaveDraftMock: vi.fn(),
   pendingStreams: new Set<string>(),
   streamControllers: new Map<string, AbortController>(),
   streamingChats: new Set<string>(),
@@ -175,6 +177,8 @@ vi.mock('@/services/storage/session-storage', () => ({
   sessionChatStorage: {
     getAllChats: sessionGetAllChatsMock,
     saveChat: sessionSaveMock,
+    saveStreamingDraft: sessionSaveDraftMock,
+    clearStreamingDraft: vi.fn(),
   },
 }))
 
@@ -201,8 +205,10 @@ function createOpenStream() {
   const chunks: ChatChunk[] = []
   let resume: (() => void) | undefined
   let closed = false
+  let failure: unknown = null
   const stream = (async function* () {
     while (!closed || chunks.length > 0) {
+      if (failure !== null) throw failure
       if (chunks.length === 0) {
         await new Promise<void>((resolve) => {
           resume = resolve
@@ -221,6 +227,10 @@ function createOpenStream() {
     },
     close: () => {
       closed = true
+      resume?.()
+    },
+    fail: (error: unknown) => {
+      failure = error
       resume?.()
     },
   }
@@ -321,6 +331,71 @@ describe('useChatMessaging stopped streams', () => {
       'chat-1',
       expect.objectContaining({ thoughts: 'Partial reasoning' }),
       expect.any(String),
+    )
+  })
+
+  it('keeps the latest guest draft durable after a network error', async () => {
+    const initialChat: Chat = {
+      id: 'chat-1',
+      title: 'Existing chat',
+      createdAt: new Date(),
+      messages: [],
+    }
+    const stream = createOpenStream()
+    sendChatStreamMock.mockResolvedValue(stream.stream)
+
+    const { result } = renderHook(() => {
+      const [currentChat, setCurrentChat] = useState(initialChat)
+      const [chats, setChats] = useState([initialChat])
+      const messaging = useChatMessaging({
+        systemPrompt: '',
+        storeHistory: false,
+        models: [{} as never],
+        selectedModel: 'test-model',
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+      })
+      return { currentChat, messaging }
+    })
+
+    let query!: Promise<unknown>
+    act(() => {
+      query = result.current.messaging.handleQuery(
+        'New prompt',
+      ) as Promise<unknown>
+    })
+    await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
+
+    stream.send({ choices: [{ delta: { content: 'Partial answer' } }] })
+    await vi.waitFor(() =>
+      expect(sessionSaveDraftMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          messages: expect.arrayContaining([
+            expect.objectContaining({
+              role: 'assistant',
+              content: 'Partial answer',
+            }),
+          ]),
+        }),
+      ),
+    )
+
+    stream.fail(new TypeError('Network unavailable'))
+    await act(async () => {
+      await query
+    })
+
+    expect(sessionSaveDraftMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            role: 'assistant',
+            content: 'Partial answer',
+          }),
+        ]),
+      }),
     )
   })
 

@@ -178,6 +178,7 @@ export const UI_EXPAND_PROJECT_DOCUMENTS = 'tinfoil-ui-expand-project-documents'
 
 // --- sessionStorage: Sync --------------------------------------------------
 export const SYNC_SESSION_CHATS = 'tinfoil-sync-session-chats'
+export const SYNC_SESSION_CHAT_DRAFT_PREFIX = 'tinfoil-sync-session-chat-draft:'
 export const SYNC_DELETED_CHATS = 'tinfoil-sync-deleted-chats'
 
 // --- sessionStorage: Message queue -----------------------------------------

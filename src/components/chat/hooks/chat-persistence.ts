@@ -97,6 +97,7 @@ export function createUpdateChatWithHistoryCheck({
     )
 
     if (updatedChat.isTemporary) {
+      sessionChatStorage.clearStreamingDraft(chatId)
       return
     }
 
@@ -106,10 +107,11 @@ export function createUpdateChatWithHistoryCheck({
         updatedChat.isLocalOnly ||
         (!allowCloudSyncWhileStreaming && streamingTracker.isStreaming(chatId))
 
-      // Skip IndexedDB save if explicitly requested (during streaming chunks)
       if (skipIndexedDBSave) {
         return
       }
+
+      sessionChatStorage.clearStreamingDraft(chatId)
 
       logInfo('[persistence] Saving chat to storage', {
         component: 'chat-persistence',
@@ -177,7 +179,11 @@ export function createUpdateChatWithHistoryCheck({
           )
         })
     } else {
-      sessionChatStorage.saveChat(updatedChat)
+      if (skipIndexedDBSave) {
+        sessionChatStorage.saveStreamingDraft(updatedChat)
+      } else {
+        sessionChatStorage.saveChat(updatedChat)
+      }
     }
   }
 }

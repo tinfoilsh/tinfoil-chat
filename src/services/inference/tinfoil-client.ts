@@ -15,6 +15,7 @@ import {
   type VerificationDocument,
 } from 'tinfoil'
 import { authTokenManager } from '../auth'
+import { INFERENCE_CLIENT_INITIALIZATION_TIMEOUT_MS } from './constants'
 
 export interface RateLimitInfo {
   maxRequests: number
@@ -41,8 +42,52 @@ let cachedRateLimit: RateLimitInfo | null = null
 let remainingBeforeRequest: number | null = null
 let refreshInFlight: Promise<void> | null = null
 let sessionCacheGeneration = 0
+let initializationInFlight: InitializationTask | null = null
+let cachedVerificationDocument: VerificationDocument | null = null
 
 class SessionCacheInvalidatedError extends Error {}
+
+export class TinfoilClientInitializationTimeoutError extends Error {
+  constructor() {
+    super('Tinfoil client initialization timed out')
+    this.name = 'TinfoilClientInitializationTimeoutError'
+  }
+}
+
+interface InitializedClient {
+  client: OpenAI
+  secureClient: SecureClient | null
+}
+
+interface InitializationTask {
+  generation: number
+  controller: AbortController
+  timeoutId: ReturnType<typeof setTimeout>
+  promise: Promise<void>
+}
+
+function abortInitialization(reason: unknown): void {
+  const task = initializationInFlight
+  if (!task) return
+  initializationInFlight = null
+  clearTimeout(task.timeoutId)
+  task.controller.abort(reason)
+}
+
+function waitForSignal<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason)
+
+  return new Promise<T>((resolve, reject) => {
+    const handleAbort = () => reject(signal.reason)
+    signal.addEventListener('abort', handleAbort, { once: true })
+    promise.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', handleAbort)
+    })
+  })
+}
 
 function assertSessionCacheGeneration(cacheGeneration: number): void {
   if (cacheGeneration !== sessionCacheGeneration) {
@@ -104,11 +149,13 @@ function surfaceHourlyLimit(parsedError: ServerErrorBody | null): never {
 async function fetchChatJWT(
   authBearer: string,
   cacheGeneration: number,
+  signal?: AbortSignal,
 ): Promise<{ key: string; expiresAt: number | null } | null> {
   let response: Response
   try {
     response = await fetch(`${API_BASE_URL}/api/chat/token`, {
       headers: { Authorization: `Bearer ${authBearer}` },
+      signal,
     })
   } catch {
     return null
@@ -146,6 +193,7 @@ async function fetchChatJWT(
 
 async function fetchSessionTokenForGeneration(
   cacheGeneration: number,
+  signal?: AbortSignal,
 ): Promise<string> {
   if (IS_DEV) {
     return DEV_API_KEY
@@ -161,7 +209,10 @@ async function fetchSessionTokenForGeneration(
     typeof window !== 'undefined' &&
     localStorage.getItem(AUTH_ACTIVE_USER_ID) !== null
   ) {
-    await authTokenManager.waitForInit(AUTH_INIT_WAIT_MS)
+    const authInitialization = authTokenManager.waitForInit(AUTH_INIT_WAIT_MS)
+    await (signal
+      ? waitForSignal(authInitialization, signal)
+      : authInitialization)
   }
 
   // Resolve the auth bearer (if any) up front so the cache-validity
@@ -171,7 +222,10 @@ async function fetchSessionTokenForGeneration(
   let authBearer: string | null = null
   if (authTokenManager.isInitialized()) {
     try {
-      authBearer = await authTokenManager.getValidToken()
+      const validToken = authTokenManager.getValidToken()
+      authBearer = await (signal
+        ? waitForSignal(validToken, signal)
+        : validToken)
     } catch (error) {
       logError(
         'Failed to get auth token, falling back to anonymous key',
@@ -216,7 +270,7 @@ async function fetchSessionTokenForGeneration(
   // Anonymous users (and signed-in users without an active subscription) fall
   // back to the opaque /api/keys/chat path below.
   if (authBearer) {
-    const jwt = await fetchChatJWT(authBearer, cacheGeneration)
+    const jwt = await fetchChatJWT(authBearer, cacheGeneration, signal)
     assertSessionCacheGeneration(cacheGeneration)
     if (jwt !== null) {
       cachedSessionToken = jwt.key
@@ -236,6 +290,7 @@ async function fetchSessionTokenForGeneration(
 
   const response = await fetch(`${API_BASE_URL}/api/keys/chat`, {
     headers,
+    signal,
   })
   assertSessionCacheGeneration(cacheGeneration)
 
@@ -288,10 +343,13 @@ async function fetchSessionTokenForGeneration(
   return data.key
 }
 
-async function fetchSessionToken(): Promise<string> {
+async function fetchSessionToken(signal?: AbortSignal): Promise<string> {
   while (true) {
     try {
-      return await fetchSessionTokenForGeneration(sessionCacheGeneration)
+      return await fetchSessionTokenForGeneration(
+        sessionCacheGeneration,
+        signal,
+      )
     } catch (error) {
       if (!(error instanceof SessionCacheInvalidatedError)) throw error
     }
@@ -380,6 +438,11 @@ export async function refreshRateLimit(): Promise<void> {
 
 export function resetTinfoilClient(): void {
   sessionCacheGeneration++
+  // Abort with the same retryable error as invalidateSessionCache so
+  // concurrent waiters in ensureInitialized re-initialize against the new
+  // generation instead of surfacing what downstream would classify as a
+  // user abort.
+  abortInitialization(new SessionCacheInvalidatedError())
   clientInstance = null
   secureClient = null
   lastSessionToken = null
@@ -389,49 +452,58 @@ export function resetTinfoilClient(): void {
   cachedRateLimit = null
   remainingBeforeRequest = null
   refreshInFlight = null
+  cachedVerificationDocument = null
 }
 
 export function invalidateSessionCache(): void {
   sessionCacheGeneration++
+  abortInitialization(new SessionCacheInvalidatedError())
   refreshInFlight = null
   cachedSessionToken = null
   cachedSessionTokenExpiresAt = null
   cachedSessionTokenWasAuthenticated = false
   remainingBeforeRequest = null
+  cachedVerificationDocument = null
   if (cachedRateLimit !== null) {
     cachedRateLimit = null
     dispatchRateLimitUpdate()
   }
 }
 
-async function initClient(sessionToken: string): Promise<OpenAI> {
+async function initClient(
+  sessionToken: string,
+  signal: AbortSignal,
+): Promise<InitializedClient> {
   try {
     if (IS_DEV) {
-      clientInstance = new OpenAI({
+      return {
+        secureClient: null,
+        client: new OpenAI({
+          apiKey: sessionToken,
+          baseURL: `${window.location.origin}/api/local-router/v1`,
+          dangerouslyAllowBrowser: true,
+          defaultHeaders: {
+            [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,
+          },
+        }),
+      }
+    }
+
+    const candidateSecureClient = new SecureClient({})
+    await waitForSignal(candidateSecureClient.ready(), signal)
+    return {
+      secureClient: candidateSecureClient,
+      client: new OpenAI({
         apiKey: sessionToken,
-        baseURL: `${window.location.origin}/api/local-router/v1`,
-        dangerouslyAllowBrowser: true,
-        defaultHeaders: {
-          [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,
-        },
-      })
-    } else {
-      secureClient = new SecureClient({})
-      // Run the enclave attestation + transport setup here so getBaseURL returns the resolved enclave URL
-      await secureClient.ready()
-      clientInstance = new OpenAI({
-        apiKey: sessionToken,
-        baseURL: secureClient.getBaseURL(),
+        baseURL: candidateSecureClient.getBaseURL(),
         dangerouslyAllowBrowser: true,
         // Opt into the router's inline progress-marker stream.
         defaultHeaders: {
           [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,
         },
-        fetch: secureClient.fetch,
-      })
+        fetch: candidateSecureClient.fetch,
+      }),
     }
-    lastSessionToken = sessionToken
-    return clientInstance
   } catch (error) {
     logError('Failed to initialize Tinfoil client', error, {
       component: 'tinfoil-client',
@@ -559,9 +631,45 @@ export function getRecoveryBaseURL(): string {
  * time anything needs them, and rebuild on session-token rotation.
  */
 async function ensureInitialized(): Promise<void> {
-  const sessionToken = await fetchSessionToken()
-  if (!clientInstance || lastSessionToken !== sessionToken) {
-    await initClient(sessionToken)
+  while (true) {
+    const generation = sessionCacheGeneration
+    let task = initializationInFlight
+
+    if (!task || task.generation !== generation) {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => {
+        controller.abort(new TinfoilClientInitializationTimeoutError())
+      }, INFERENCE_CLIENT_INITIALIZATION_TIMEOUT_MS)
+      const promise = (async () => {
+        const sessionToken = await fetchSessionTokenForGeneration(
+          generation,
+          controller.signal,
+        )
+        assertSessionCacheGeneration(generation)
+        if (clientInstance && lastSessionToken === sessionToken) return
+
+        const initialized = await initClient(sessionToken, controller.signal)
+        assertSessionCacheGeneration(generation)
+        clientInstance = initialized.client
+        secureClient = initialized.secureClient
+        lastSessionToken = sessionToken
+      })()
+      task = { generation, controller, timeoutId, promise }
+      initializationInFlight = task
+    }
+
+    try {
+      await task.promise
+      return
+    } catch (error) {
+      if (error instanceof SessionCacheInvalidatedError) continue
+      throw error
+    } finally {
+      if (initializationInFlight === task) {
+        clearTimeout(task.timeoutId)
+        initializationInFlight = null
+      }
+    }
   }
 }
 
@@ -570,7 +678,15 @@ async function ensureInitialized(): Promise<void> {
  */
 export async function getVerificationDocument(): Promise<VerificationDocument | null> {
   await ensureInitialized()
-  return secureClient ? secureClient.getVerificationDocument() : null
+  const document = secureClient ? secureClient.getVerificationDocument() : null
+  if (document) {
+    cachedVerificationDocument = document
+  }
+  return document
+}
+
+export function getCachedVerificationDocument(): VerificationDocument | null {
+  return cachedVerificationDocument
 }
 
 async function getRawClient(): Promise<OpenAI> {
