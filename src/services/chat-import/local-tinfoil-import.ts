@@ -1,7 +1,6 @@
 import type { Attachment, Chat, Message } from '@/components/chat/types'
 import { uint8ArrayToBase64 } from '@/utils/binary-codec'
 import { LOCAL_IMPORT_WORKER_TIMEOUT_MS } from './constants'
-import { parseTinfoilExportBytes } from './local-tinfoil-import-parser'
 
 export const LOCAL_IMPORT_MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 
@@ -47,7 +46,18 @@ interface ImportWorkerResponse {
   error?: string
 }
 
-class ImportWorkerUnavailableError extends Error {}
+export class LocalImportBackgroundProcessingUnavailableError extends Error {
+  readonly code = 'LOCAL_IMPORT_BACKGROUND_PROCESSING_UNAVAILABLE'
+
+  constructor(options?: ErrorOptions) {
+    super(
+      'Background file processing is unavailable in this browser. Please try a supported browser.',
+      options,
+    )
+    this.name = 'LocalImportBackgroundProcessingUnavailableError'
+  }
+}
+
 export class LocalImportWorkerTimeoutError extends Error {
   constructor() {
     super('The export took too long to process')
@@ -74,24 +84,6 @@ function isImportWorkerResponse(value: unknown): value is ImportWorkerResponse {
   )
 }
 
-async function readExportOnMainThread(
-  file: File,
-  signal?: AbortSignal,
-): Promise<{
-  conversations: TinfoilExportedConversation[]
-  entries?: Record<string, Uint8Array>
-}> {
-  throwIfAborted(signal)
-  const buffer = await file.arrayBuffer()
-  throwIfAborted(signal)
-  return parseTinfoilExportBytes<TinfoilExportedConversation>({
-    bytes: new Uint8Array(buffer),
-    fileName: file.name,
-    mimeType: file.type,
-    maxArchiveBytes: LOCAL_IMPORT_MAX_ARCHIVE_BYTES,
-  })
-}
-
 async function readExport(
   file: File,
   signal?: AbortSignal,
@@ -106,16 +98,10 @@ async function readExport(
     throw new Error('The export file is too large')
   }
   throwIfAborted(signal)
-  if (typeof Worker === 'undefined') return readExportOnMainThread(file, signal)
-
-  try {
-    return await readExportInWorker(file, signal)
-  } catch (error) {
-    if (error instanceof ImportWorkerUnavailableError) {
-      return readExportOnMainThread(file, signal)
-    }
-    throw error
+  if (typeof Worker === 'undefined') {
+    throw new LocalImportBackgroundProcessingUnavailableError()
   }
+  return readExportInWorker(file, signal)
 }
 
 async function readExportInWorker(
@@ -133,8 +119,8 @@ async function readExportInWorker(
     worker = new Worker(
       new URL('./local-tinfoil-import.worker.ts', import.meta.url),
     )
-  } catch {
-    throw new ImportWorkerUnavailableError()
+  } catch (error) {
+    throw new LocalImportBackgroundProcessingUnavailableError({ cause: error })
   }
 
   return new Promise((resolve, reject) => {
@@ -166,7 +152,9 @@ async function readExportInWorker(
       if (settled) return
       const response: unknown = event.data
       if (!isImportWorkerResponse(response)) {
-        settle(() => reject(new Error('Invalid response from import worker')))
+        settle(() =>
+          reject(new LocalImportBackgroundProcessingUnavailableError()),
+        )
         return
       }
       const conversations = response.conversations
@@ -183,11 +171,19 @@ async function readExportInWorker(
         }),
       )
     }
-    worker.onerror = () => {
-      settle(() => reject(new ImportWorkerUnavailableError()))
+    worker.onerror = (event) => {
+      settle(() =>
+        reject(
+          new LocalImportBackgroundProcessingUnavailableError({
+            cause: event.error,
+          }),
+        ),
+      )
     }
     worker.onmessageerror = () => {
-      settle(() => reject(new ImportWorkerUnavailableError()))
+      settle(() =>
+        reject(new LocalImportBackgroundProcessingUnavailableError()),
+      )
     }
     timeout = setTimeout(() => {
       settle(() => reject(new LocalImportWorkerTimeoutError()))
@@ -207,8 +203,12 @@ async function readExportInWorker(
         },
         [buffer],
       )
-    } catch {
-      settle(() => reject(new ImportWorkerUnavailableError()))
+    } catch (error) {
+      settle(() =>
+        reject(
+          new LocalImportBackgroundProcessingUnavailableError({ cause: error }),
+        ),
+      )
     }
   })
 }
