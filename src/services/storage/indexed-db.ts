@@ -11,6 +11,8 @@ import {
 import { nextClock } from '@/services/cloud/edit-clock'
 import type { Project } from '@/types/project'
 import { logError, logWarning } from '@/utils/error-handling'
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex } from '@noble/hashes/utils.js'
 
 export interface Chat extends Omit<ChatType, 'createdAt'> {
   createdAt: string
@@ -97,19 +99,14 @@ const ACCOUNT_CHANGE_READ_ERROR = 'IndexedDB read superseded by account change'
 const ACCOUNT_CHANGE_WRITE_ERROR =
   'IndexedDB write superseded by account change'
 let isUpgradeBlocked = false
+const textEncoder = new TextEncoder()
 
 export function isIndexedDBUpgradeBlocked(): boolean {
   return isUpgradeBlocked
 }
 
 function hashString(input: string): string {
-  // Small, deterministic 32-bit hash for change detection
-  let hash = 5381
-  for (let i = 0; i < input.length; i++) {
-    hash = (hash * 33) ^ input.charCodeAt(i)
-  }
-  // Unsigned hex string
-  return (hash >>> 0).toString(16)
+  return bytesToHex(sha256(textEncoder.encode(input)))
 }
 
 function deserializeStoredChat(chat: StoredChat): StoredChat {
@@ -310,11 +307,15 @@ function attachmentHasPayload(attachment: Attachment): boolean {
 
 let fallbackAttachmentPayloadId = 0
 
-function createAttachmentPayloadId(reservedPayloadIds: Set<string>): string {
+function createAttachmentPayloadId(
+  chatId: string,
+  reservedPayloadIds: Set<string>,
+): string {
   const token =
     globalThis.crypto?.randomUUID?.() ??
     `fallback-${fallbackAttachmentPayloadId++}`
-  const baseId = `${GENERATED_ATTACHMENT_PAYLOAD_PREFIX}${token}`
+  const encodedChatId = bytesToHex(textEncoder.encode(chatId))
+  const baseId = `${GENERATED_ATTACHMENT_PAYLOAD_PREFIX}${encodedChatId}:${token}`
   let payloadId = baseId
   let collision = 0
   while (reservedPayloadIds.has(payloadId)) {
@@ -363,7 +364,7 @@ function normalizeAttachmentPayloads(chat: Chat): {
               !referencedPayloadIds.has(legacyPayloadId) &&
               !explicitlyReferencedPayloadIds.has(legacyPayloadId)
             ? legacyPayloadId
-            : createAttachmentPayloadId(reservedPayloadIds)
+            : createAttachmentPayloadId(chat.id, reservedPayloadIds)
       referencedPayloadIds.add(payloadId)
       const { base64, thumbnailBase64, textContent, pages, ...metadata } =
         storedAttachment

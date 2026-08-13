@@ -7,7 +7,7 @@ import {
   type StoredChat,
 } from '@/services/storage/indexed-db'
 import { IDBKeyRange as FakeIDBKeyRange, IDBFactory } from 'fake-indexeddb'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 function storedChat(
   id: string,
@@ -114,6 +114,10 @@ function blockChatTransaction(
 }
 
 describe('IndexedDB pending sync index', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   beforeEach(() => {
     Object.defineProperty(globalThis, 'indexedDB', {
       configurable: true,
@@ -695,6 +699,70 @@ describe('IndexedDB pending sync index', () => {
       'second',
       'adversarial',
     ])
+  })
+
+  it('keeps fallback payload ids unique across module reloads and chats', async () => {
+    vi.stubGlobal('crypto', {})
+    vi.resetModules()
+    const { IndexedDBStorage: FirstStorage } =
+      await import('@/services/storage/indexed-db')
+    const firstStorage = new FirstStorage()
+    await firstStorage.initialize()
+    await firstStorage.saveChat(
+      storedChat('first/chat', {
+        messages: [
+          {
+            role: 'user',
+            content: 'First',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              { id: 'shared', type: 'image', fileName: 'a.png', base64: 'a' },
+              { id: 'shared', type: 'image', fileName: 'b.png', base64: 'b' },
+            ],
+          },
+        ],
+      }),
+    )
+
+    vi.resetModules()
+    const { IndexedDBStorage: SecondStorage } =
+      await import('@/services/storage/indexed-db')
+    const secondStorage = new SecondStorage()
+    await secondStorage.initialize()
+    await secondStorage.saveChat(
+      storedChat('second:chat', {
+        messages: [
+          {
+            role: 'user',
+            content: 'Second',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              { id: 'shared', type: 'image', fileName: 'c.png', base64: 'c' },
+              { id: 'shared', type: 'image', fileName: 'd.png', base64: 'd' },
+            ],
+          },
+        ],
+      }),
+    )
+
+    const first = await secondStorage.getChat('first/chat')
+    const second = await secondStorage.getChat('second:chat')
+    const firstAttachments = first?.messages[0].attachments ?? []
+    const secondAttachments = second?.messages[0].attachments ?? []
+
+    expect(firstAttachments.map((attachment) => attachment.base64)).toEqual([
+      'a',
+      'b',
+    ])
+    expect(secondAttachments.map((attachment) => attachment.base64)).toEqual([
+      'c',
+      'd',
+    ])
+    expect(
+      (firstAttachments[1] as { storagePayloadId?: string }).storagePayloadId,
+    ).not.toBe(
+      (secondAttachments[1] as { storagePayloadId?: string }).storagePayloadId,
+    )
   })
 
   it('finalizes duplicate client ids using their payload identities', async () => {
