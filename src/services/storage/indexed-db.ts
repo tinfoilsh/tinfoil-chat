@@ -85,6 +85,33 @@ export class AttachmentPayloadIdUnavailableError extends Error {
   }
 }
 
+export class AttachmentPayloadReferenceAmbiguityError extends Error {
+  readonly code = 'ATTACHMENT_PAYLOAD_REFERENCE_AMBIGUOUS'
+
+  constructor() {
+    super('Attachment payload reference is ambiguous')
+    this.name = 'AttachmentPayloadReferenceAmbiguityError'
+  }
+}
+
+export class AttachmentPayloadReferenceMissingError extends Error {
+  readonly code = 'ATTACHMENT_PAYLOAD_REFERENCE_MISSING'
+
+  constructor() {
+    super('Attachment has no payload or remote retrieval identity')
+    this.name = 'AttachmentPayloadReferenceMissingError'
+  }
+}
+
+export class AttachmentPayloadMissingError extends Error {
+  readonly code = 'ATTACHMENT_PAYLOAD_MISSING'
+
+  constructor() {
+    super('Stored attachment payload is missing')
+    this.name = 'AttachmentPayloadMissingError'
+  }
+}
+
 export const DB_NAME = 'tinfoil-chat'
 export const DB_VERSION = 5
 export const INDEXED_DB_UPGRADE_BLOCKED_EVENT = 'indexedDBUpgradeBlocked'
@@ -309,6 +336,15 @@ function attachmentHasPayload(attachment: Attachment): boolean {
   )
 }
 
+function isLazilyRetrievableAttachment(attachment: Attachment): boolean {
+  return (
+    attachment.type === 'image' &&
+    attachment.id.trim().length > 0 &&
+    typeof attachment.encryptionKey === 'string' &&
+    attachment.encryptionKey.trim().length > 0
+  )
+}
+
 function createAttachmentPayloadId(
   chatId: string,
   reservedPayloadIds: Set<string>,
@@ -416,7 +452,6 @@ function inheritAttachmentPayloadReferences(
   chat: Chat,
   existing: StoredChat | null | undefined,
 ): Chat {
-  if (!existing) return chat
   type PayloadCandidate = {
     payloadId: string
     messageKey: string
@@ -445,9 +480,11 @@ function inheritAttachmentPayloadReferences(
       attachment.fileName,
       attachment.mimeType ?? null,
       attachment.fileSize ?? null,
+      attachment.description ?? null,
+      attachment.encryptionKey ?? null,
     ])
 
-  for (const message of existing.messages) {
+  for (const message of existing?.messages ?? []) {
     for (const attachment of message.attachments ?? []) {
       const storedAttachment = attachment as StoredAttachmentReference
       if (storedAttachment.storagePayloadId) {
@@ -483,38 +520,54 @@ function inheritAttachmentPayloadReferences(
     const candidates = candidatesByAttachmentId.get(attachmentId) ?? []
 
     for (const incoming of incomingAttachments) {
-      const exactCandidates = candidates.filter(
+      if (attachmentHasPayload(incoming.attachment)) {
+        continue
+      }
+
+      if (incoming.attachment.storagePayloadId) {
+        const referenceMatches = candidates.filter(
+          (candidate) =>
+            !candidate.used &&
+            candidate.payloadId === incoming.attachment.storagePayloadId &&
+            candidate.attachmentKey === incoming.attachmentKey,
+        )
+        if (referenceMatches.length > 1) {
+          throw new AttachmentPayloadReferenceAmbiguityError()
+        }
+        if (referenceMatches.length === 1) {
+          referenceMatches[0].used = true
+          continue
+        }
+        if (isLazilyRetrievableAttachment(incoming.attachment)) {
+          continue
+        }
+        throw new AttachmentPayloadReferenceMissingError()
+      }
+
+      const metadataMatches = candidates.filter(
         (candidate) =>
           !candidate.used && candidate.attachmentKey === incoming.attachmentKey,
       )
-      const candidate =
-        exactCandidates.find(
-          (item) => item.messageKey === incoming.messageKey,
-        ) ?? exactCandidates[0]
-      if (!candidate) continue
-      candidate.used = true
-      if (
-        !attachmentHasPayload(incoming.attachment) &&
-        !incoming.attachment.storagePayloadId
-      ) {
-        incoming.attachment.storagePayloadId = candidate.payloadId
-      }
-    }
+      const messageMatches = metadataMatches.filter(
+        (candidate) => candidate.messageKey === incoming.messageKey,
+      )
+      const exactMatches =
+        messageMatches.length > 0 ? messageMatches : metadataMatches
 
-    for (const incoming of incomingAttachments) {
-      if (
-        attachmentHasPayload(incoming.attachment) ||
-        incoming.attachment.storagePayloadId
-      ) {
+      if (exactMatches.length > 1) {
+        throw new AttachmentPayloadReferenceAmbiguityError()
+      }
+
+      const candidate = exactMatches[0]
+      if (candidate) {
+        candidate.used = true
+        incoming.attachment.storagePayloadId = candidate.payloadId
         continue
       }
-      const candidate =
-        candidates.find(
-          (item) => !item.used && item.messageKey === incoming.messageKey,
-        ) ?? candidates.find((item) => !item.used)
-      if (!candidate) continue
-      candidate.used = true
-      incoming.attachment.storagePayloadId = candidate.payloadId
+
+      if (!isLazilyRetrievableAttachment(incoming.attachment)) {
+        throw new AttachmentPayloadReferenceMissingError()
+      }
     }
   }
 
@@ -537,10 +590,24 @@ function hydrateAttachmentPayloads(
       attachments: message.attachments?.map((attachment) => {
         const { storagePayloadId, ...metadata } =
           attachment as StoredAttachmentReference
+        if (!storagePayloadId) {
+          if (
+            attachmentHasPayload(metadata) ||
+            isLazilyRetrievableAttachment(metadata)
+          ) {
+            return metadata
+          }
+          throw new AttachmentPayloadMissingError()
+        }
         const payload = storagePayloadId
           ? payloadById.get(storagePayloadId)
           : undefined
-        if (!payload) return metadata
+        if (!payload) {
+          if (isLazilyRetrievableAttachment(metadata)) {
+            return { ...metadata, storagePayloadId }
+          }
+          throw new AttachmentPayloadMissingError()
+        }
         const { id, chatId, ...content } = payload
         return { ...metadata, storagePayloadId, ...content }
       }),
@@ -947,10 +1014,17 @@ export class IndexedDBStorage {
           // The mutation sees (and callers receive) the hydrated chat so
           // attachment content survives the round trip; the write below
           // re-normalizes payloads back out of the chat record.
-          const current = hydrateAttachmentPayloads(
-            stored,
-            payloadRequest.result as StoredAttachmentPayload[],
-          )
+          let current: StoredChat
+          try {
+            current = hydrateAttachmentPayloads(
+              stored,
+              payloadRequest.result as StoredAttachmentPayload[],
+            )
+          } catch (error) {
+            transaction.abort()
+            reject(error)
+            return
+          }
           const result = mutation(current)
           if (!result.changed) {
             output = result.chat
@@ -1285,8 +1359,13 @@ export class IndexedDBStorage {
       }
       payloadRequest.onerror = () =>
         reject(new Error('Failed to get attachment payloads'))
-      transaction.oncomplete = () =>
-        resolve(chat ? hydrateAttachmentPayloads(chat, payloads) : null)
+      transaction.oncomplete = () => {
+        try {
+          resolve(chat ? hydrateAttachmentPayloads(chat, payloads) : null)
+        } catch (error) {
+          reject(error)
+        }
+      }
     })
   }
 
@@ -1683,20 +1762,24 @@ export class IndexedDBStorage {
 
         request.onerror = () => reject(new Error('Failed to get all chats'))
         transaction.oncomplete = () => {
-          const payloadsByChat = new Map<string, StoredAttachmentPayload[]>()
-          for (const payload of payloads) {
-            const chatPayloads = payloadsByChat.get(payload.chatId)
-            if (chatPayloads) chatPayloads.push(payload)
-            else payloadsByChat.set(payload.chatId, [payload])
-          }
-          resolve(
-            chats.map((chat) =>
-              hydrateAttachmentPayloads(
-                chat,
-                payloadsByChat.get(chat.id) ?? [],
+          try {
+            const payloadsByChat = new Map<string, StoredAttachmentPayload[]>()
+            for (const payload of payloads) {
+              const chatPayloads = payloadsByChat.get(payload.chatId)
+              if (chatPayloads) chatPayloads.push(payload)
+              else payloadsByChat.set(payload.chatId, [payload])
+            }
+            resolve(
+              chats.map((chat) =>
+                hydrateAttachmentPayloads(
+                  chat,
+                  payloadsByChat.get(chat.id) ?? [],
+                ),
               ),
-            ),
-          )
+            )
+          } catch (error) {
+            reject(error)
+          }
         }
       }),
     )
@@ -2045,12 +2128,18 @@ export class IndexedDBStorage {
           const chat = chatRequest.result as StoredChat | undefined
           if (!chat) return
 
-          const currentFingerprint = chatContentFingerprint(
-            hydrateAttachmentPayloads(
+          let hydratedChat: StoredChat
+          try {
+            hydratedChat = hydrateAttachmentPayloads(
               chat,
               payloadRequest.result as StoredAttachmentPayload[],
-            ),
-          )
+            )
+          } catch (error) {
+            transaction.abort()
+            reject(error)
+            return
+          }
+          const currentFingerprint = chatContentFingerprint(hydratedChat)
           const concurrentEdit =
             (opts.preUploadUpdatedAt !== undefined &&
               chat.updatedAt !== opts.preUploadUpdatedAt) ||
@@ -2201,9 +2290,20 @@ export class IndexedDBStorage {
             }
           }
 
+          let inheritedChat: Chat
+          try {
+            inheritedChat = inheritAttachmentPayloadReferences(
+              opts.chat,
+              existing,
+            )
+          } catch (error) {
+            transaction.abort()
+            reject(error)
+            return
+          }
           const normalizedAttachments =
             normalizeAttachmentPayloadsInTransaction(
-              inheritAttachmentPayloadReferences(opts.chat, existing),
+              inheritedChat,
               transaction,
               reject,
             )
