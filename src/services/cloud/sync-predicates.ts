@@ -59,6 +59,7 @@ export function isUploadableChat(
         | 'isBlankChat'
         | 'decryptionFailed'
         | 'dataCorrupted'
+        | 'isMetadataOnly'
       >
     | Pick<
         StoredChat,
@@ -68,6 +69,7 @@ export function isUploadableChat(
         | 'isBlankChat'
         | 'decryptionFailed'
         | 'dataCorrupted'
+        | 'isMetadataOnly'
       >,
   isStreaming?: (chatId: string) => boolean,
 ): boolean {
@@ -80,6 +82,10 @@ export function isUploadableChat(
   }
 
   if (chat.decryptionFailed === true) {
+    return false
+  }
+
+  if (chat.isMetadataOnly === true) {
     return false
   }
 

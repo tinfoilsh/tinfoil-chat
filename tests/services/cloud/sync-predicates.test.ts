@@ -107,6 +107,19 @@ describe('Sync Predicates', () => {
       ).toBe(false)
     })
 
+    it('returns false for unhydrated metadata with a nonzero message count', () => {
+      expect(
+        isUploadableChat({
+          id: 'unhydrated-metadata',
+          messageCount: 4,
+          isMetadataOnly: true,
+          isLocalOnly: false,
+          isBlankChat: false,
+          decryptionFailed: false,
+        }),
+      ).toBe(false)
+    })
+
     it('handles false vs undefined for boolean flags', () => {
       const explicitFalse = {
         ...baseChat,

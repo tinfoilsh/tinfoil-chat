@@ -58,6 +58,7 @@ export interface ChatSyncMetadata {
   updatedAt: string
   isLocalOnly?: boolean
   isBlankChat?: boolean
+  isMetadataOnly?: boolean
 }
 
 export interface SaveChatResult {
@@ -1720,12 +1721,7 @@ export class IndexedDBStorage {
       const db = await this.ensureDB()
       return new Promise<void>((resolve, reject) => {
         const transaction = db.transaction(
-          [
-            CHATS_STORE,
-            ATTACHMENT_PAYLOADS_STORE,
-            CHAT_SUMMARIES_STORE,
-            SYNC_OUTBOX_STORE,
-          ],
+          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
           'readwrite',
         )
         const store = transaction.objectStore(CHATS_STORE)

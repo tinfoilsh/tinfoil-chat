@@ -68,9 +68,9 @@ vi.mock('@/services/storage/chat-events', () => ({
 }))
 vi.mock('@/services/cloud/sync-predicates', () => ({
   isUploadableChat: (
-    chat: { id: string },
+    chat: { id: string; isMetadataOnly?: boolean },
     isStreaming: (id: string) => boolean,
-  ) => !isStreaming(chat.id),
+  ) => chat.isMetadataOnly !== true && !isStreaming(chat.id),
 }))
 
 describe('chat revision synchronization', () => {
@@ -119,6 +119,23 @@ describe('chat revision synchronization', () => {
     expect(revisionEvents).not.toHaveBeenCalled()
     expect(revisionSnapshot).not.toHaveBeenCalled()
     expect(getPendingUploadChats).not.toHaveBeenCalled()
+  })
+
+  it('does not send metadata-only rows through the revision uploader', async () => {
+    hasPendingSyncWork.mockResolvedValue(true)
+    getPendingUploadChats.mockResolvedValue([
+      {
+        id: 'metadata-only',
+        messages: [],
+        messageCount: 4,
+        isMetadataOnly: true,
+        pendingUpload: 1,
+      },
+    ])
+
+    await drainChatRevisionSync(adapter, userId)
+
+    expect(adapter.upload).not.toHaveBeenCalled()
   })
 
   it('applies ordered deletes and project moves before pending uploads', async () => {

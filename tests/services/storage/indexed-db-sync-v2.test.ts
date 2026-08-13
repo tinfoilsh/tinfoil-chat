@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const DB_NAME = 'tinfoil-chat'
 const LEGACY_DB_VERSION = 1
+const SUMMARY_DATABASE_VERSION = 6
 
 function deleteDatabase(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -47,6 +48,54 @@ function createLegacyDatabase(): Promise<void> {
   })
 }
 
+function createSummaryDatabase(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, SUMMARY_DATABASE_VERSION)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      const chats = db.createObjectStore('chats', { keyPath: 'id' })
+      chats.createIndex('lastAccessedAt', 'lastAccessedAt')
+      chats.createIndex('createdAt', 'createdAt')
+      chats.createIndex('syncedAt', 'syncedAt')
+      chats.createIndex('syncPending', 'syncPending')
+      chats.createIndex('projectId', 'projectId')
+      const metadataOnlyChat = {
+        id: 'metadata-only',
+        title: 'Remote summary',
+        messages: [],
+        messageCount: 4,
+        isMetadataOnly: true,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        lastAccessedAt: 0,
+        locallyModified: true,
+        syncPending: 1,
+        isLocalOnly: false,
+      }
+      chats.put(metadataOnlyChat)
+
+      const projects = db.createObjectStore('projects', {
+        keyPath: 'cacheKey',
+      })
+      projects.createIndex('userId', 'userId')
+      db.createObjectStore('migrations', { keyPath: 'id' })
+      const payloads = db.createObjectStore('attachmentPayloads', {
+        keyPath: 'id',
+      })
+      payloads.createIndex('chatId', 'chatId')
+      const summaries = db.createObjectStore('chatSummaries', {
+        keyPath: 'id',
+      })
+      summaries.put(metadataOnlyChat)
+    }
+    request.onsuccess = () => {
+      request.result.close()
+      resolve()
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
 function readIndexNames(storeName: string): Promise<string[]> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME)
@@ -55,6 +104,19 @@ function readIndexNames(storeName: string): Promise<string[]> {
       const names = Array.from(
         db.transaction(storeName, 'readonly').objectStore(storeName).indexNames,
       )
+      db.close()
+      resolve(names)
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
+function readStoreNames(): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME)
+    request.onsuccess = () => {
+      const db = request.result
+      const names = Array.from(db.objectStoreNames)
       db.close()
       resolve(names)
     }
@@ -95,6 +157,41 @@ describe('IndexedDB sync protocol v2 migration', () => {
 
     expect(await storage.hasPendingSyncWork('user-1')).toBe(false)
     await expect(storage.getPendingUploadChats('user-1')).resolves.toEqual([])
+  })
+
+  it('upgrades the summary schema without making metadata uploadable', async () => {
+    await createSummaryDatabase()
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+
+    expect(await readStoreNames()).toEqual(
+      expect.arrayContaining([
+        'chats',
+        'projects',
+        'migrations',
+        'attachmentPayloads',
+        'chatSummaries',
+        'sync_state',
+        'remote_chat_state',
+        'sync_outbox',
+      ]),
+    )
+    expect(await readIndexNames('chats')).toEqual(
+      expect.arrayContaining([
+        'projectId',
+        'syncPending',
+        'pendingUploadByUser',
+      ]),
+    )
+    await expect(storage.getPendingUploadChats('user-1')).resolves.toEqual([])
+    await expect(storage.hasPendingSyncWork('user-1')).resolves.toBe(false)
+    await expect(storage.getChatSummaries()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'metadata-only',
+        isMetadataOnly: true,
+        messageCount: 0,
+      }),
+    ])
   })
 
   it('lists pending uploads only for their owning account', async () => {
@@ -646,6 +743,7 @@ describe('IndexedDB sync protocol v2 migration', () => {
     expect(derivePendingUpload({ ...valid, dataCorrupted: true })).toBe(0)
     expect(derivePendingUpload({ ...valid, isBlankChat: true })).toBe(0)
     expect(derivePendingUpload({ ...valid, messages: [] })).toBe(0)
+    expect(derivePendingUpload({ ...valid, isMetadataOnly: true })).toBe(0)
     expect(derivePendingUpload({ ...valid, locallyModified: false })).toBe(0)
   })
 })
