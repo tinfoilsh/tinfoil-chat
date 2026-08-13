@@ -175,7 +175,7 @@ describe('IndexedDB pending sync index', () => {
     upgraded.close()
   })
 
-  it('continues a blocked upgrade after the older connection closes', async () => {
+  it('fails a blocked upgrade promptly and allows a retry', async () => {
     const olderConnection = await openVersionThree([storedChat('cloud-chat')])
     olderConnection.onversionchange = () => undefined
     const blocked = new Promise<void>((resolve) => {
@@ -189,9 +189,10 @@ describe('IndexedDB pending sync index', () => {
     const chatsPromise = storage.getAllChats()
 
     await blocked
+    await expect(chatsPromise).rejects.toThrow('Database upgrade blocked')
     olderConnection.close()
 
-    await expect(chatsPromise).resolves.toEqual([
+    await expect(storage.getAllChats()).resolves.toEqual([
       expect.objectContaining({ id: 'cloud-chat' }),
     ])
   })
@@ -1697,7 +1698,7 @@ describe('IndexedDB pending sync index', () => {
     })
     await vi.waitFor(() =>
       expect(transactionSpy).toHaveBeenCalledWith(
-        ['chats', 'attachmentPayloads', 'chatSummaries'],
+        ['chats', 'attachmentPayloads', 'chatSummaries', 'sync_outbox'],
         'readwrite',
       ),
     )

@@ -49,6 +49,7 @@ vi.mock('@/services/cloud/cloud-storage', () => ({
   },
 }))
 vi.mock('@/services/storage/indexed-db', () => ({
+  chatContentFingerprint: vi.fn(() => 'content-fingerprint'),
   indexedDBStorage: {
     clearRevisionSyncState,
     getChat,
@@ -84,6 +85,7 @@ vi.mock('@/services/cloud/sync-health', () => ({
 }))
 vi.mock('@/utils/error-handling', () => ({
   logError: vi.fn(),
+  logInfo: vi.fn(),
 }))
 
 describe('CloudSyncService revision coordinator routing', () => {

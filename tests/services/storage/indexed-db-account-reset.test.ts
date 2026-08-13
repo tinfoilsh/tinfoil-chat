@@ -25,6 +25,9 @@ describe('IndexedDBStorage account reset', () => {
     const clearProjects = vi.fn(() => ({ onerror: null }))
     const clearPayloads = vi.fn(() => ({ onerror: null }))
     const clearSummaries = vi.fn(() => ({ onerror: null }))
+    const clearSyncState = vi.fn(() => ({ onerror: null }))
+    const clearRemoteState = vi.fn(() => ({ onerror: null }))
+    const clearOutbox = vi.fn(() => ({ onerror: null }))
     const transaction: FakeResetTransaction = {
       oncomplete: null,
       onerror: null,
@@ -38,7 +41,13 @@ describe('IndexedDBStorage account reset', () => {
               ? clearProjects
               : storeName === 'attachmentPayloads'
                 ? clearPayloads
-                : clearSummaries,
+                : storeName === 'chatSummaries'
+                  ? clearSummaries
+                  : storeName === 'sync_state'
+                    ? clearSyncState
+                    : storeName === 'remote_chat_state'
+                      ? clearRemoteState
+                      : clearOutbox,
       }),
     }
     const resetDb = {
@@ -50,6 +59,9 @@ describe('IndexedDBStorage account reset', () => {
       clearProjects,
       clearPayloads,
       clearSummaries,
+      clearSyncState,
+      clearRemoteState,
+      clearOutbox,
       transaction,
     }
   }
@@ -71,8 +83,16 @@ describe('IndexedDBStorage account reset', () => {
 
   it('bypasses a stalled write queue and closes the old connection', async () => {
     const storage = new IndexedDBStorage()
-    const { clear, clearProjects, clearPayloads, clearSummaries, transaction } =
-      prepareReset(storage)
+    const {
+      clear,
+      clearProjects,
+      clearPayloads,
+      clearSummaries,
+      clearSyncState,
+      clearRemoteState,
+      clearOutbox,
+      transaction,
+    } = prepareReset(storage)
     const close = vi.fn()
     Object.assign(storage as any, {
       db: { close },
@@ -86,6 +106,9 @@ describe('IndexedDBStorage account reset', () => {
     expect(clearProjects).toHaveBeenCalledTimes(1)
     expect(clearPayloads).toHaveBeenCalledTimes(1)
     expect(clearSummaries).toHaveBeenCalledTimes(1)
+    expect(clearSyncState).toHaveBeenCalledTimes(1)
+    expect(clearRemoteState).toHaveBeenCalledTimes(1)
+    expect(clearOutbox).toHaveBeenCalledTimes(1)
     await completeReset(transaction)
     await reset
   })
