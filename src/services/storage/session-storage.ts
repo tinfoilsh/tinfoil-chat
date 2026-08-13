@@ -172,24 +172,8 @@ export const sessionChatStorage = {
     try {
       const chats = getCanonicalChats()
       const filteredChats = chats.filter((c) => c.id !== chatId)
-      const draftKey = getDraftKey(chatId)
-      const draft = sessionStorage.getItem(draftKey)
-      sessionStorage.removeItem(draftKey)
-      try {
-        sessionStorage.setItem(
-          SYNC_SESSION_CHATS,
-          JSON.stringify(filteredChats),
-        )
-      } catch (error) {
-        if (draft !== null) {
-          try {
-            sessionStorage.setItem(draftKey, draft)
-          } catch {
-            // Both session writes are best effort.
-          }
-        }
-        throw error
-      }
+      sessionStorage.setItem(SYNC_SESSION_CHATS, JSON.stringify(filteredChats))
+      sessionStorage.removeItem(getDraftKey(chatId))
     } catch (error) {
       logError('Failed to delete chat from session storage', error, {
         component: 'sessionChatStorage',
