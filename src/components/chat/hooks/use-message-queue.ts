@@ -38,6 +38,13 @@ type UseMessageQueueReturn = {
   notifyGenerationCancelled: (chatId: string) => void
 }
 
+export class QueueIdentifierUnavailableError extends Error {
+  constructor() {
+    super('Secure queue identifier generation is unavailable')
+    this.name = 'QueueIdentifierUnavailableError'
+  }
+}
+
 const isBrowser = typeof window !== 'undefined'
 
 function isBlankQueueId(queueId: string): boolean {
@@ -54,10 +61,13 @@ function storageKeyFor(
 }
 
 function generateQueuedId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID()
+  if (
+    typeof crypto === 'undefined' ||
+    typeof crypto.randomUUID !== 'function'
+  ) {
+    throw new QueueIdentifierUnavailableError()
   }
-  return `queued-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  return crypto.randomUUID()
 }
 
 function loadFromStorage(key: string | null): QueuedMessage[] {

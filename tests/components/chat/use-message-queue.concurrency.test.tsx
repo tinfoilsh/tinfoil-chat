@@ -1,8 +1,11 @@
-import { useMessageQueue } from '@/components/chat/hooks/use-message-queue'
+import {
+  QueueIdentifierUnavailableError,
+  useMessageQueue,
+} from '@/components/chat/hooks/use-message-queue'
 import type { Attachment, LoadingState } from '@/components/chat/types'
 import { MESSAGE_QUEUE_PREFIX } from '@/constants/storage-keys'
 import { act, renderHook } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 async function flushMicrotasks(): Promise<void> {
   await act(async () => {
@@ -22,6 +25,34 @@ function createWedgedHandleQuery() {
 describe('useMessageQueue concurrency', () => {
   beforeEach(() => {
     window.sessionStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('leaves the queue unchanged when secure IDs are unavailable', () => {
+    const storageKey = `${MESSAGE_QUEUE_PREFIX}chat-a`
+    const existing = [{ id: 'existing', text: 'already queued' }]
+    window.sessionStorage.setItem(storageKey, JSON.stringify(existing))
+    vi.stubGlobal('crypto', {})
+
+    const { result } = renderHook(() =>
+      useMessageQueue({
+        chatId: 'chat-a',
+        loadingState: 'loading' as LoadingState,
+        handleQuery: vi.fn(),
+        isRateLimited: () => false,
+      }),
+    )
+
+    expect(() =>
+      act(() => result.current.submit({ text: 'new message' })),
+    ).toThrow(QueueIdentifierUnavailableError)
+    expect(result.current.queuedMessages).toEqual(existing)
+    expect(
+      JSON.parse(window.sessionStorage.getItem(storageKey) ?? '[]'),
+    ).toEqual(existing)
   })
 
   it('dispatches in a newly active chat while another chat is still streaming', async () => {
