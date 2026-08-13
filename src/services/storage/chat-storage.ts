@@ -46,7 +46,24 @@ export class ChatStorageService {
   }
 
   async saveChat(chat: Chat, skipCloudSync = false): Promise<Chat> {
+    return (await this.saveChatInternal(chat, skipCloudSync, false)) ?? chat
+  }
+
+  async saveExistingChat(
+    chat: Chat,
+    skipCloudSync = false,
+  ): Promise<Chat | null> {
+    return this.saveChatInternal(chat, skipCloudSync, true)
+  }
+
+  private async saveChatInternal(
+    chat: Chat,
+    skipCloudSync: boolean,
+    requireExisting: boolean,
+  ): Promise<Chat | null> {
+    if (deletedChatsTracker.isDeleted(chat.id)) return null
     await this.initialize()
+    if (deletedChatsTracker.isDeleted(chat.id)) return null
 
     // Never save blank chats to storage
     if (chat.isBlankChat) {
@@ -72,7 +89,10 @@ export class ChatStorageService {
       isLocalOnly: chatToSave.isLocalOnly === true || !isCloudSyncEnabled(),
     }
 
-    const saveResult = await indexedDBStorage.saveChat(storageChat)
+    const saveResult = requireExisting
+      ? await indexedDBStorage.saveExistingChat(storageChat)
+      : await indexedDBStorage.saveChat(storageChat)
+    if (!saveResult.saved) return null
     const isLocalOnly = saveResult.isLocalOnly
 
     // Emit change event after local save
@@ -297,6 +317,25 @@ export class ChatStorageService {
 
     const storedChats = await indexedDBStorage.getAllChats()
     // Convert StoredChat[] to Chat[] but preserve sync metadata
+    return storedChats.map(
+      ({
+        lastAccessedAt,
+        syncPending,
+        syncVersion,
+        version,
+        pendingSave,
+        ...chatWithSyncData
+      }) => ({
+        ...chatWithSyncData,
+        createdAt: new Date(chatWithSyncData.createdAt),
+      }),
+    )
+  }
+
+  async getChatSummariesWithSyncStatus(): Promise<Chat[]> {
+    await this.initialize()
+
+    const storedChats = await indexedDBStorage.getChatSummaries()
     return storedChats.map(
       ({
         lastAccessedAt,

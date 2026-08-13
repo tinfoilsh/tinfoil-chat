@@ -21,6 +21,7 @@ import { FaLock } from '../icons/lazy-icons'
 import { RedactedText } from '../ui/redacted-text'
 import { cn } from '../ui/utils'
 import { formatRelativeTime } from './chat-list-utils'
+import { getBlankQueueId } from './message-queue-identity'
 import { TypingAnimation } from './typing-animation'
 
 const INITIAL_TURN_MESSAGE_COUNT = 2
@@ -33,6 +34,7 @@ export interface ChatItemData {
   updatedAt?: string
   messageCount?: number
   messages?: { length: number }
+  isMetadataOnly?: boolean
   decryptionFailed?: boolean
   dataCorrupted?: boolean
   isLocalOnly?: boolean
@@ -53,7 +55,7 @@ export function getChatKey(chat: ChatItemData): string {
  * Generates the ID to pass to onSelectChat for blank chats
  */
 export function getBlankChatSelectId(chat: ChatItemData): string {
-  return chat.isLocalOnly ? 'blank-local' : 'blank-cloud'
+  return getBlankQueueId(chat.isLocalOnly === true)
 }
 
 export interface ProjectOption {
@@ -191,7 +193,11 @@ export function ChatListItem({
   const mobileMenuPortalRef = useRef<HTMLDivElement>(null)
   const prevTitleRef = useRef(chat.title)
 
-  const messageCount = chat.messages?.length ?? chat.messageCount ?? 0
+  // Metadata-only summaries carry an empty messages array as a
+  // placeholder, so the stored count is the truthful one for them.
+  const messageCount = chat.isMetadataOnly
+    ? (chat.messageCount ?? 0)
+    : (chat.messages?.length ?? chat.messageCount ?? 0)
   const isNewChat = messageCount === 0 && !chat.decryptionFailed
   const hasRealTitle = !chat.isBlankChat && !chat.decryptionFailed
   const shouldRedactTitle =

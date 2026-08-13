@@ -1,3 +1,4 @@
+import { useToast } from '@/hooks/use-toast'
 import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { isChatRecoveryTurnCancelled } from '@/services/inference/chat-recovery'
@@ -10,6 +11,7 @@ import { samePendingRecoveryEnvelope } from '@/types/chat-recovery'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { BLANK_LOCAL_QUEUE_ID, isBlankQueueId } from '../message-queue-identity'
 import type { Chat, PendingRecoveryEnvelope } from '../types'
 import {
   createBlankChat,
@@ -44,6 +46,7 @@ interface UseChatStorageReturn {
   loadChatById: (chatId: string, isLocalUrl: boolean) => Promise<void>
   setIsInitialLoad: (loading: boolean) => void
   isInitialLoad: boolean
+  isChatHydrating: boolean
   reloadChats: () => Promise<void>
   initialChatDecryptionFailed: boolean
   clearInitialChatDecryptionFailed: () => void
@@ -91,7 +94,9 @@ export function useChatStorage({
   initialNewChatIsLocalOnly = false,
 }: UseChatStorageProps): UseChatStorageReturn {
   const { isSignedIn } = useAuth()
+  const { toast } = useToast()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [hydratingChatId, setHydratingChatId] = useState<string | null>(null)
   const initialChatLoadedRef = useRef(false)
   const reloadGenerationRef = useRef(0)
   const pendingRecoveryReloadIdsRef = useRef(new Set<string>())
@@ -112,6 +117,10 @@ export function useChatStorage({
           initialChats[0],
       }
     })
+  const currentChatRef = useRef(currentChat)
+  currentChatRef.current = currentChat
+  const selectionRequestRef = useRef(0)
+  const selectionFallbackRef = useRef<Chat | null>(null)
 
   // Create persistence manager
   const persistenceManager = useMemo(
@@ -139,7 +148,14 @@ export function useChatStorage({
       recoveryIds?.forEach((id) => pendingRecoveryReloadIdsRef.current.add(id))
       const reloadGeneration = ++reloadGenerationRef.current
       try {
-        const loadedChats = await loadChats(storeHistory && !!isSignedIn)
+        const current = currentChatRef.current
+        const needsFullReload =
+          !!recoveryIds?.length ||
+          (!current.isBlankChat && !!current.pendingRecoveries?.length)
+        const loadedChats = await loadChats(
+          storeHistory && !!isSignedIn,
+          !needsFullReload,
+        )
         if (reloadGeneration !== reloadGenerationRef.current) {
           return
         }
@@ -161,21 +177,48 @@ export function useChatStorage({
           // Cancelled recoveries are stripped here too, not just on
           // currentChat: switching to a chat adopts its entry from this
           // list, which must not reintroduce a stopped turn's envelope.
+          const previousById = new Map(prevChats.map((chat) => [chat.id, chat]))
           const nonBlankChats = loadedChats
             .filter(
               (c) => !c.isBlankChat && !deletedChatsTracker.isDeleted(c.id),
             )
-            .map((c) =>
-              c.pendingRecoveries?.length
-                ? {
+            .map((c) => {
+              const existing = previousById.get(c.id)
+              let chat = c
+              if (c.isMetadataOnly && existing && !existing.isMetadataOnly) {
+                // A hydrated copy keeps its messages only while it still
+                // mirrors storage. When the stored chat has newer content
+                // (another device, a background write), fall back to the
+                // summary so the next selection rehydrates instead of
+                // pinning stale messages. Streaming chats and sends in
+                // their pre-save window are ahead of storage, so they
+                // always keep their in-memory messages.
+                const hydratedMatchesStorage =
+                  existing.updatedAt === c.updatedAt &&
+                  existing.messages.length === (c.messageCount ?? 0)
+                if (
+                  hydratedMatchesStorage ||
+                  existing.pendingSave === true ||
+                  streamingTracker.isStreamingOrPending(c.id)
+                ) {
+                  chat = {
+                    ...existing,
                     ...c,
+                    messages: existing.messages,
+                    isMetadataOnly: false,
+                  }
+                }
+              }
+              return chat.pendingRecoveries?.length
+                ? {
+                    ...chat,
                     pendingRecoveries: withoutCancelledRecoveries(
-                      c.id,
-                      c.pendingRecoveries,
+                      chat.id,
+                      chat.pendingRecoveries,
                     ),
                   }
-                : c,
-            )
+                : chat
+            })
 
           // Combine blank chats with loaded chats and sort
           const finalChats = sortChats([
@@ -191,7 +234,7 @@ export function useChatStorage({
           let nextCurrent = prev
           if (!prev.isBlankChat) {
             // Only update metadata (syncedAt, title) if the same chat exists in storage
-            const existingChat = loadedChats.find((c) => c.id === prev.id)
+            const existingChat = nonBlankChats.find((c) => c.id === prev.id)
             if (existingChat) {
               const storedRecoveries = withoutCancelledRecoveries(
                 prev.id,
@@ -241,7 +284,10 @@ export function useChatStorage({
                 )
                 if (
                   (isRecoveryReload || recoveryResolvedElsewhere) &&
-                  !isStreaming
+                  !isStreaming &&
+                  // A summary entry has no messages to adopt; keep the
+                  // on-screen copy and only update its metadata below.
+                  !existingChat.isMetadataOnly
                 ) {
                   nextCurrent = {
                     ...existingChat,
@@ -333,7 +379,10 @@ export function useChatStorage({
       if (typeof window === 'undefined') return
 
       try {
-        const loadedChats = await loadChats(storeHistory && !!isSignedIn)
+        const loadedChats = await loadChats(
+          storeHistory && !!isSignedIn,
+          storeHistory && !!isSignedIn,
+        )
 
         if (!mounted) return
 
@@ -517,17 +566,84 @@ export function useChatStorage({
     [setCurrentChat],
   )
 
+  const selectChat = useCallback(
+    async (chat: Chat) => {
+      const selectionRequest = ++selectionRequestRef.current
+      if (!chat.isMetadataOnly) {
+        selectionFallbackRef.current = null
+        setHydratingChatId(null)
+        switchChat(chat)
+        return
+      }
+
+      if (selectionFallbackRef.current === null) {
+        selectionFallbackRef.current = currentChatRef.current
+      }
+      setCurrentChat(chat)
+      setHydratingChatId(chat.id)
+
+      try {
+        const hydratedChat = await chatStorage.getChat(chat.id)
+        if (!hydratedChat) {
+          throw new Error('Selected chat no longer exists')
+        }
+        // Apply by id, not reference: a concurrent reload may have
+        // replaced the objects in state. The selected summary revision
+        // must still be current so a live update is never overwritten.
+        setChatCollection((previous) => {
+          if (selectionRequest !== selectionRequestRef.current) return previous
+          const candidate = previous.chats.find(({ id }) => id === chat.id)
+          if (
+            !candidate?.isMetadataOnly ||
+            candidate.updatedAt !== chat.updatedAt ||
+            candidate.messageCount !== chat.messageCount
+          ) {
+            return previous
+          }
+          return {
+            chats: previous.chats.map((current) =>
+              current.id === chat.id ? hydratedChat : current,
+            ),
+            currentChat: hydratedChat,
+          }
+        })
+        if (selectionRequest === selectionRequestRef.current) {
+          selectionFallbackRef.current = null
+          setHydratingChatId(null)
+        }
+      } catch (error) {
+        if (selectionRequest !== selectionRequestRef.current) return
+        const fallback = selectionFallbackRef.current
+        selectionFallbackRef.current = null
+        setHydratingChatId(null)
+        if (fallback) {
+          setCurrentChat(fallback)
+        }
+        logError('Failed to load selected chat', error, {
+          component: 'useChatStorage',
+          metadata: { chatId: chat.id },
+        })
+        toast({
+          title: 'Failed to load chat',
+          description: 'Please try again.',
+          variant: 'destructive',
+        })
+      }
+    },
+    [setChatCollection, setCurrentChat, switchChat, toast],
+  )
+
   // Handle chat selection
   const handleChatSelect = useCallback(
     (chatId: string) => {
       // Handle special blank chat identifiers
-      if (chatId === 'blank-local' || chatId === 'blank-cloud') {
-        const isLocal = chatId === 'blank-local'
+      if (isBlankQueueId(chatId)) {
+        const isLocal = chatId === BLANK_LOCAL_QUEUE_ID
         const selectedChat = chats.find(
           (chat) => chat.isBlankChat && chat.isLocalOnly === isLocal,
         )
         if (selectedChat) {
-          switchChat(selectedChat)
+          void selectChat(selectedChat)
         }
         return
       }
@@ -535,10 +651,10 @@ export function useChatStorage({
       // For regular chats, find by ID
       const selectedChat = chats.find((chat) => chat.id === chatId)
       if (selectedChat) {
-        switchChat(selectedChat)
+        void selectChat(selectedChat)
       }
     },
-    [chats, switchChat],
+    [chats, selectChat],
   )
 
   // Load a specific chat by ID from URL
@@ -552,7 +668,7 @@ export function useChatStorage({
       // First check if chat already exists in local state
       const existingChat = chats.find((c) => c.id === chatId)
       if (existingChat) {
-        switchChat(existingChat)
+        await selectChat(existingChat)
         return
       }
 
@@ -658,7 +774,7 @@ export function useChatStorage({
         setIsInitialLoad(false)
       }
     },
-    [chats, isSignedIn, storeHistory, switchChat, setChats, setCurrentChat],
+    [chats, isSignedIn, storeHistory, selectChat, setChats, setCurrentChat],
   )
 
   // Load initial chat from URL if provided
@@ -762,6 +878,8 @@ export function useChatStorage({
     loadChatById,
     setIsInitialLoad,
     isInitialLoad,
+    isChatHydrating:
+      hydratingChatId !== null && currentChat.id === hydratingChatId,
     reloadChats,
     initialChatDecryptionFailed,
     clearInitialChatDecryptionFailed,

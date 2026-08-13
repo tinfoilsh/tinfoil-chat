@@ -53,6 +53,7 @@ import {
 import { generateTitle, getTitleContent } from '@/services/inference/title'
 import { chatEvents } from '@/services/storage/chat-events'
 import { chatStorage } from '@/services/storage/chat-storage'
+import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
@@ -126,7 +127,7 @@ interface UseChatMessagingReturn {
     systemPromptOverride?: string,
     baseMessages?: Message[],
     quote?: string,
-  ) => void
+  ) => Promise<ChatDispatchResult>
   cancelGeneration: (chatId?: string) => Promise<void>
   editMessage: (messageIndex: number, newContent: string) => void
   regenerateMessage: (messageIndex: number) => void
@@ -138,6 +139,13 @@ interface UseChatMessagingReturn {
   ) => void
   retryToolCall: (messageIndex: number, toolCallId: string) => Promise<boolean>
 }
+
+export type ChatDispatchResult =
+  | { status: 'accepted' }
+  | {
+      status: 'not-started'
+      reason: 'blocked' | 'chat-unavailable' | 'chat-deleted'
+    }
 
 type ActiveLiveGeneration = {
   chat: Chat
@@ -547,10 +555,11 @@ export function useChatMessaging({
           !systemPromptOverride &&
           !attachments?.length &&
           !quote) ||
+        models.length === 0 ||
         targetChatStatus.loadingState !== 'idle' ||
         isRecoveryActive
       )
-        return
+        return { status: 'not-started', reason: 'blocked' } as const
 
       // Safety check - ensure we have a current chat
       if (!currentChat) {
@@ -558,8 +567,12 @@ export function useChatMessaging({
           component: 'useChatMessaging',
           action: 'handleQuery',
         })
-        return
+        return { status: 'not-started', reason: 'blocked' } as const
       }
+      const targetChat = currentChat
+      const targetChatId = targetChat.id
+      const requireExistingChat =
+        storeHistory && targetChat.isMetadataOnly === true
 
       // Free-tier daily quota gate. Every send path funnels through here
       // (queue dispatches, regenerate/edit, URL-hash sends), so an exhausted
@@ -569,7 +582,7 @@ export function useChatMessaging({
       const quota = getRateLimitInfo()
       if (quota && quota.remaining <= 0 && quota.kind !== 'hourly') {
         window.dispatchEvent(new CustomEvent(REQUEST_UPGRADE_EVENT))
-        return
+        return { status: 'not-started', reason: 'blocked' } as const
       }
 
       // Clear input immediately when send button is pressed
@@ -583,10 +596,12 @@ export function useChatMessaging({
       // This stream owns its own id tracker and title promise so it never
       // collides with other in-flight streams. Scoped setters always target
       // the (possibly swapped) id of this stream.
-      const streamChatIdRef = { current: currentChat.id }
+      const streamChatIdRef = { current: targetChatId }
       let earlyTitlePromise: Promise<string> | null = null
       let initialSavePromise: Promise<void> | undefined
       let recoveryLocalSavePromise: Promise<Chat> | undefined
+      let dispatchAccepted = false
+      let optimisticTurnApplied = false
 
       const setLoadingStateFor = (s: LoadingState) =>
         patchStatus(streamChatIdRef.current, { loadingState: s })
@@ -622,6 +637,44 @@ export function useChatMessaging({
         streamingTracker.beginPendingStream(id)
       }
       markPendingStream(streamChatIdRef.current)
+      const abortPendingSend = (showLoadError: boolean) => {
+        if (showLoadError) {
+          setStreamErrorFor({
+            message: 'Failed to load this chat. Please try again.',
+            code: null,
+          })
+        }
+        if (pendingStreamId !== null) {
+          streamingTracker.endPendingStream(pendingStreamId)
+          pendingStreamId = null
+        }
+        patchStatus(streamChatIdRef.current, {
+          loadingState: 'idle',
+          isWaitingForResponse: false,
+          isStreaming: false,
+          isThinking: false,
+        })
+        clearController(streamChatIdRef.current, controller)
+      }
+      const rollbackOptimisticTurn = () => {
+        if (!optimisticTurnApplied || !turnId) return
+        const removeTurn = (chat: Chat): Chat => ({
+          ...chat,
+          messages: chat.messages.filter(
+            (message) =>
+              !(message.role === 'user' && message.turnId === turnId),
+          ),
+        })
+        setChats((previous) =>
+          previous.map((chat) =>
+            chat.id === targetChatId ? removeTurn(chat) : chat,
+          ),
+        )
+        setCurrentChat((previous) =>
+          previous.id === targetChatId ? removeTurn(previous) : previous,
+        )
+        optimisticTurnApplied = false
+      }
 
       // Only create a user message if there's actual query content
       // When using system prompt override with empty query, skip user message
@@ -655,9 +708,14 @@ export function useChatMessaging({
         : null
 
       // Track if this is the first message for a blank chat
-      let updatedChat = { ...currentChat }
-      const isBlankChat = currentChat.isBlankChat === true
-      const isFirstMessage = currentChat.messages.length === 0
+      let updatedChat = { ...targetChat }
+      const isBlankChat = targetChat.isBlankChat === true
+      // Metadata-only chats haven't loaded their messages, so consult the
+      // stored count: treating them as first-message would regenerate the
+      // title over an existing conversation.
+      const isFirstMessage = targetChat.isMetadataOnly
+        ? (targetChat.messageCount ?? 0) === 0
+        : targetChat.messages.length === 0
       let updatedMessages: Message[] = []
 
       // Reset title generation for new chats
@@ -836,8 +894,67 @@ export function useChatMessaging({
         }, 0)
       } else {
         // Not a blank chat, just update messages
+        // A metadata-only selection hasn't loaded its stored messages yet;
+        // appending to its placeholder empty history would show (and
+        // persist) a conversation containing only this turn. Hydrate from
+        // storage first so the send builds on the full history.
+        if (updatedChat.isMetadataOnly && storeHistory) {
+          const summaryUpdatedAt = updatedChat.updatedAt
+          const summaryMessageCount = updatedChat.messageCount
+          let hydratedChat: Chat | null = null
+          try {
+            hydratedChat = await chatStorage.getChat(updatedChat.id)
+          } catch (error) {
+            logError('Failed to hydrate chat before sending', error, {
+              component: 'useChatMessaging',
+              action: 'handleQuery.hydrateBeforeSend',
+              metadata: { chatId: updatedChat.id },
+            })
+          }
+          const latestTarget =
+            currentChatRef.current.id === targetChatId
+              ? currentChatRef.current
+              : chatsRef.current.find((chat) => chat.id === targetChatId)
+          if (
+            hydratedChat &&
+            latestTarget?.isMetadataOnly &&
+            (latestTarget.updatedAt !== summaryUpdatedAt ||
+              latestTarget.messageCount !== summaryMessageCount)
+          ) {
+            try {
+              hydratedChat = await chatStorage.getChat(updatedChat.id)
+              updatedChat = latestTarget
+            } catch (error) {
+              hydratedChat = null
+              logError('Failed to refresh chat before sending', error, {
+                component: 'useChatMessaging',
+                action: 'handleQuery.refreshBeforeSend',
+                metadata: { chatId: updatedChat.id },
+              })
+            }
+          }
+          const targetStillExists =
+            !deletedChatsTracker.isDeleted(targetChatId) &&
+            (currentChatRef.current.id === targetChatId ||
+              chatsRef.current.some((chat) => chat.id === targetChatId))
+          if (!hydratedChat || !targetStillExists) {
+            abortPendingSend(!deletedChatsTracker.isDeleted(targetChatId))
+            return {
+              status: 'not-started',
+              reason: deletedChatsTracker.isDeleted(targetChatId)
+                ? 'chat-deleted'
+                : 'chat-unavailable',
+            } as const
+          }
+          updatedChat = {
+            ...updatedChat,
+            messages: hydratedChat.messages,
+            isMetadataOnly: false,
+          }
+        }
+
         // Use baseMessages if provided (e.g., from editMessage), otherwise use currentChat.messages
-        const existingMessages = baseMessages ?? currentChat.messages
+        const existingMessages = baseMessages ?? updatedChat.messages
         updatedMessages = userMessage
           ? [...existingMessages, userMessage]
           : [...existingMessages]
@@ -853,15 +970,18 @@ export function useChatMessaging({
         }
         recoveryEligible = canRecoverTurn(updatedChat)
 
-        setCurrentChat(updatedChat)
+        setCurrentChat((previous) =>
+          previous.id === targetChatId ? updatedChat : previous,
+        )
         setChats((prevChats) =>
           prevChats.map((chat) =>
-            chat.id === currentChat.id ? updatedChat : chat,
+            chat.id === targetChatId ? updatedChat : chat,
           ),
         )
+        optimisticTurnApplied = userMessage !== null
 
         // Scroll after state update and DOM renders
-        if (scrollToBottom) {
+        if (scrollToBottom && viewedChatIdRef.current === targetChatId) {
           setTimeout(() => scrollToBottom(), 50)
         }
 
@@ -870,7 +990,26 @@ export function useChatMessaging({
           // Temporary chats are never persisted
         } else if (storeHistory) {
           if (recoveryEligible) {
-            recoveryLocalSavePromise = chatStorage.saveChat(updatedChat, true)
+            if (requireExistingChat) {
+              const saved = await chatStorage.saveExistingChat(
+                updatedChat,
+                true,
+              )
+              if (!saved) {
+                rollbackOptimisticTurn()
+                abortPendingSend(true)
+                return {
+                  status: 'not-started',
+                  reason: deletedChatsTracker.isDeleted(targetChatId)
+                    ? 'chat-deleted'
+                    : 'chat-unavailable',
+                } as const
+              }
+              updatedChat = saved
+              recoveryLocalSavePromise = Promise.resolve(saved)
+            } else {
+              recoveryLocalSavePromise = chatStorage.saveChat(updatedChat, true)
+            }
             try {
               updatedChat = await recoveryLocalSavePromise
             } catch (error) {
@@ -886,7 +1025,22 @@ export function useChatMessaging({
               )
             }
           } else {
-            updatedChat = await chatStorage.saveChatAndSync(updatedChat)
+            if (requireExistingChat) {
+              const saved = await chatStorage.saveExistingChat(updatedChat)
+              if (!saved) {
+                rollbackOptimisticTurn()
+                abortPendingSend(true)
+                return {
+                  status: 'not-started',
+                  reason: deletedChatsTracker.isDeleted(targetChatId)
+                    ? 'chat-deleted'
+                    : 'chat-unavailable',
+                } as const
+              }
+              updatedChat = saved
+            } else {
+              updatedChat = await chatStorage.saveChatAndSync(updatedChat)
+            }
           }
         } else {
           sessionChatStorage.saveChat(updatedChat)
@@ -898,7 +1052,7 @@ export function useChatMessaging({
           streamingTracker.endPendingStream(pendingStreamId)
         }
         clearController(streamChatIdRef.current, controller)
-        return
+        return { status: 'not-started', reason: 'blocked' } as const
       }
 
       // Capture the starting chat ID before any async operations that might change it
@@ -911,6 +1065,7 @@ export function useChatMessaging({
         initialSave: initialSavePromise,
       }
       activeLiveGenerationsRef.current.set(startingChatId, activeGeneration)
+      dispatchAccepted = true
 
       // Fire title generation in parallel with streaming (based on user's message).
       // The promise is awaited after streaming completes, before the final save.
@@ -1279,6 +1434,7 @@ export function useChatMessaging({
                   pendingSave: chatToSave.pendingSave,
                   ...generatedTitlePatch(),
                 },
+                requireExisting: requireExistingChat,
               },
             )
 
@@ -1480,6 +1636,9 @@ export function useChatMessaging({
           streamingTracker.endStreaming(streamChatIdRef.current)
         }
       }
+      return dispatchAccepted
+        ? ({ status: 'accepted' } as const)
+        : ({ status: 'not-started', reason: 'blocked' } as const)
     },
     [
       currentChat,

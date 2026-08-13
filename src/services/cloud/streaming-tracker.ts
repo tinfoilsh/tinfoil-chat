@@ -89,6 +89,14 @@ class StreamingTracker {
     return Array.from(this.streamingChats)
   }
 
+  reset(): void {
+    const hadStreamingChats = this.streamingChats.size > 0
+    this.streamingChats.clear()
+    this.pendingStreams.clear()
+    this.streamEndCallbacks.clear()
+    if (hadStreamingChats) this.publish()
+  }
+
   // Register a callback to be called when a specific chat finishes streaming
   onStreamEnd(chatId: string, callback: () => void): void {
     if (!this.isStreaming(chatId)) {

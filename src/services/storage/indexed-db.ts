@@ -130,7 +130,7 @@ export class AttachmentPayloadMissingError extends Error {
 }
 
 export const DB_NAME = 'tinfoil-chat'
-export const DB_VERSION = 5
+export const DB_VERSION = 6
 export const INDEXED_DB_UPGRADE_BLOCKED_EVENT = 'indexedDBUpgradeBlocked'
 const CHATS_STORE = 'chats'
 const CHATS_PROJECT_INDEX = 'projectId'
@@ -142,6 +142,8 @@ const SYNC_PENDING_MIGRATION_ID = 'sync-pending-v4'
 const ATTACHMENT_PAYLOADS_STORE = 'attachmentPayloads'
 const ATTACHMENT_PAYLOADS_CHAT_INDEX = 'chatId'
 const GENERATED_ATTACHMENT_PAYLOAD_PREFIX = 'attachment-payload:'
+const CHAT_SUMMARIES_STORE = 'chatSummaries'
+const CHAT_SUMMARIES_MIGRATION_ID = 'chat-summaries-v6'
 const ACCOUNT_CHANGE_RESET_TIMEOUT_MS = 10_000
 const ACCOUNT_CHANGE_READ_ERROR = 'IndexedDB read superseded by account change'
 const ACCOUNT_CHANGE_WRITE_ERROR =
@@ -168,8 +170,13 @@ function deserializeStoredChat(chat: StoredChat): StoredChat {
     throw new Error('Stored chat has invalid messages')
   }
 
+  // Full rows always carry their real messages; drop summary markers that
+  // an earlier write may have leaked so readers never mistake a hydrated
+  // chat for a summary.
+  const { isMetadataOnly, messageCount, ...fullChat } = chat
+
   return {
-    ...chat,
+    ...fullChat,
     messages: chat.messages.map((message) => ({
       ...message,
       timestamp: message.timestamp ? new Date(message.timestamp) : new Date(),
@@ -357,6 +364,28 @@ export function resolveStoredLocalOnly(
 function updateSyncPending(chat: StoredChat): StoredChat {
   chat.syncPending = chatNeedsSync(chat)
   return chat
+}
+
+function toStoredChatSummary(chat: StoredChat): StoredChat {
+  return {
+    ...chat,
+    messages: [],
+    messageCount: Array.isArray(chat.messages) ? chat.messages.length : 0,
+    isMetadataOnly: true,
+  }
+}
+
+function putStoredChat(
+  chatStore: IDBObjectStore,
+  summaryStore: IDBObjectStore,
+  chat: StoredChat,
+): IDBRequest<IDBValidKey> {
+  const prepared = updateSyncPending(chat)
+  summaryStore.put(toStoredChatSummary(prepared))
+  // isMetadataOnly/messageCount describe summary rows only; persisting
+  // them on the full row would make hydrated reads look like summaries.
+  const { isMetadataOnly, messageCount, ...fullRow } = prepared
+  return chatStore.put(fullRow)
 }
 
 /**
@@ -707,6 +736,7 @@ export class IndexedDBStorage {
   private initializationPromise: Promise<void> | null = null
   private saveQueue: Promise<unknown> = Promise.resolve()
   private syncPendingIndexReady = false
+  private chatSummariesReady = false
   private saveGeneration = 0
   // Account cleanup always reloads; keep this instance fail-closed until then.
   private accountResetStarted = false
@@ -820,9 +850,18 @@ export class IndexedDBStorage {
               { unique: false },
             )
           }
+          if (!db.objectStoreNames.contains(CHAT_SUMMARIES_STORE)) {
+            db.createObjectStore(CHAT_SUMMARIES_STORE, { keyPath: 'id' })
+          }
           if ((event as IDBVersionChangeEvent).oldVersion === 0) {
-            request.transaction?.objectStore(MIGRATIONS_STORE).put({
+            const migrations =
+              request.transaction?.objectStore(MIGRATIONS_STORE)
+            migrations?.put({
               id: SYNC_PENDING_MIGRATION_ID,
+              completedAt: Date.now(),
+            })
+            migrations?.put({
+              id: CHAT_SUMMARIES_MIGRATION_ID,
               completedAt: Date.now(),
             })
           }
@@ -956,7 +995,12 @@ export class IndexedDBStorage {
       (resetDb) =>
         new Promise<void>((resolve, reject) => {
           const transaction = resetDb.transaction(
-            [CHATS_STORE, PROJECTS_STORE, ATTACHMENT_PAYLOADS_STORE],
+            [
+              CHATS_STORE,
+              PROJECTS_STORE,
+              ATTACHMENT_PAYLOADS_STORE,
+              CHAT_SUMMARIES_STORE,
+            ],
             'readwrite',
           )
           const timeout = window.setTimeout(() => {
@@ -1005,6 +1049,15 @@ export class IndexedDBStorage {
               ),
             )
           }
+          const summariesRequest = transaction
+            .objectStore(CHAT_SUMMARIES_STORE)
+            .clear()
+          summariesRequest.onerror = () => {
+            clearTimeout(timeout)
+            reject(
+              new Error('Failed to clear chat summaries for account change'),
+            )
+          }
         }),
     )
 
@@ -1051,10 +1104,11 @@ export class IndexedDBStorage {
       const db = await this.ensureDB()
       return new Promise<StoredChat | null>((resolve, reject) => {
         const transaction = db.transaction(
-          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
+          [CHATS_STORE, CHAT_SUMMARIES_STORE, ATTACHMENT_PAYLOADS_STORE],
           'readwrite',
         )
         const store = transaction.objectStore(CHATS_STORE)
+        const summaryStore = transaction.objectStore(CHAT_SUMMARIES_STORE)
         const payloadStore = transaction.objectStore(ATTACHMENT_PAYLOADS_STORE)
         let output: StoredChat | null = null
 
@@ -1134,8 +1188,8 @@ export class IndexedDBStorage {
                     new Error('Failed to save attachment payload'),
                 )
             }
-            store.put({
-              ...mutated,
+            putStoredChat(store, summaryStore, {
+              ...output!,
               messages: normalizedAttachments.messages as any,
             })
           }
@@ -1186,11 +1240,12 @@ export class IndexedDBStorage {
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(
-        [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
+        [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
         'readwrite',
       )
       const store = transaction.objectStore(CHATS_STORE)
       const payloadStore = transaction.objectStore(ATTACHMENT_PAYLOADS_STORE)
+      const summaryStore = transaction.objectStore(CHAT_SUMMARIES_STORE)
       let result: SaveChatResult = {
         saved: false,
         isLocalOnly: (chat as StoredChat).isLocalOnly === true,
@@ -1235,6 +1290,22 @@ export class IndexedDBStorage {
         const existingChat = getRequest.result as StoredChat | undefined
         if (options.requireExisting && !existingChat) {
           return
+        }
+
+        // Metadata-only copies carry an empty messages array as a
+        // lightweight stand-in; the stored row stays the source of truth
+        // for content until hydration. Apply the metadata over the stored
+        // messages instead of overwriting them, and never materialize a
+        // row from a summary whose full chat no longer exists.
+        if ((chat as StoredChat).isMetadataOnly === true) {
+          if (!existingChat) {
+            return
+          }
+          chat = {
+            ...chat,
+            messages: existingChat.messages,
+            pendingRecoveries: existingChat.pendingRecoveries,
+          }
         }
 
         const normalizedAttachments = normalizeAttachmentPayloadsInTransaction(
@@ -1350,7 +1421,7 @@ export class IndexedDBStorage {
                   new Error('Failed to save attachment payload'),
               )
           }
-          const putRequest = store.put(storedChat)
+          const putRequest = putStoredChat(store, summaryStore, storedChat)
           putRequest.onerror = () => reject(new Error('Failed to save chat'))
         }
 
@@ -1465,11 +1536,12 @@ export class IndexedDBStorage {
       const db = await this.ensureDB()
       return new Promise<void>((resolve, reject) => {
         const transaction = db.transaction(
-          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
+          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
           'readwrite',
         )
         const store = transaction.objectStore(CHATS_STORE)
         const request = store.delete(id)
+        transaction.objectStore(CHAT_SUMMARIES_STORE).delete(id)
         deleteAttachmentPayloadsForChat(
           transaction.objectStore(ATTACHMENT_PAYLOADS_STORE),
           id,
@@ -1493,7 +1565,7 @@ export class IndexedDBStorage {
       if (!isCurrent()) return false
       return new Promise<boolean>((resolve, reject) => {
         const transaction = db.transaction(
-          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
+          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
           'readwrite',
         )
         const store = transaction.objectStore(CHATS_STORE)
@@ -1505,6 +1577,7 @@ export class IndexedDBStorage {
           const chat = getRequest.result as StoredChat | undefined
           if (!chat || chat.updatedAt !== expectedUpdatedAt) return
           store.delete(id)
+          transaction.objectStore(CHAT_SUMMARIES_STORE).delete(id)
           deleteAttachmentPayloadsForChat(
             transaction.objectStore(ATTACHMENT_PAYLOADS_STORE),
             id,
@@ -1525,7 +1598,7 @@ export class IndexedDBStorage {
       const db = await this.ensureDB()
       return new Promise((resolve, reject) => {
         const transaction = db.transaction(
-          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
+          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
           'readwrite',
         )
         const store = transaction.objectStore(CHATS_STORE)
@@ -1538,6 +1611,7 @@ export class IndexedDBStorage {
             const chat = cursor.value as StoredChat
             if (!chat.isLocalOnly) {
               cursor.delete()
+              transaction.objectStore(CHAT_SUMMARIES_STORE).delete(chat.id)
               deleteAttachmentPayloadsForChat(
                 transaction.objectStore(ATTACHMENT_PAYLOADS_STORE),
                 chat.id,
@@ -1564,7 +1638,7 @@ export class IndexedDBStorage {
       const db = await this.ensureDB()
       return new Promise<string[]>((resolve, reject) => {
         const transaction = db.transaction(
-          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
+          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
           'readwrite',
         )
         const store = transaction.objectStore(CHATS_STORE)
@@ -1578,6 +1652,7 @@ export class IndexedDBStorage {
             if (chat.projectId === projectId) {
               deletedIds.push(chat.id)
               cursor.delete()
+              transaction.objectStore(CHAT_SUMMARIES_STORE).delete(chat.id)
               deleteAttachmentPayloadsForChat(
                 transaction.objectStore(ATTACHMENT_PAYLOADS_STORE),
                 chat.id,
@@ -1637,7 +1712,7 @@ export class IndexedDBStorage {
       const db = await this.ensureDB()
       return new Promise<number>((resolve, reject) => {
         const transaction = db.transaction(
-          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
+          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
           'readwrite',
         )
         const store = transaction.objectStore(CHATS_STORE)
@@ -1648,6 +1723,7 @@ export class IndexedDBStorage {
           count = countRequest.result
           store.clear()
           transaction.objectStore(ATTACHMENT_PAYLOADS_STORE).clear()
+          transaction.objectStore(CHAT_SUMMARIES_STORE).clear()
         }
 
         transaction.oncomplete = () => resolve(count)
@@ -1802,7 +1878,7 @@ export class IndexedDBStorage {
     return this.protectRead(
       new Promise((resolve, reject) => {
         const transaction = db.transaction(
-          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
+          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
           'readonly',
         )
         const store = transaction.objectStore(CHATS_STORE)
@@ -1877,6 +1953,91 @@ export class IndexedDBStorage {
           reject(new Error('Failed to get chat sync metadata'))
       }),
     )
+  }
+
+  async getChatSummaries(): Promise<StoredChat[]> {
+    await this.ensureChatSummaries()
+    await this.waitForSaveQueue()
+    const db = await this.ensureDB()
+
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHAT_SUMMARIES_STORE], 'readonly')
+        const request = transaction.objectStore(CHAT_SUMMARIES_STORE).getAll()
+        request.onsuccess = () => {
+          const chats: StoredChat[] = []
+          for (const chat of request.result as StoredChat[]) {
+            if (!Array.isArray(chat.messages)) {
+              logWarning('Skipping invalid chat summary', {
+                component: 'IndexedDBStorage',
+                metadata: { chatId: chat.id },
+              })
+              continue
+            }
+            chats.push(chat)
+          }
+          resolve(chats)
+        }
+        request.onerror = () =>
+          reject(new Error('Failed to get chat summaries'))
+      }),
+    )
+  }
+
+  private async ensureChatSummaries(): Promise<void> {
+    if (this.chatSummariesReady) return
+    return this.enqueueSave('ensureChatSummaries', async () => {
+      if (this.chatSummariesReady) return
+      const db = await this.ensureDB()
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(
+          [CHATS_STORE, CHAT_SUMMARIES_STORE, MIGRATIONS_STORE],
+          'readwrite',
+        )
+        const chatsStore = transaction.objectStore(CHATS_STORE)
+        const summariesStore = transaction.objectStore(CHAT_SUMMARIES_STORE)
+        const migrationsStore = transaction.objectStore(MIGRATIONS_STORE)
+
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () =>
+          reject(new Error('Failed to prepare chat summaries'))
+        transaction.onabort = () =>
+          reject(new Error('Chat summary migration was aborted'))
+
+        const markerRequest = migrationsStore.get(CHAT_SUMMARIES_MIGRATION_ID)
+        markerRequest.onerror = () =>
+          reject(new Error('Failed to read the chat summary migration'))
+        markerRequest.onsuccess = () => {
+          if (markerRequest.result) return
+
+          const cursorRequest = chatsStore.openCursor()
+          cursorRequest.onerror = () =>
+            reject(new Error('Failed to migrate chat summaries'))
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result
+            if (!cursor) {
+              migrationsStore.put({
+                id: CHAT_SUMMARIES_MIGRATION_ID,
+                completedAt: Date.now(),
+              })
+              return
+            }
+
+            const chat = cursor.value as StoredChat
+            if (Array.isArray(chat.messages)) {
+              summariesStore.put(toStoredChatSummary(chat))
+            } else {
+              logWarning('Skipping invalid chat during summary migration', {
+                component: 'IndexedDBStorage',
+                metadata: { chatId: chat.id },
+              })
+            }
+            cursor.continue()
+          }
+        }
+      })
+      this.chatSummariesReady = true
+    })
   }
 
   async getProjectsForUser(userId: string): Promise<Project[]> {
@@ -1989,12 +2150,13 @@ export class IndexedDBStorage {
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(
-        [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
+        [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
         'readwrite',
       )
       const store = transaction.objectStore(CHATS_STORE)
       const request = store.clear()
       transaction.objectStore(ATTACHMENT_PAYLOADS_STORE).clear()
+      transaction.objectStore(CHAT_SUMMARIES_STORE).clear()
 
       transaction.oncomplete = () => resolve()
       transaction.onerror = () => reject(new Error('Failed to clear all chats'))
@@ -2006,8 +2168,12 @@ export class IndexedDBStorage {
     return this.enqueueSave('updateLastAccessed', async () => {
       const db = await this.ensureDB()
       return new Promise<void>((resolve, reject) => {
-        const transaction = db.transaction([CHATS_STORE], 'readwrite')
+        const transaction = db.transaction(
+          [CHATS_STORE, CHAT_SUMMARIES_STORE],
+          'readwrite',
+        )
         const store = transaction.objectStore(CHATS_STORE)
+        const summaryStore = transaction.objectStore(CHAT_SUMMARIES_STORE)
         const request = store.get(id)
 
         transaction.oncomplete = () => resolve()
@@ -2021,7 +2187,9 @@ export class IndexedDBStorage {
           const chat = request.result as StoredChat | undefined
           if (!chat) return
           chat.lastAccessedAt = Date.now()
-          store.put(updateSyncPending(chat))
+          const putRequest = putStoredChat(store, summaryStore, chat)
+          putRequest.onerror = () =>
+            reject(new Error('Failed to update last accessed'))
         }
       })
     })
@@ -2146,8 +2314,12 @@ export class IndexedDBStorage {
     return this.enqueueSave('markAsSynced', async () => {
       const db = await this.ensureDB()
       return new Promise<void>((resolve, reject) => {
-        const transaction = db.transaction([CHATS_STORE], 'readwrite')
+        const transaction = db.transaction(
+          [CHATS_STORE, CHAT_SUMMARIES_STORE],
+          'readwrite',
+        )
         const store = transaction.objectStore(CHATS_STORE)
+        const summaryStore = transaction.objectStore(CHAT_SUMMARIES_STORE)
         const request = store.get(id)
 
         transaction.oncomplete = () => resolve()
@@ -2166,7 +2338,9 @@ export class IndexedDBStorage {
           // The clock is now current as of this synced version, so a
           // later reader trusts it for arbitration.
           chat.clockVersion = syncVersion
-          store.put(updateSyncPending(chat))
+          const putRequest = putStoredChat(store, summaryStore, chat)
+          putRequest.onerror = () =>
+            reject(new Error('Failed to mark as synced'))
         }
       })
     })
@@ -2185,8 +2359,12 @@ export class IndexedDBStorage {
     return this.enqueueSave('rebaseSyncVersion', async () => {
       const db = await this.ensureDB()
       return new Promise<void>((resolve, reject) => {
-        const transaction = db.transaction([CHATS_STORE], 'readwrite')
+        const transaction = db.transaction(
+          [CHATS_STORE, CHAT_SUMMARIES_STORE],
+          'readwrite',
+        )
         const store = transaction.objectStore(CHATS_STORE)
+        const summaryStore = transaction.objectStore(CHAT_SUMMARIES_STORE)
         const request = store.get(id)
 
         transaction.oncomplete = () => resolve()
@@ -2201,7 +2379,9 @@ export class IndexedDBStorage {
           if (!chat) return
           chat.syncVersion = syncVersion
           chat.locallyModified = true
-          store.put(updateSyncPending(chat))
+          const putRequest = putStoredChat(store, summaryStore, chat)
+          putRequest.onerror = () =>
+            reject(new Error('Failed to rebase sync version'))
         }
       })
     })
@@ -2229,11 +2409,12 @@ export class IndexedDBStorage {
       const db = await this.ensureDB()
       return new Promise<void>((resolve, reject) => {
         const transaction = db.transaction(
-          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
+          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
           'readwrite',
         )
         const store = transaction.objectStore(CHATS_STORE)
         const payloadStore = transaction.objectStore(ATTACHMENT_PAYLOADS_STORE)
+        const summaryStore = transaction.objectStore(CHAT_SUMMARIES_STORE)
         const chatRequest = store.get(opts.chatId)
         const payloadRequest = payloadStore
           .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
@@ -2323,7 +2504,9 @@ export class IndexedDBStorage {
             for (const payload of normalizedAttachments.payloads) {
               payloadStore.put(payload)
             }
-            store.put(updateSyncPending(chat))
+            const request = putStoredChat(store, summaryStore, chat)
+            request.onerror = () =>
+              reject(new Error('Failed to finalize upload'))
           }
           const payloadCursor = payloadStore
             .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
@@ -2381,11 +2564,12 @@ export class IndexedDBStorage {
       if (!isCurrent()) return { applied: false }
       return new Promise<{ applied: boolean }>((resolve, reject) => {
         const transaction = db.transaction(
-          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
+          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
           'readwrite',
         )
         const store = transaction.objectStore(CHATS_STORE)
         const payloadStore = transaction.objectStore(ATTACHMENT_PAYLOADS_STORE)
+        const summaryStore = transaction.objectStore(CHAT_SUMMARIES_STORE)
         const chatRequest = store.get(opts.chat.id)
         let applied = false
         let cancelled = false
@@ -2460,9 +2644,16 @@ export class IndexedDBStorage {
 
           const writeChatAndPayloads = () => {
             for (const payload of normalizedAttachments.payloads) {
-              payloadStore.put(payload)
+              const payloadRequest = payloadStore.put(payload)
+              payloadRequest.onerror = () =>
+                reject(
+                  payloadRequest.error ??
+                    new Error('Failed to save remote attachment payload'),
+                )
             }
-            store.put(storedChat)
+            const request = putStoredChat(store, summaryStore, storedChat)
+            request.onerror = () =>
+              reject(new Error('Failed to apply remote chat'))
             applied = true
           }
           const payloadCursor = payloadStore
@@ -2504,8 +2695,12 @@ export class IndexedDBStorage {
     return this.enqueueSave('resetSyncMetadataForAllChats', async () => {
       const db = await this.ensureDB()
       await new Promise<void>((resolve, reject) => {
-        const transaction = db.transaction([CHATS_STORE], 'readwrite')
+        const transaction = db.transaction(
+          [CHATS_STORE, CHAT_SUMMARIES_STORE],
+          'readwrite',
+        )
         const store = transaction.objectStore(CHATS_STORE)
+        const summaryStore = transaction.objectStore(CHAT_SUMMARIES_STORE)
         transaction.oncomplete = () => resolve()
         transaction.onerror = () =>
           reject(new Error('Failed to reset sync metadata'))
@@ -2518,7 +2713,9 @@ export class IndexedDBStorage {
           chat.syncVersion = 0
           chat.syncedAt = undefined
           chat.locallyModified = true
-          cursor.update(updateSyncPending(chat))
+          const prepared = updateSyncPending(chat)
+          cursor.update(prepared)
+          summaryStore.put(toStoredChatSummary(prepared))
           cursor.continue()
         }
         request.onerror = () =>
@@ -2534,8 +2731,12 @@ export class IndexedDBStorage {
 
       if (chat) {
         return new Promise<void>((resolve, reject) => {
-          const transaction = db.transaction([CHATS_STORE], 'readwrite')
+          const transaction = db.transaction(
+            [CHATS_STORE, CHAT_SUMMARIES_STORE],
+            'readwrite',
+          )
           const store = transaction.objectStore(CHATS_STORE)
+          const summaryStore = transaction.objectStore(CHAT_SUMMARIES_STORE)
 
           transaction.oncomplete = () => resolve()
           transaction.onerror = () =>
@@ -2547,7 +2748,7 @@ export class IndexedDBStorage {
           chat.locallyModified = true
           chat.syncedAt = undefined
 
-          const request = store.put(updateSyncPending(chat))
+          const request = putStoredChat(store, summaryStore, chat)
 
           request.onerror = () =>
             reject(new Error('Failed to reset chat timestamps'))

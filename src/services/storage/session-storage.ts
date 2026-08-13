@@ -4,6 +4,7 @@ import {
   SYNC_SESSION_CHATS,
 } from '@/constants/storage-keys'
 import { logError } from '@/utils/error-handling'
+import { deletedChatsTracker } from './deleted-chats-tracker'
 
 // Convert date strings back to Date objects
 function restoreChat(chat: Chat): Chat {
@@ -84,6 +85,10 @@ export const sessionChatStorage = {
         if (chat?.id) this.clearStreamingDraft(chat.id)
         return
       }
+      if (deletedChatsTracker.isDeleted(chat.id)) {
+        this.clearStreamingDraft(chat.id)
+        return
+      }
       sessionStorage.setItem(getDraftKey(chat.id), JSON.stringify(chat))
     } catch (error) {
       logError('Failed to save chat streaming draft', error, {
@@ -132,6 +137,11 @@ export const sessionChatStorage = {
           component: 'sessionChatStorage',
           action: 'saveChat',
         })
+        return
+      }
+
+      if (deletedChatsTracker.isDeleted(chat.id)) {
+        this.clearStreamingDraft(chat.id)
         return
       }
 

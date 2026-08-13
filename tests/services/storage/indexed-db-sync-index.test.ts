@@ -271,6 +271,15 @@ describe('IndexedDB pending sync index', () => {
       'Document text',
     )
 
+    const summaries = await storage.getChatSummaries()
+    expect(summaries).toHaveLength(1)
+    expect(summaries[0]).toMatchObject({
+      id: 'with-attachment',
+      isMetadataOnly: true,
+      messageCount: 1,
+      messages: [],
+    })
+
     await storage.applyRemoteChatIfFresh({
       chat: {
         ...storedChat('with-attachment'),
@@ -312,7 +321,6 @@ describe('IndexedDB pending sync index', () => {
       },
     )
     expect(payloadCountAfterRemoval).toBe(0)
-
     await storage.deleteChat('with-attachment')
     const payloadCount = await new Promise<number>((resolve, reject) => {
       const request = db
@@ -1299,7 +1307,10 @@ describe('IndexedDB pending sync index', () => {
     const transactionSpy = vi.spyOn(metadataDb, 'transaction')
     const marking = metadataWriter.markAsSynced('metadata-race', 3)
     await vi.waitFor(() =>
-      expect(transactionSpy).toHaveBeenCalledWith(['chats'], 'readwrite'),
+      expect(transactionSpy).toHaveBeenCalledWith(
+        ['chats', 'chatSummaries'],
+        'readwrite',
+      ),
     )
     blocker.release()
     await Promise.all([blocker.complete, marking])
@@ -1328,17 +1339,26 @@ describe('IndexedDB pending sync index', () => {
 
     await (storage as any).updateLastAccessed('metadata-transactions')
     expect(transactionSpy).toHaveBeenCalledTimes(1)
-    expect(transactionSpy).toHaveBeenLastCalledWith(['chats'], 'readwrite')
+    expect(transactionSpy).toHaveBeenLastCalledWith(
+      ['chats', 'chatSummaries'],
+      'readwrite',
+    )
 
     transactionSpy.mockClear()
     await storage.markAsSynced('metadata-transactions', 2)
     expect(transactionSpy).toHaveBeenCalledTimes(1)
-    expect(transactionSpy).toHaveBeenLastCalledWith(['chats'], 'readwrite')
+    expect(transactionSpy).toHaveBeenLastCalledWith(
+      ['chats', 'chatSummaries'],
+      'readwrite',
+    )
 
     transactionSpy.mockClear()
     await storage.rebaseSyncVersion('metadata-transactions', 3)
     expect(transactionSpy).toHaveBeenCalledTimes(1)
-    expect(transactionSpy).toHaveBeenLastCalledWith(['chats'], 'readwrite')
+    expect(transactionSpy).toHaveBeenLastCalledWith(
+      ['chats', 'chatSummaries'],
+      'readwrite',
+    )
   })
 
   it('does not rewrite attachments after a cross-tab content edit', async () => {
@@ -1420,7 +1440,7 @@ describe('IndexedDB pending sync index', () => {
     })
     await vi.waitFor(() =>
       expect(transactionSpy).toHaveBeenCalledWith(
-        ['chats', 'attachmentPayloads'],
+        ['chats', 'attachmentPayloads', 'chatSummaries'],
         'readwrite',
       ),
     )
@@ -1610,7 +1630,7 @@ describe('IndexedDB pending sync index', () => {
     })
     await vi.waitFor(() =>
       expect(transactionSpy).toHaveBeenCalledWith(
-        ['chats', 'attachmentPayloads'],
+        ['chats', 'attachmentPayloads', 'chatSummaries'],
         'readwrite',
       ),
     )

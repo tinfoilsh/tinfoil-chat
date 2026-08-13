@@ -160,7 +160,7 @@ describe('useChatMessaging retryLastMessage', () => {
         systemPrompt: '',
         rules: '',
         storeHistory: false,
-        models: [],
+        models: [{ modelName: 'test-model' } as BaseModel],
         selectedModel: 'test-model',
         chats: [chat],
         currentChat: chat,

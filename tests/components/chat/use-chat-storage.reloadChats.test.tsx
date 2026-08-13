@@ -1,8 +1,9 @@
 import { useChatStorage } from '@/components/chat/hooks/use-chat-storage'
 import type { PendingRecoveryEnvelope } from '@/components/chat/types'
 import { chatEvents } from '@/services/storage/chat-events'
+import { chatStorage } from '@/services/storage/chat-storage'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   mockLoadChats,
@@ -10,12 +11,14 @@ const {
   mockDownloadChat,
   mockLoadChatImages,
   mockApplyRemoteChat,
+  mockToast,
 } = vi.hoisted(() => ({
   mockLoadChats: vi.fn(),
   mockIsStreaming: vi.fn(),
   mockDownloadChat: vi.fn(),
   mockLoadChatImages: vi.fn(),
   mockApplyRemoteChat: vi.fn(),
+  mockToast: vi.fn(),
 }))
 
 vi.mock('@clerk/nextjs', () => ({
@@ -56,6 +59,10 @@ vi.mock('@/services/storage/indexed-db', () => ({
   },
 }))
 
+vi.mock('@/hooks/use-toast', () => ({
+  useToast: () => ({ toast: mockToast }),
+}))
+
 function createMockRecovery(
   overrides: Partial<PendingRecoveryEnvelope> = {},
 ): PendingRecoveryEnvelope {
@@ -78,6 +85,431 @@ describe('useChatStorage.reloadChats', () => {
     mockIsStreaming.mockReturnValue(false)
     mockLoadChatImages.mockResolvedValue(new Map())
     mockApplyRemoteChat.mockResolvedValue({ applied: true })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('loads summaries first and hydrates a chat when selected', async () => {
+    const summary = {
+      id: 'chat-summary',
+      title: 'Summary',
+      messages: [],
+      messageCount: 1,
+      isMetadataOnly: true,
+      createdAt: new Date('2026-08-12T00:00:00.000Z'),
+      isBlankChat: false,
+      isLocalOnly: false,
+    }
+    const hydrated = {
+      ...summary,
+      messages: [
+        {
+          role: 'user' as const,
+          content: 'Loaded message',
+          timestamp: new Date('2026-08-12T00:00:00.000Z'),
+        },
+      ],
+      isMetadataOnly: false,
+    }
+    mockLoadChats.mockResolvedValueOnce([summary])
+    const getChat = vi.spyOn(chatStorage, 'getChat').mockResolvedValue(hydrated)
+
+    const { result } = renderHook(() => useChatStorage({ storeHistory: true }))
+    await waitFor(() => expect(result.current.isInitialLoad).toBe(false))
+
+    expect(mockLoadChats).toHaveBeenCalledWith(true, true)
+    expect(result.current.chats.find((chat) => chat.id === summary.id)).toEqual(
+      summary,
+    )
+
+    act(() => result.current.handleChatSelect(summary.id))
+    await waitFor(() =>
+      expect(result.current.currentChat.messages).toHaveLength(1),
+    )
+
+    expect(getChat).toHaveBeenCalledWith(summary.id)
+  })
+
+  it('owns selection immediately and ignores late A hydration after selecting B', async () => {
+    const prior = {
+      id: 'prior',
+      title: 'Prior',
+      messages: [
+        {
+          role: 'user' as const,
+          content: 'Still visible',
+          timestamp: new Date('2026-08-12T00:00:00.000Z'),
+        },
+      ],
+      createdAt: new Date('2026-08-12T00:00:00.000Z'),
+      isBlankChat: false,
+      isLocalOnly: false,
+    }
+    const summaryA = {
+      ...prior,
+      id: 'A',
+      title: 'A',
+      messages: [],
+      messageCount: 1,
+      isMetadataOnly: true,
+    }
+    const summaryB = { ...summaryA, id: 'B', title: 'B' }
+    const hydratedA = {
+      ...summaryA,
+      messages: prior.messages,
+      isMetadataOnly: false,
+    }
+    const hydratedB = {
+      ...summaryB,
+      messages: prior.messages,
+      isMetadataOnly: false,
+    }
+    let resolveA!: (chat: typeof hydratedA) => void
+    let resolveB!: (chat: typeof hydratedB) => void
+    mockLoadChats.mockResolvedValueOnce([prior, summaryA, summaryB])
+    vi.spyOn(chatStorage, 'getChat').mockImplementation((id) =>
+      id === 'A'
+        ? new Promise((resolve) => {
+            resolveA = resolve
+          })
+        : new Promise((resolve) => {
+            resolveB = resolve
+          }),
+    )
+    const { result } = renderHook(() => useChatStorage({ storeHistory: true }))
+    await waitFor(() => expect(result.current.isInitialLoad).toBe(false))
+    act(() => result.current.setCurrentChat(prior))
+
+    act(() => result.current.handleChatSelect('A'))
+    expect(result.current.currentChat.id).toBe('A')
+    expect(result.current.isChatHydrating).toBe(true)
+    act(() => result.current.handleChatSelect('B'))
+    expect(result.current.currentChat.id).toBe('B')
+    expect(result.current.isChatHydrating).toBe(true)
+
+    await act(async () => resolveB(hydratedB))
+    expect(result.current.currentChat.id).toBe('B')
+    expect(result.current.isChatHydrating).toBe(false)
+    await act(async () => resolveA(hydratedA))
+    expect(result.current.currentChat.id).toBe('B')
+    expect(result.current.chats.find(({ id }) => id === 'A')).toBe(summaryA)
+  })
+
+  it('reverts to the prior chat and shows an error when hydration fails', async () => {
+    const prior = {
+      id: 'prior',
+      title: 'Prior',
+      messages: [
+        {
+          role: 'user' as const,
+          content: 'Still visible',
+          timestamp: new Date('2026-08-12T00:00:00.000Z'),
+        },
+      ],
+      createdAt: new Date('2026-08-12T00:00:00.000Z'),
+      isBlankChat: false,
+      isLocalOnly: false,
+    }
+    const summary = {
+      ...prior,
+      id: 'A',
+      messages: [],
+      messageCount: 1,
+      isMetadataOnly: true,
+    }
+    mockLoadChats.mockResolvedValueOnce([prior, summary])
+    vi.spyOn(chatStorage, 'getChat').mockRejectedValue(new Error('read failed'))
+    const { result } = renderHook(() => useChatStorage({ storeHistory: true }))
+    await waitFor(() => expect(result.current.isInitialLoad).toBe(false))
+    act(() => result.current.setCurrentChat(prior))
+
+    act(() => result.current.handleChatSelect('A'))
+    expect(result.current.currentChat.id).toBe('A')
+    expect(result.current.isChatHydrating).toBe(true)
+    await waitFor(() => expect(mockToast).toHaveBeenCalled())
+
+    expect(result.current.currentChat).toMatchObject(prior)
+    expect(result.current.isChatHydrating).toBe(false)
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Failed to load chat' }),
+    )
+  })
+
+  it('does not overwrite a selected chat that changes during hydration', async () => {
+    const summary = {
+      id: 'chat-summary',
+      title: 'Summary',
+      messages: [],
+      messageCount: 1,
+      isMetadataOnly: true,
+      createdAt: new Date('2026-08-12T00:00:00.000Z'),
+      isBlankChat: false,
+      isLocalOnly: false,
+    }
+    let finishHydration!: (chat: typeof summary) => void
+    mockLoadChats.mockResolvedValueOnce([summary])
+    vi.spyOn(chatStorage, 'getChat').mockReturnValue(
+      new Promise((resolve) => {
+        finishHydration = resolve
+      }),
+    )
+    const { result } = renderHook(() => useChatStorage({ storeHistory: true }))
+    await waitFor(() => expect(result.current.isInitialLoad).toBe(false))
+
+    act(() => result.current.handleChatSelect(summary.id))
+    const liveChat = {
+      ...summary,
+      isMetadataOnly: false,
+      messages: [
+        {
+          role: 'assistant' as const,
+          content: 'Live response',
+          timestamp: new Date('2026-08-12T00:00:01.000Z'),
+        },
+      ],
+    }
+    act(() => {
+      result.current.setCurrentChat(liveChat)
+      result.current.setChats((chats) =>
+        chats.map((chat) => (chat.id === liveChat.id ? liveChat : chat)),
+      )
+    })
+    await act(async () => finishHydration(summary))
+
+    expect(result.current.currentChat).toBe(liveChat)
+    expect(result.current.chats.find((chat) => chat.id === liveChat.id)).toBe(
+      liveChat,
+    )
+  })
+
+  it('applies hydration by id when a reload replaced the chat objects', async () => {
+    const summary = {
+      id: 'chat-summary',
+      title: 'Summary',
+      messages: [],
+      messageCount: 1,
+      isMetadataOnly: true,
+      createdAt: new Date('2026-08-12T00:00:00.000Z'),
+      updatedAt: '2026-08-12T00:00:00.000Z',
+      isBlankChat: false,
+      isLocalOnly: false,
+    }
+    const hydrated = {
+      ...summary,
+      messages: [
+        {
+          role: 'user' as const,
+          content: 'Loaded message',
+          timestamp: new Date('2026-08-12T00:00:00.000Z'),
+        },
+      ],
+      isMetadataOnly: false,
+    }
+    let finishHydration!: (chat: typeof hydrated) => void
+    mockLoadChats.mockResolvedValue([summary])
+    vi.spyOn(chatStorage, 'getChat').mockReturnValue(
+      new Promise((resolve) => {
+        finishHydration = resolve
+      }),
+    )
+    const { result } = renderHook(() => useChatStorage({ storeHistory: true }))
+    await waitFor(() => expect(result.current.isInitialLoad).toBe(false))
+
+    act(() => result.current.handleChatSelect(summary.id))
+    // A background sync reload rebuilds the chats array with fresh summary
+    // objects while hydration is still in flight.
+    await act(async () => {
+      await result.current.reloadChats()
+    })
+    expect(result.current.currentChat.id).toBe(summary.id)
+
+    await act(async () => finishHydration(hydrated))
+
+    expect(result.current.currentChat.messages).toHaveLength(1)
+    expect(result.current.currentChat.isMetadataOnly).toBe(false)
+    expect(
+      result.current.chats.find((chat) => chat.id === summary.id)?.messages,
+    ).toHaveLength(1)
+  })
+
+  it('re-marks a hydrated chat as metadata-only when storage has newer content', async () => {
+    const summary = {
+      id: 'chat-1',
+      title: 'Chat',
+      messages: [],
+      messageCount: 1,
+      isMetadataOnly: true,
+      createdAt: new Date('2026-08-12T00:00:00.000Z'),
+      updatedAt: '2026-08-12T00:00:00.000Z',
+      isBlankChat: false,
+      isLocalOnly: false,
+    }
+    const hydrated = {
+      ...summary,
+      messages: [
+        {
+          role: 'user' as const,
+          content: 'First message',
+          timestamp: new Date('2026-08-12T00:00:00.000Z'),
+        },
+      ],
+      isMetadataOnly: false,
+    }
+    mockLoadChats.mockResolvedValueOnce([summary])
+    const getChat = vi.spyOn(chatStorage, 'getChat').mockResolvedValue(hydrated)
+
+    const { result } = renderHook(() => useChatStorage({ storeHistory: true }))
+    await waitFor(() => expect(result.current.isInitialLoad).toBe(false))
+    act(() => result.current.handleChatSelect(summary.id))
+    await waitFor(() =>
+      expect(result.current.currentChat.messages).toHaveLength(1),
+    )
+
+    // The user opens another chat, then a sync from a second device adds
+    // messages to chat-1: the reload's summary reports newer content.
+    const other = {
+      id: 'chat-2',
+      title: 'Other',
+      messages: [],
+      createdAt: new Date('2026-08-12T01:00:00.000Z'),
+      isBlankChat: false,
+      isLocalOnly: false,
+    }
+    act(() => result.current.setCurrentChat(other))
+    const newerSummary = {
+      ...summary,
+      messageCount: 3,
+      updatedAt: '2026-08-12T02:00:00.000Z',
+    }
+    mockLoadChats.mockResolvedValue([newerSummary, other])
+    await act(async () => {
+      await result.current.reloadChats()
+    })
+
+    const listed = result.current.chats.find((chat) => chat.id === summary.id)
+    expect(listed?.isMetadataOnly).toBe(true)
+
+    // Re-selecting the chat hydrates the fresh copy instead of showing
+    // the stale one.
+    const rehydrated = {
+      ...hydrated,
+      updatedAt: newerSummary.updatedAt,
+      messages: [
+        ...hydrated.messages,
+        {
+          role: 'assistant' as const,
+          content: 'Synced answer',
+          timestamp: new Date('2026-08-12T02:00:00.000Z'),
+        },
+        {
+          role: 'user' as const,
+          content: 'Synced follow-up',
+          timestamp: new Date('2026-08-12T02:00:01.000Z'),
+        },
+      ],
+    }
+    getChat.mockResolvedValue(rehydrated)
+    act(() => result.current.handleChatSelect(summary.id))
+    await waitFor(() =>
+      expect(result.current.currentChat.messages).toHaveLength(3),
+    )
+  })
+
+  it('never blanks the displayed chat when a newer summary arrives', async () => {
+    const summary = {
+      id: 'chat-1',
+      title: 'Chat',
+      messages: [],
+      messageCount: 1,
+      isMetadataOnly: true,
+      createdAt: new Date('2026-08-12T00:00:00.000Z'),
+      updatedAt: '2026-08-12T00:00:00.000Z',
+      isBlankChat: false,
+      isLocalOnly: false,
+    }
+    const hydrated = {
+      ...summary,
+      messages: [
+        {
+          role: 'user' as const,
+          content: 'First message',
+          timestamp: new Date('2026-08-12T00:00:00.000Z'),
+        },
+      ],
+      isMetadataOnly: false,
+    }
+    mockLoadChats.mockResolvedValueOnce([summary])
+    vi.spyOn(chatStorage, 'getChat').mockResolvedValue(hydrated)
+
+    const { result } = renderHook(() => useChatStorage({ storeHistory: true }))
+    await waitFor(() => expect(result.current.isInitialLoad).toBe(false))
+    act(() => result.current.handleChatSelect(summary.id))
+    await waitFor(() =>
+      expect(result.current.currentChat.messages).toHaveLength(1),
+    )
+
+    // Storage reports newer content while this chat is on screen. The
+    // current chat only merges metadata (never adopts the summary's empty
+    // messages), so the visible conversation is preserved.
+    const newerSummary = {
+      ...summary,
+      title: 'Renamed elsewhere',
+      messageCount: 2,
+      updatedAt: '2026-08-12T01:00:00.000Z',
+    }
+    mockLoadChats.mockResolvedValue([newerSummary])
+    await act(async () => {
+      await result.current.reloadChats()
+    })
+
+    expect(result.current.currentChat.messages).toHaveLength(1)
+    expect(result.current.currentChat.title).toBe('Renamed elsewhere')
+    expect(result.current.currentChat.isMetadataOnly).toBeFalsy()
+  })
+
+  it('keeps hydrated messages when the reload summary matches storage', async () => {
+    const summary = {
+      id: 'chat-1',
+      title: 'Chat',
+      messages: [],
+      messageCount: 1,
+      isMetadataOnly: true,
+      createdAt: new Date('2026-08-12T00:00:00.000Z'),
+      updatedAt: '2026-08-12T00:00:00.000Z',
+      isBlankChat: false,
+      isLocalOnly: false,
+    }
+    const hydrated = {
+      ...summary,
+      messages: [
+        {
+          role: 'user' as const,
+          content: 'First message',
+          timestamp: new Date('2026-08-12T00:00:00.000Z'),
+        },
+      ],
+      isMetadataOnly: false,
+    }
+    mockLoadChats.mockResolvedValueOnce([summary])
+    vi.spyOn(chatStorage, 'getChat').mockResolvedValue(hydrated)
+
+    const { result } = renderHook(() => useChatStorage({ storeHistory: true }))
+    await waitFor(() => expect(result.current.isInitialLoad).toBe(false))
+    act(() => result.current.handleChatSelect(summary.id))
+    await waitFor(() =>
+      expect(result.current.currentChat.messages).toHaveLength(1),
+    )
+
+    mockLoadChats.mockResolvedValue([summary])
+    await act(async () => {
+      await result.current.reloadChats()
+    })
+
+    const listed = result.current.chats.find((chat) => chat.id === summary.id)
+    expect(listed?.isMetadataOnly).toBe(false)
+    expect(listed?.messages).toHaveLength(1)
   })
 
   it('keeps a routed local new chat selected after loading storage', async () => {

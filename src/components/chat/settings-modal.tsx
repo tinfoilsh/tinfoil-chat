@@ -1817,7 +1817,8 @@ export function SettingsModal({
       // Filter out blank chats and chats that failed decryption
       const exportableChats = Array.from(chatsById.values()).filter(
         (chat) =>
-          !chat.isBlankChat && chat.messages && chat.messages.length > 0,
+          !chat.isBlankChat &&
+          (chat.messageCount ?? chat.messages?.length ?? 0) > 0,
       )
 
       setIsPreparingExport(false)
