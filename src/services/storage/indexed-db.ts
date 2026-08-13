@@ -156,6 +156,30 @@ export function chatContentFingerprint(chat: {
             id: a.id,
             type: a.type,
             fileName: a.fileName,
+            mimeType: a.mimeType,
+            fileSize: a.fileSize,
+            description: a.description,
+            encryptionKey: a.encryptionKey,
+            base64Hash:
+              typeof a.base64 === 'string' ? hashString(a.base64) : null,
+            base64Length: typeof a.base64 === 'string' ? a.base64.length : 0,
+            thumbnailBase64Hash:
+              typeof a.thumbnailBase64 === 'string'
+                ? hashString(a.thumbnailBase64)
+                : null,
+            thumbnailBase64Length:
+              typeof a.thumbnailBase64 === 'string'
+                ? a.thumbnailBase64.length
+                : 0,
+            textContentHash:
+              typeof a.textContent === 'string'
+                ? hashString(a.textContent)
+                : null,
+            textContentLength:
+              typeof a.textContent === 'string' ? a.textContent.length : 0,
+            pagesHash: Array.isArray(a.pages)
+              ? hashString(JSON.stringify(a.pages))
+              : null,
           }))
         : [],
     // Legacy fields — still included for old messages that haven't been migrated
@@ -1971,9 +1995,8 @@ export class IndexedDBStorage {
    * Atomic upload finalization (§C6 / §H5).
    *
    * Runs inside `saveQueue` so it is serialized with any concurrent
-   * user saves. Re-reads the chat fresh, applies attachment id/key
-   * rewrites by stable client id (not by position), and only clears
-   * `locallyModified` if no edit happened since `preUploadUpdatedAt`.
+   * user saves. Re-reads the chat fresh and verifies its content fingerprint
+   * before applying attachment id/key rewrites or clearing `locallyModified`.
    *
    * If a concurrent edit is detected, the new sync version is still
    * persisted but the chat stays `locallyModified=true` so the next
@@ -1983,6 +2006,7 @@ export class IndexedDBStorage {
     chatId: string
     rewrites: AttachmentRewrite[]
     preUploadUpdatedAt: string | undefined
+    preUploadFingerprint: string
     syncVersion: number
   }): Promise<void> {
     return this.enqueueSave('finalizeUpload', async () => {
@@ -1995,6 +2019,9 @@ export class IndexedDBStorage {
         const store = transaction.objectStore(CHATS_STORE)
         const payloadStore = transaction.objectStore(ATTACHMENT_PAYLOADS_STORE)
         const chatRequest = store.get(opts.chatId)
+        const payloadRequest = payloadStore
+          .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
+          .getAll(IDBKeyRange.only(opts.chatId))
         transaction.oncomplete = () => resolve()
         transaction.onerror = () =>
           reject(new Error('Failed to finalize upload'))
@@ -2002,11 +2029,26 @@ export class IndexedDBStorage {
           reject(new Error('Upload finalization transaction aborted'))
         chatRequest.onerror = () =>
           reject(new Error('Failed to read chat before finalizing upload'))
-        chatRequest.onsuccess = () => {
+        payloadRequest.onerror = () =>
+          reject(
+            new Error('Failed to read attachment payloads before finalizing'),
+          )
+        payloadRequest.onsuccess = () => {
           const chat = chatRequest.result as StoredChat | undefined
           if (!chat) return
 
-          if (opts.rewrites.length > 0) {
+          const currentFingerprint = chatContentFingerprint(
+            hydrateAttachmentPayloads(
+              chat,
+              payloadRequest.result as StoredAttachmentPayload[],
+            ),
+          )
+          const concurrentEdit =
+            (opts.preUploadUpdatedAt !== undefined &&
+              chat.updatedAt !== opts.preUploadUpdatedAt) ||
+            currentFingerprint !== opts.preUploadFingerprint
+
+          if (!concurrentEdit && opts.rewrites.length > 0) {
             const rewritesByPayloadId = new Map(
               opts.rewrites
                 .filter((rewrite) => rewrite.storagePayloadId)
@@ -2041,9 +2083,6 @@ export class IndexedDBStorage {
             }
           }
 
-          const concurrentEdit =
-            opts.preUploadUpdatedAt !== undefined &&
-            chat.updatedAt !== opts.preUploadUpdatedAt
           chat.syncVersion = opts.syncVersion
           if (!concurrentEdit) {
             chat.locallyModified = false

@@ -77,6 +77,7 @@ vi.mock('@/utils/error-handling', () => ({
 }))
 
 vi.mock('@/services/storage/indexed-db', () => ({
+  chatContentFingerprint: (chat: unknown) => JSON.stringify(chat),
   indexedDBStorage: {
     getAllChats: (...args: any[]) => mockGetAllChats(...args),
     getCloudChatCount: (...args: any[]) => mockGetCloudChatCount(...args),
@@ -359,6 +360,7 @@ describe('CloudSyncService', () => {
           chatId: 'cloud-1',
           syncVersion: 8,
           rewrites: [],
+          preUploadFingerprint: expect.any(String),
         }),
       )
     })

@@ -172,6 +172,38 @@ describe('chatContentFingerprint', () => {
     })
     expect(fp1).not.toBe(fp2)
   })
+
+  it('captures normalized attachment payload changes', () => {
+    const attachment = {
+      id: 'attachment',
+      type: 'image',
+      fileName: 'image.png',
+    }
+    const fp1 = chatContentFingerprint({
+      title: 'T',
+      messages: [
+        {
+          role: 'user',
+          content: 'x',
+          timestamp: '2024-01-01T00:00:00Z',
+          attachments: [{ ...attachment, base64: 'AAA' }],
+        },
+      ],
+    })
+    const fp2 = chatContentFingerprint({
+      title: 'T',
+      messages: [
+        {
+          role: 'user',
+          content: 'x',
+          timestamp: '2024-01-01T00:00:00Z',
+          attachments: [{ ...attachment, base64: 'BBB' }],
+        },
+      ],
+    })
+
+    expect(fp1).not.toBe(fp2)
+  })
 })
 
 describe('chatNeedsSync', () => {

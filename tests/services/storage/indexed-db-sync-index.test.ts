@@ -1,4 +1,5 @@
 import {
+  chatContentFingerprint,
   DB_NAME,
   DB_VERSION,
   INDEXED_DB_UPGRADE_BLOCKED_EVENT,
@@ -761,6 +762,7 @@ describe('IndexedDB pending sync index', () => {
         },
       ],
       preUploadUpdatedAt: uploaded.updatedAt,
+      preUploadFingerprint: chatContentFingerprint(uploaded),
       syncVersion: 2,
     })
 
@@ -862,7 +864,7 @@ describe('IndexedDB pending sync index', () => {
     expect(transactionSpy).toHaveBeenLastCalledWith(['chats'], 'readwrite')
   })
 
-  it('finalizes against the latest cross-tab messages and payloads', async () => {
+  it('does not rewrite attachments after a cross-tab content edit', async () => {
     const writer = new IndexedDBStorage()
     const finalizer = new IndexedDBStorage()
     await Promise.all([writer.initialize(), finalizer.initialize()])
@@ -936,6 +938,7 @@ describe('IndexedDB pending sync index', () => {
         },
       ],
       preUploadUpdatedAt: uploaded.updatedAt,
+      preUploadFingerprint: chatContentFingerprint(uploaded),
       syncVersion: 4,
     })
     await vi.waitFor(() =>
@@ -953,15 +956,123 @@ describe('IndexedDB pending sync index', () => {
       'Newer tab message',
     ])
     expect(result?.messages[0].attachments?.[0]).toMatchObject({
-      id: 'server-attachment',
-      encryptionKey: 'server-key',
+      id: 'uploaded-attachment',
       base64: 'uploaded-payload',
     })
+    expect(result?.messages[0].attachments?.[0].encryptionKey).toBeUndefined()
     expect(result?.messages[1].attachments?.[0].textContent).toBe(
       'Newer tab payload',
     )
     expect(result?.locallyModified).toBe(true)
     expect(result?.syncVersion).toBe(4)
+  })
+
+  it('keeps replacement bytes uploadable when finalization was blocked', async () => {
+    const writer = new IndexedDBStorage()
+    const finalizer = new IndexedDBStorage()
+    await Promise.all([writer.initialize(), finalizer.initialize()])
+    await writer.saveChat(
+      storedChat('replacement-race', {
+        locallyModified: true,
+        messages: [
+          {
+            role: 'user',
+            content: 'Image',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'client-image',
+                type: 'image',
+                fileName: 'image.png',
+                base64: 'old-bytes',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    const uploaded = await writer.getChat('replacement-race')
+    if (!uploaded) throw new Error('Expected stored chat')
+    const payloadId = (
+      uploaded.messages[0].attachments?.[0] as {
+        storagePayloadId?: string
+      }
+    ).storagePayloadId
+    if (!payloadId) throw new Error('Expected attachment payload id')
+
+    const blocker = blockChatTransaction(
+      writer,
+      uploaded.id,
+      (chat, transaction) => {
+        chat.updatedAt = '2026-08-12T00:00:01.000Z'
+        chat.locallyModified = true
+        transaction.objectStore('attachmentPayloads').put({
+          id: payloadId,
+          chatId: chat.id,
+          base64: 'new-bytes',
+        })
+        transaction.objectStore('chats').put(chat)
+      },
+    )
+    await blocker.ready
+    const finalizing = finalizer.finalizeUpload({
+      chatId: uploaded.id,
+      rewrites: [
+        {
+          clientId: 'client-image',
+          serverId: 'old-server-image',
+          encryptionKey: 'old-server-key',
+          storagePayloadId: payloadId,
+        },
+      ],
+      preUploadUpdatedAt: uploaded.updatedAt,
+      preUploadFingerprint: chatContentFingerprint(uploaded),
+      syncVersion: 4,
+    })
+    blocker.release()
+    await Promise.all([blocker.complete, finalizing])
+
+    const result = await writer.getChat(uploaded.id)
+    expect(result?.messages[0].attachments?.[0]).toMatchObject({
+      id: 'client-image',
+      base64: 'new-bytes',
+    })
+    expect(result?.messages[0].attachments?.[0].encryptionKey).toBeUndefined()
+    expect(result).toMatchObject({ locallyModified: true, syncVersion: 4 })
+  })
+
+  it('keeps same-timestamp edits dirty using the upload fingerprint', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat(
+      storedChat('same-timestamp-finalize', {
+        title: 'Before upload',
+        locallyModified: true,
+      }),
+    )
+    const uploaded = await storage.getChat('same-timestamp-finalize')
+    if (!uploaded) throw new Error('Expected stored chat')
+    const preUploadFingerprint = chatContentFingerprint(uploaded)
+
+    await storage.saveChat({
+      ...uploaded,
+      title: 'Edited during upload',
+      updatedAt: uploaded.updatedAt,
+    })
+    await storage.finalizeUpload({
+      chatId: uploaded.id,
+      rewrites: [],
+      preUploadUpdatedAt: uploaded.updatedAt,
+      preUploadFingerprint,
+      syncVersion: 5,
+    })
+
+    expect(await storage.getChat(uploaded.id)).toMatchObject({
+      title: 'Edited during upload',
+      updatedAt: uploaded.updatedAt,
+      locallyModified: true,
+      syncVersion: 5,
+    })
   })
 
   it('rechecks remote apply CAS after an overlapping tab transaction', async () => {

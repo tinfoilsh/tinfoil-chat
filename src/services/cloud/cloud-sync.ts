@@ -10,7 +10,11 @@ import { AuthTokenUnavailableError } from '@/services/auth'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { chatEvents } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
-import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
+import {
+  chatContentFingerprint,
+  indexedDBStorage,
+  type StoredChat,
+} from '../storage/indexed-db'
 import { decideRecovery } from '../sync-enclave/enclave-error-recovery'
 import { passkeyEvents } from '../sync-enclave/passkey-events'
 import { keyCurrent, newIdempotencyKey } from '../sync-enclave/sync-api'
@@ -799,6 +803,7 @@ export class CloudSyncService {
     }
 
     const preUploadUpdatedAt = chat.updatedAt
+    const preUploadFingerprint = chatContentFingerprint(chat)
     const preUploadVersion = chat.syncVersion ?? 0
     if (!this.isCurrentGeneration(generation)) return
     const { syncVersion, rewrites } = await cloudStorage.uploadChat(chat, {
@@ -811,6 +816,7 @@ export class CloudSyncService {
       chatId,
       rewrites,
       preUploadUpdatedAt,
+      preUploadFingerprint,
       syncVersion: syncVersion ?? preUploadVersion + 1,
     })
   }
@@ -910,6 +916,7 @@ export class CloudSyncService {
       }
 
       const preUploadUpdatedAt = chat.updatedAt
+      const preUploadFingerprint = chatContentFingerprint(chat)
       const preUploadVersion = chat.syncVersion ?? 0
       if (!this.isCurrentGeneration(generation)) return null
       return async () => {
@@ -924,6 +931,7 @@ export class CloudSyncService {
             chatId,
             rewrites,
             preUploadUpdatedAt,
+            preUploadFingerprint,
             syncVersion: syncVersion ?? preUploadVersion + 1,
           })
           reportChatSynced(chatId)
