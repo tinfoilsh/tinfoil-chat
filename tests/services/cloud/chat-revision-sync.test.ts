@@ -524,10 +524,6 @@ describe('chat revision synchronization', () => {
 
   it('aborts before commits and uploads when the account changes', async () => {
     hasPendingSyncWork.mockResolvedValue(true)
-    revisionSummary.mockResolvedValue({
-      current_revision: '9',
-      oldest_replayable_revision: '1',
-    })
     revisionEvents.mockResolvedValue({
       events: [
         {
