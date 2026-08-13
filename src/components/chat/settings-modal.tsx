@@ -523,6 +523,9 @@ export function SettingsModal({
   const claudeConversationsFileInputRef = useRef<HTMLInputElement>(null)
   const claudeProjectsFileInputRef = useRef<HTMLInputElement>(null)
   const tinfoilFileInputRef = useRef<HTMLInputElement>(null)
+  const localTinfoilImportAbortControllerRef = useRef<AbortController | null>(
+    null,
+  )
 
   // Export state
   const [isExporting, setIsExporting] = useState(false)
@@ -1474,9 +1477,15 @@ export function SettingsModal({
     setImportSource('tinfoil')
     setIsImporting(true)
     setImportResult(null)
+    localTinfoilImportAbortControllerRef.current?.abort()
+    const abortController = new AbortController()
+    localTinfoilImportAbortControllerRef.current = abortController
 
     try {
-      const chats = await parseLocalTinfoilExport(file, getParseOptions())
+      const chats = await parseLocalTinfoilExport(file, {
+        ...getParseOptions(),
+        signal: abortController.signal,
+      })
       const { imported, errors } = await saveImportedChats(chats)
 
       setImportResult({
@@ -1495,6 +1504,7 @@ export function SettingsModal({
         description: `Imported ${imported} chat${imported !== 1 ? 's' : ''} from Tinfoil`,
       })
     } catch (err) {
+      if (abortController.signal.aborted) return
       setImportResult({
         success: false,
         chatsImported: 0,
@@ -1507,9 +1517,12 @@ export function SettingsModal({
         variant: 'destructive',
       })
     } finally {
-      setIsImporting(false)
-      setImportProgress(null)
-      e.target.value = ''
+      if (localTinfoilImportAbortControllerRef.current === abortController) {
+        localTinfoilImportAbortControllerRef.current = null
+        setIsImporting(false)
+        setImportProgress(null)
+        e.target.value = ''
+      }
     }
   }
 
@@ -2060,6 +2073,14 @@ export function SettingsModal({
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current)
       }
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      const abortController = localTinfoilImportAbortControllerRef.current
+      localTinfoilImportAbortControllerRef.current = null
+      abortController?.abort()
     }
   }, [])
 

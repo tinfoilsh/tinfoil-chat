@@ -1,5 +1,6 @@
 import type { Attachment, Chat, Message } from '@/components/chat/types'
 import { uint8ArrayToBase64 } from '@/utils/binary-codec'
+import { LOCAL_IMPORT_WORKER_TIMEOUT_MS } from './constants'
 import { parseTinfoilExportBytes } from './local-tinfoil-import-parser'
 
 export const LOCAL_IMPORT_MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
@@ -36,6 +37,7 @@ interface TinfoilExportedConversation {
 export interface LocalTinfoilImportOptions {
   generateChatId: (createdAt?: Date) => string
   isCloudSyncEnabled: boolean
+  signal?: AbortSignal
 }
 
 interface ImportWorkerResponse {
@@ -46,20 +48,54 @@ interface ImportWorkerResponse {
 }
 
 class ImportWorkerUnavailableError extends Error {}
+export class LocalImportWorkerTimeoutError extends Error {
+  constructor() {
+    super('The export took too long to process')
+    this.name = 'LocalImportWorkerTimeoutError'
+  }
+}
 
-async function readExportOnMainThread(file: File): Promise<{
+function getAbortError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException('The import was cancelled', 'AbortError')
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw getAbortError(signal)
+}
+
+function isImportWorkerResponse(value: unknown): value is ImportWorkerResponse {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'ok' in value &&
+    typeof value.ok === 'boolean'
+  )
+}
+
+async function readExportOnMainThread(
+  file: File,
+  signal?: AbortSignal,
+): Promise<{
   conversations: TinfoilExportedConversation[]
   entries?: Record<string, Uint8Array>
 }> {
+  throwIfAborted(signal)
+  const buffer = await file.arrayBuffer()
+  throwIfAborted(signal)
   return parseTinfoilExportBytes<TinfoilExportedConversation>({
-    bytes: new Uint8Array(await file.arrayBuffer()),
+    bytes: new Uint8Array(buffer),
     fileName: file.name,
     mimeType: file.type,
     maxArchiveBytes: LOCAL_IMPORT_MAX_ARCHIVE_BYTES,
   })
 }
 
-async function readExport(file: File): Promise<{
+async function readExport(
+  file: File,
+  signal?: AbortSignal,
+): Promise<{
   conversations: TinfoilExportedConversation[]
   entries?: Record<string, Uint8Array>
 }> {
@@ -69,23 +105,29 @@ async function readExport(file: File): Promise<{
   if (file.size > LOCAL_IMPORT_MAX_ARCHIVE_BYTES) {
     throw new Error('The export file is too large')
   }
-  if (typeof Worker === 'undefined') return readExportOnMainThread(file)
+  throwIfAborted(signal)
+  if (typeof Worker === 'undefined') return readExportOnMainThread(file, signal)
 
   try {
-    return await readExportInWorker(file)
+    return await readExportInWorker(file, signal)
   } catch (error) {
     if (error instanceof ImportWorkerUnavailableError) {
-      return readExportOnMainThread(file)
+      return readExportOnMainThread(file, signal)
     }
     throw error
   }
 }
 
-async function readExportInWorker(file: File): Promise<{
+async function readExportInWorker(
+  file: File,
+  signal?: AbortSignal,
+): Promise<{
   conversations: TinfoilExportedConversation[]
   entries?: Record<string, Uint8Array>
 }> {
+  throwIfAborted(signal)
   const buffer = await file.arrayBuffer()
+  throwIfAborted(signal)
   let worker: Worker
   try {
     worker = new Worker(
@@ -96,29 +138,65 @@ async function readExportInWorker(file: File): Promise<{
   }
 
   return new Promise((resolve, reject) => {
-    worker.onmessage = (event: MessageEvent<ImportWorkerResponse>) => {
+    let settled = false
+    let timeout: ReturnType<typeof setTimeout> | null = null
+
+    const cleanup = () => {
+      if (timeout !== null) {
+        clearTimeout(timeout)
+        timeout = null
+      }
+      worker.onmessage = null
+      worker.onerror = null
+      worker.onmessageerror = null
+      signal?.removeEventListener('abort', handleAbort)
       worker.terminate()
-      if (
-        !event.data.ok ||
-        !event.data.conversations ||
-        !Array.isArray(event.data.conversations)
-      ) {
-        reject(new Error(event.data.error ?? 'Invalid Tinfoil export format'))
+    }
+    const settle = (action: () => void) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      action()
+    }
+    const handleAbort = () => {
+      settle(() => reject(getAbortError(signal!)))
+    }
+
+    worker.onmessage = (event: MessageEvent<ImportWorkerResponse>) => {
+      if (settled) return
+      const response: unknown = event.data
+      if (!isImportWorkerResponse(response)) {
+        settle(() => reject(new Error('Invalid response from import worker')))
         return
       }
-      resolve({
-        conversations: event.data.conversations,
-        entries: event.data.entries,
-      })
+      const conversations = response.conversations
+      if (!response.ok || !conversations || !Array.isArray(conversations)) {
+        settle(() =>
+          reject(new Error(response.error ?? 'Invalid Tinfoil export format')),
+        )
+        return
+      }
+      settle(() =>
+        resolve({
+          conversations,
+          entries: response.entries,
+        }),
+      )
     }
     worker.onerror = () => {
-      worker.terminate()
-      reject(new ImportWorkerUnavailableError())
+      settle(() => reject(new ImportWorkerUnavailableError()))
     }
     worker.onmessageerror = () => {
-      worker.terminate()
-      reject(new ImportWorkerUnavailableError())
+      settle(() => reject(new ImportWorkerUnavailableError()))
     }
+    timeout = setTimeout(() => {
+      settle(() => reject(new LocalImportWorkerTimeoutError()))
+    }, LOCAL_IMPORT_WORKER_TIMEOUT_MS)
+    if (signal?.aborted) {
+      handleAbort()
+      return
+    }
+    signal?.addEventListener('abort', handleAbort, { once: true })
     try {
       worker.postMessage(
         {
@@ -130,8 +208,7 @@ async function readExportInWorker(file: File): Promise<{
         [buffer],
       )
     } catch {
-      worker.terminate()
-      reject(new ImportWorkerUnavailableError())
+      settle(() => reject(new ImportWorkerUnavailableError()))
     }
   })
 }
@@ -165,7 +242,7 @@ export async function parseLocalTinfoilExport(
   file: File,
   options: LocalTinfoilImportOptions,
 ): Promise<Chat[]> {
-  const { conversations, entries } = await readExport(file)
+  const { conversations, entries } = await readExport(file, options.signal)
   const chats: Chat[] = []
 
   for (const conversation of conversations) {
