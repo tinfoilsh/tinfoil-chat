@@ -1313,6 +1313,84 @@ describe('CloudSyncService', () => {
     })
   })
 
+  describe('retryDecryptionWithNewKey', () => {
+    const failedOne = {
+      id: 'failed-one',
+      title: 'Failed one',
+      messages: [],
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+      decryptionFailed: true,
+      isLocalOnly: false,
+    }
+    const failedTwo = { ...failedOne, id: 'failed-two', title: 'Failed two' }
+
+    it('waits for ownership, deep-syncs, and counts only restored IDs', async () => {
+      let grantLock!: () => void
+      const leaderFinished = new Promise<void>((resolve) => {
+        grantLock = resolve
+      })
+      const request = vi.fn(
+        async (
+          _name: string,
+          _options: LockOptions,
+          callback: (lock: Lock) => Promise<unknown>,
+        ) => {
+          await leaderFinished
+          return callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' })
+        },
+      )
+      vi.stubGlobal('navigator', { locks: { request } })
+      mockGetAllChats
+        .mockResolvedValueOnce([failedOne, failedTwo])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            ...failedOne,
+            decryptionFailed: false,
+            messages: [{ role: 'user' }],
+          },
+        ])
+      mockGetChat.mockResolvedValue(null)
+      mockGetUnsyncedChats.mockResolvedValue([])
+      mockListChats
+        .mockResolvedValueOnce({
+          conversations: [{ id: 'failed-one', content: 'first' }],
+          hasMore: true,
+          nextContinuationToken: 'older',
+        })
+        .mockResolvedValueOnce({
+          conversations: [{ id: 'failed-two', content: 'second' }],
+          hasMore: false,
+        })
+      const service = new CloudSyncService()
+
+      const retry = service.retryDecryptionWithNewKey()
+      await Promise.resolve()
+      expect(mockDeleteChat).not.toHaveBeenCalled()
+      grantLock()
+
+      await expect(retry).resolves.toBe(1)
+      expect(mockDeleteChat).toHaveBeenCalledTimes(2)
+      expect(mockListChats).toHaveBeenCalledTimes(2)
+      expect(mockListChats.mock.calls[1]?.[0]?.continuationToken).toBe('older')
+      expect(mockSaveExistingChat).toHaveBeenCalledWith(failedTwo)
+    })
+
+    it('restores placeholders and reports zero when the deep pull fails', async () => {
+      mockGetAllChats.mockResolvedValueOnce([failedOne])
+      mockGetChat.mockResolvedValue(null)
+      mockGetUnsyncedChats.mockResolvedValue([])
+      mockListChats.mockRejectedValue(new SyncNetworkError())
+      const service = new CloudSyncService()
+
+      await expect(service.retryDecryptionWithNewKey()).resolves.toBe(0)
+
+      expect(mockListChats).toHaveBeenCalledTimes(2)
+      expect(mockSaveExistingChat).toHaveBeenCalledWith(failedOne)
+    })
+  })
+
   describe('syncAllChats', () => {
     it('builds the ingest map from lightweight sync metadata', async () => {
       const metadata = {

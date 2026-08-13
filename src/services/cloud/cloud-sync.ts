@@ -2048,10 +2048,21 @@ export class CloudSyncService {
       batchSize?: number
     } = {},
   ): Promise<number> {
+    return this.withSyncLock(() => this.doRetryDecryptionWithNewKey(options))
+  }
+
+  private async doRetryDecryptionWithNewKey(
+    options: {
+      onProgress?: (current: number, total: number) => void
+      batchSize?: number
+    } = {},
+  ): Promise<number> {
+    const generation = this.accountGeneration
     const { onProgress } = options
     const batchSize = Math.max(1, Math.floor(options.batchSize || 5))
 
     const allChats = await indexedDBStorage.getAllChats()
+    if (!this.isCurrentGeneration(generation)) return 0
     const failed = allChats.filter((chat) => chat.decryptionFailed)
     if (failed.length === 0) return 0
 
@@ -2064,6 +2075,7 @@ export class CloudSyncService {
           action: 'retryDecryptionWithNewKey',
         })
       }
+      if (!this.isCurrentGeneration(generation)) return 0
       if ((i + 1) % batchSize === 0 || i === failed.length - 1) {
         onProgress?.(i + 1, failed.length)
         await new Promise((resolve) => setTimeout(resolve, 0))
@@ -2077,20 +2089,66 @@ export class CloudSyncService {
     this.invalidateChatSyncCaches()
 
     try {
-      await this.smartSync()
+      await this.doSyncAllChats({ deep: true }, generation)
     } catch (error) {
       logError('Resync after eviction failed', error, {
         component: 'CloudSync',
         action: 'retryDecryptionWithNewKey',
       })
+      await this.restoreFailedDecryptionPlaceholders(failed, generation)
       return 0
     }
 
-    const remaining = (await indexedDBStorage.getAllChats()).filter(
-      (chat) => chat.decryptionFailed,
-    ).length
+    if (!this.isCurrentGeneration(generation)) return 0
+    const restoredChats = await indexedDBStorage.getAllChats()
+    if (!this.isCurrentGeneration(generation)) return 0
+    const restoredById = new Map(restoredChats.map((chat) => [chat.id, chat]))
+    const recovered = failed.filter((placeholder) => {
+      const restored = restoredById.get(placeholder.id)
+      return restored !== undefined && !restored.decryptionFailed
+    }).length
+    await this.restoreFailedDecryptionPlaceholders(
+      failed.filter((placeholder) => !restoredById.has(placeholder.id)),
+      generation,
+    )
 
-    return Math.max(0, failed.length - remaining)
+    return recovered
+  }
+
+  private async restoreFailedDecryptionPlaceholders(
+    placeholders: StoredChat[],
+    generation: number,
+  ): Promise<void> {
+    if (!this.isCurrentGeneration(generation) || !isCloudSyncEnabled()) return
+    let restoredAny = false
+    for (const placeholder of placeholders) {
+      if (
+        !this.isCurrentGeneration(generation) ||
+        deletedChatsTracker.isDeleted(placeholder.id)
+      ) {
+        continue
+      }
+      try {
+        const existing = await indexedDBStorage.getChat(placeholder.id)
+        if (!this.isCurrentGeneration(generation)) return
+        if (!existing) {
+          await indexedDBStorage.saveExistingChat(placeholder)
+          restoredAny = true
+        }
+      } catch (error) {
+        logError(
+          `Failed to restore placeholder chat ${placeholder.id}`,
+          error,
+          {
+            component: 'CloudSync',
+            action: 'retryDecryptionWithNewKey.restorePlaceholder',
+          },
+        )
+      }
+    }
+    if (restoredAny && this.isCurrentGeneration(generation)) {
+      this.invalidateChatSyncCaches()
+    }
   }
 
   // Fetch a page of remote chats, decrypt, persist to IndexedDB, and return pagination info
