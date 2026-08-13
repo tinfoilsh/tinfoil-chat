@@ -97,7 +97,7 @@ describe('getContextTokenBudget', () => {
   })
 
   it('reserves pending input tokens before budgeting persisted history', () => {
-    expect(getHistoryTokenBudget(1000, 250)).toBe(650)
+    expect(getHistoryTokenBudget(1000, 250)).toBe(550)
     expect(getHistoryTokenBudget(1000, 1000)).toBe(0)
   })
 })
@@ -209,7 +209,7 @@ describe('findContextStartIndex', () => {
 
 describe('selectMessagesWithinBudget', () => {
   it('selects the most recent messages that fit the model budget', () => {
-    // 1k-token context window → 900-token budget; each message is 400 tokens
+    // 1k-token context window → 800-token budget; each message is 400 tokens
     const messages = [
       makeMessage('user', 1600),
       makeMessage('assistant', 1600),

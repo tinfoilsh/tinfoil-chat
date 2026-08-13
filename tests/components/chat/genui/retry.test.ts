@@ -125,7 +125,7 @@ describe('artifact retry', () => {
     const selected = selectArtifactRetryContext(
       [message('user', older), message('assistant', recent)],
       1000,
-      'm'.repeat(3200),
+      'm'.repeat(2800),
     )
 
     expect(selected).toEqual([{ role: 'assistant', content: recent }])
@@ -139,7 +139,7 @@ describe('artifact retry', () => {
     }
 
     expect(
-      selectArtifactRetryContext([contextualMessage], 1000, 'm'.repeat(3200)),
+      selectArtifactRetryContext([contextualMessage], 1000, 'm'.repeat(2800)),
     ).toEqual([{ role: 'assistant', content: 'visible' }])
   })
 

@@ -7,7 +7,7 @@ import {
 
 // Fraction of the model's context window reserved for conversation history;
 // the remainder is headroom for the system prompt and the model's response.
-export const CONTEXT_WINDOW_USAGE_RATIO = 0.9
+export const CONTEXT_WINDOW_USAGE_RATIO = 0.8
 
 export const DEFAULT_CONTEXT_WINDOW_TOKENS = 64000
 
