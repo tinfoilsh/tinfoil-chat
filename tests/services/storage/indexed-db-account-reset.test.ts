@@ -291,7 +291,7 @@ describe('IndexedDBStorage account reset', () => {
     expect(transaction.abort).toHaveBeenCalledTimes(1)
   })
 
-  it('rejects malformed stored chats instead of leaving reads pending', async () => {
+  it('skips malformed stored chats without leaving reads pending', async () => {
     const storage = new IndexedDBStorage()
     const cursorRequest = {
       onsuccess: null,
@@ -310,15 +310,18 @@ describe('IndexedDBStorage account reset', () => {
     const chats = storage.getAllChats()
     await vi.waitFor(() => expect(cursorRequest.onsuccess).not.toBeNull())
 
+    const continueCursor = vi.fn()
     cursorRequest.onsuccess?.({
       target: {
         result: {
           value: { id: 'broken_chat', messages: null },
-          continue: vi.fn(),
+          continue: continueCursor,
         },
       },
     })
+    expect(continueCursor).toHaveBeenCalledTimes(1)
+    cursorRequest.onsuccess?.({ target: { result: null } })
 
-    await expect(chats).rejects.toThrow('Stored chat has invalid messages')
+    await expect(chats).resolves.toEqual([])
   })
 })
