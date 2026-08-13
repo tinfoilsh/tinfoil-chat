@@ -410,20 +410,16 @@ export function ChatMessages({
   }, [models, selectedModel])
 
   // Separate messages into archived and live sections - memoize this calculation
-  const { archivedMessages, liveMessages } = useMemo(() => {
+  const computedArchiveStartIndex = useMemo(() => {
     const budget = getHistoryTokenBudget(
       contextWindowTokens ??
         resolveContextWindowTokens(currentModel ?? undefined),
       pendingContextTokens,
     )
-    const startIndex = findContextStartIndex(messages, budget, {
+    return findContextStartIndex(messages, budget, {
       reasoningHistoryPolicy,
       keepMostRecent: pendingContextTokens === 0,
     })
-    return {
-      archivedMessages: messages.slice(0, startIndex),
-      liveMessages: messages.slice(startIndex),
-    }
   }, [
     messages,
     contextWindowTokens,
@@ -431,6 +427,46 @@ export function ChatMessages({
     reasoningHistoryPolicy,
     pendingContextTokens,
   ])
+  const [archiveBoundary, setArchiveBoundary] = useState(() => ({
+    chatId,
+    initialized: messages.length > 0,
+    startIndex: computedArchiveStartIndex,
+  }))
+  let archiveStartIndex: number
+  if (archiveBoundary.chatId !== chatId) {
+    archiveStartIndex = computedArchiveStartIndex
+    setArchiveBoundary({
+      chatId,
+      initialized: messages.length > 0,
+      startIndex: archiveStartIndex,
+    })
+  } else if (!archiveBoundary.initialized && messages.length > 0) {
+    archiveStartIndex = computedArchiveStartIndex
+    setArchiveBoundary({
+      chatId,
+      initialized: true,
+      startIndex: archiveStartIndex,
+    })
+  } else {
+    archiveStartIndex = Math.min(
+      archiveBoundary.startIndex,
+      computedArchiveStartIndex,
+      messages.length,
+    )
+    if (archiveStartIndex !== archiveBoundary.startIndex) {
+      setArchiveBoundary({
+        ...archiveBoundary,
+        startIndex: archiveStartIndex,
+      })
+    }
+  }
+  const { archivedMessages, liveMessages } = useMemo(
+    () => ({
+      archivedMessages: messages.slice(0, archiveStartIndex),
+      liveMessages: messages.slice(archiveStartIndex),
+    }),
+    [archiveStartIndex, messages],
+  )
 
   useEffect(() => {
     setMounted(true)
@@ -513,10 +549,16 @@ export function ChatMessages({
       pendingRecoveryTurnIds.has(turnId),
     ),
   )
+  const activeOrDraftingRecoveryTurns = new Set(activeRecoveryTurns)
+  for (const draft of recoveryDrafts) {
+    if (pendingRecoveryTurnIds.has(draft.turnId)) {
+      activeOrDraftingRecoveryTurns.add(draft.turnId)
+    }
+  }
   const archiveHasActiveRecovery = archivedMessages.some(
     (message) =>
       message.turnId !== undefined &&
-      pendingRecoveryTurnIds.has(message.turnId),
+      activeOrDraftingRecoveryTurns.has(message.turnId),
   )
   // Latch the archive open while a recovery streams into it, so the recovered
   // turn stays visible after its envelope clears instead of collapsing away.

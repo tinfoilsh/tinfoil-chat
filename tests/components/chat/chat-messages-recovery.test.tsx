@@ -130,6 +130,7 @@ describe('ChatMessages recovery indicator', () => {
             timestamp: new Date('2026-07-21T00:00:01.000Z'),
           },
         ]}
+        activeRecoveryTurnIds={['turn-1']}
       />,
     )
 
@@ -149,7 +150,11 @@ describe('ChatMessages recovery indicator', () => {
     }
 
     const { rerender } = render(
-      <ChatMessages {...baseProps} messages={[messages[0], latestMessage]} />,
+      <ChatMessages
+        {...baseProps}
+        messages={[messages[0], latestMessage]}
+        activeRecoveryTurnIds={['turn-1']}
+      />,
     )
 
     expect(screen.getByTestId('message-turn-1')).toBeInTheDocument()
@@ -180,6 +185,31 @@ describe('ChatMessages recovery indicator', () => {
       screen.queryByRole('button', { name: /earlier messages/ }),
     ).not.toBeInTheDocument()
   })
+
+  it('keeps a never-started archived recovery collapsed', () => {
+    mockFindContextStartIndex.mockReturnValue(1)
+
+    render(
+      <ChatMessages
+        {...baseProps}
+        messages={[
+          messages[0],
+          {
+            role: 'user',
+            turnId: 'turn-2',
+            content: 'Latest',
+            timestamp: new Date('2026-07-21T00:00:01.000Z'),
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.queryByTestId('message-turn-1')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Show 1 earlier messages' }),
+    ).toBeInTheDocument()
+  })
+
   it('renders the recovery widget immediately after its user turn', async () => {
     render(<ChatMessages {...baseProps} />)
 
