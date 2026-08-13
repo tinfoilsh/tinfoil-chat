@@ -86,7 +86,7 @@ const MIGRATIONS_STORE = 'migrations'
 const SYNC_PENDING_MIGRATION_ID = 'sync-pending-v4'
 const ATTACHMENT_PAYLOADS_STORE = 'attachmentPayloads'
 const ATTACHMENT_PAYLOADS_CHAT_INDEX = 'chatId'
-const DUPLICATE_ATTACHMENT_PAYLOAD_MARKER = ':duplicate:'
+const GENERATED_ATTACHMENT_PAYLOAD_PREFIX = 'attachment-payload:'
 const ACCOUNT_CHANGE_RESET_TIMEOUT_MS = 10_000
 const ACCOUNT_CHANGE_READ_ERROR = 'IndexedDB read superseded by account change'
 const ACCOUNT_CHANGE_WRITE_ERROR =
@@ -279,6 +279,23 @@ function attachmentHasPayload(attachment: Attachment): boolean {
   )
 }
 
+let fallbackAttachmentPayloadId = 0
+
+function createAttachmentPayloadId(reservedPayloadIds: Set<string>): string {
+  const token =
+    globalThis.crypto?.randomUUID?.() ??
+    `fallback-${fallbackAttachmentPayloadId++}`
+  const baseId = `${GENERATED_ATTACHMENT_PAYLOAD_PREFIX}${token}`
+  let payloadId = baseId
+  let collision = 0
+  while (reservedPayloadIds.has(payloadId)) {
+    collision += 1
+    payloadId = `${baseId}:${collision}`
+  }
+  reservedPayloadIds.add(payloadId)
+  return payloadId
+}
+
 function normalizeAttachmentPayloads(chat: Chat): {
   messages: Message[]
   payloads: StoredAttachmentPayload[]
@@ -286,15 +303,19 @@ function normalizeAttachmentPayloads(chat: Chat): {
 } {
   const payloads: StoredAttachmentPayload[] = []
   const referencedPayloadIds = new Set<string>()
-  const attachmentIdCounts = new Map<string, number>()
   const attachmentIdOccurrences = new Map<string, number>()
+  const reservedPayloadIds = new Set<string>()
+  const explicitlyReferencedPayloadIds = new Set<string>()
 
   for (const message of chat.messages) {
     for (const attachment of message.attachments ?? []) {
-      attachmentIdCounts.set(
-        attachment.id,
-        (attachmentIdCounts.get(attachment.id) ?? 0) + 1,
-      )
+      reservedPayloadIds.add(`${chat.id}:${attachment.id}`)
+      const storagePayloadId = (attachment as StoredAttachmentReference)
+        .storagePayloadId
+      if (storagePayloadId) {
+        reservedPayloadIds.add(storagePayloadId)
+        explicitlyReferencedPayloadIds.add(storagePayloadId)
+      }
     }
   }
 
@@ -305,17 +326,15 @@ function normalizeAttachmentPayloads(chat: Chat): {
       const occurrence = attachmentIdOccurrences.get(attachment.id) ?? 0
       attachmentIdOccurrences.set(attachment.id, occurrence + 1)
       const legacyPayloadId = `${chat.id}:${attachment.id}`
-      const generatedPayloadId =
-        occurrence === 0
-          ? legacyPayloadId
-          : `${legacyPayloadId}${DUPLICATE_ATTACHMENT_PAYLOAD_MARKER}${occurrence}`
       const referencedPayloadId = storedAttachment.storagePayloadId
       const payloadId =
         referencedPayloadId && !referencedPayloadIds.has(referencedPayloadId)
           ? referencedPayloadId
-          : attachmentIdCounts.get(attachment.id) === 1
+          : occurrence === 0 &&
+              !referencedPayloadIds.has(legacyPayloadId) &&
+              !explicitlyReferencedPayloadIds.has(legacyPayloadId)
             ? legacyPayloadId
-            : generatedPayloadId
+            : createAttachmentPayloadId(reservedPayloadIds)
       referencedPayloadIds.add(payloadId)
       const { base64, thumbnailBase64, textContent, pages, ...metadata } =
         storedAttachment
@@ -356,7 +375,13 @@ function inheritAttachmentPayloadReferences(
     attachmentKey: string
     used: boolean
   }
+  type IncomingAttachment = {
+    attachment: StoredAttachmentReference
+    messageKey: string
+    attachmentKey: string
+  }
   const candidatesByAttachmentId = new Map<string, PayloadCandidate[]>()
+  const incomingByAttachmentId = new Map<string, IncomingAttachment[]>()
 
   const messageKey = (message: Message): string => {
     if (message.turnId) return `turn:${message.turnId}`
@@ -391,37 +416,63 @@ function inheritAttachmentPayloadReferences(
     }
   }
 
+  const messages = chat.messages.map((message) => ({
+    ...message,
+    attachments: message.attachments?.map((attachment) => {
+      const clonedAttachment = { ...attachment } as StoredAttachmentReference
+      const incoming = incomingByAttachmentId.get(attachment.id) ?? []
+      incoming.push({
+        attachment: clonedAttachment,
+        messageKey: messageKey(message),
+        attachmentKey: attachmentKey(attachment),
+      })
+      incomingByAttachmentId.set(attachment.id, incoming)
+      return clonedAttachment
+    }),
+  }))
+
+  for (const [attachmentId, incomingAttachments] of incomingByAttachmentId) {
+    const candidates = candidatesByAttachmentId.get(attachmentId) ?? []
+
+    for (const incoming of incomingAttachments) {
+      const exactCandidates = candidates.filter(
+        (candidate) =>
+          !candidate.used && candidate.attachmentKey === incoming.attachmentKey,
+      )
+      const candidate =
+        exactCandidates.find(
+          (item) => item.messageKey === incoming.messageKey,
+        ) ?? exactCandidates[0]
+      if (!candidate) continue
+      candidate.used = true
+      if (
+        !attachmentHasPayload(incoming.attachment) &&
+        !incoming.attachment.storagePayloadId
+      ) {
+        incoming.attachment.storagePayloadId = candidate.payloadId
+      }
+    }
+
+    for (const incoming of incomingAttachments) {
+      if (
+        attachmentHasPayload(incoming.attachment) ||
+        incoming.attachment.storagePayloadId
+      ) {
+        continue
+      }
+      const candidate =
+        candidates.find(
+          (item) => !item.used && item.messageKey === incoming.messageKey,
+        ) ?? candidates.find((item) => !item.used)
+      if (!candidate) continue
+      candidate.used = true
+      incoming.attachment.storagePayloadId = candidate.payloadId
+    }
+  }
+
   return {
     ...chat,
-    messages: chat.messages.map((message) => ({
-      ...message,
-      attachments: message.attachments?.map((attachment) => {
-        if (attachmentHasPayload(attachment)) return attachment
-        const candidates = candidatesByAttachmentId.get(attachment.id) ?? []
-        const incomingMessageKey = messageKey(message)
-        const incomingAttachmentKey = attachmentKey(attachment)
-        const candidate =
-          candidates.find(
-            (item) =>
-              !item.used &&
-              item.messageKey === incomingMessageKey &&
-              item.attachmentKey === incomingAttachmentKey,
-          ) ??
-          candidates.find(
-            (item) => !item.used && item.messageKey === incomingMessageKey,
-          ) ??
-          candidates.find(
-            (item) =>
-              !item.used && item.attachmentKey === incomingAttachmentKey,
-          ) ??
-          candidates.find((item) => !item.used)
-        if (candidate) candidate.used = true
-        const storagePayloadId = candidate?.payloadId
-        return storagePayloadId
-          ? { ...attachment, storagePayloadId }
-          : attachment
-      }),
-    })),
+    messages,
   }
 }
 

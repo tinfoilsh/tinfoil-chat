@@ -535,6 +535,132 @@ describe('IndexedDB pending sync index', () => {
     )
   })
 
+  it('reserves an exact legacy payload match before duplicate fallback', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat(
+      storedChat('inserted-duplicate', {
+        messages: [
+          {
+            role: 'user',
+            content: 'Original',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'shared-id',
+                type: 'image',
+                fileName: 'old.png',
+                mimeType: 'image/png',
+                fileSize: 3,
+                base64: 'old',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+
+    await storage.applyRemoteChatIfFresh({
+      chat: storedChat('inserted-duplicate', {
+        messages: [
+          {
+            role: 'user',
+            content: 'Inserted',
+            timestamp: new Date('2026-08-12T00:00:01.000Z'),
+            attachments: [
+              {
+                id: 'shared-id',
+                type: 'image',
+                fileName: 'new.png',
+                mimeType: 'image/png',
+                fileSize: 3,
+              },
+            ],
+          },
+          {
+            role: 'user',
+            content: 'Original',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'shared-id',
+                type: 'image',
+                fileName: 'old.png',
+                mimeType: 'image/png',
+                fileSize: 3,
+              },
+            ],
+          },
+        ],
+      }),
+      syncVersion: 2,
+      expectedLocalUpdatedAt: undefined,
+    })
+
+    const updated = await storage.getChat('inserted-duplicate')
+    expect(
+      updated?.messages.map((message) => ({
+        fileName: message.attachments?.[0].fileName,
+        base64: message.attachments?.[0].base64,
+      })),
+    ).toEqual([
+      { fileName: 'new.png', base64: undefined },
+      { fileName: 'old.png', base64: 'old' },
+    ])
+  })
+
+  it('keeps generated payload ids separate from adversarial legacy ids', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat(
+      storedChat('payload-id-collision', {
+        messages: [
+          {
+            role: 'user',
+            content: 'Attachments',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'x',
+                type: 'image',
+                fileName: 'first.png',
+                base64: 'first',
+              },
+              {
+                id: 'x',
+                type: 'image',
+                fileName: 'second.png',
+                base64: 'second',
+              },
+              {
+                id: 'x:duplicate:1',
+                type: 'image',
+                fileName: 'adversarial.png',
+                base64: 'adversarial',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+
+    const stored = await storage.getChat('payload-id-collision')
+    const attachments = stored?.messages[0].attachments ?? []
+    expect(
+      new Set(
+        attachments.map(
+          (attachment) =>
+            (attachment as { storagePayloadId?: string }).storagePayloadId,
+        ),
+      ).size,
+    ).toBe(3)
+    expect(attachments.map((attachment) => attachment.base64)).toEqual([
+      'first',
+      'second',
+      'adversarial',
+    ])
+  })
+
   it('finalizes duplicate client ids using their payload identities', async () => {
     const storage = new IndexedDBStorage()
     await storage.initialize()
