@@ -90,6 +90,9 @@ describe('IndexedDB pending sync index', () => {
       'dirty',
       'never-synced',
     ])
+    const allChats = await storage.getAllChats()
+    expect(allChats.map((chat) => chat.id)).not.toContain('malformed')
+    expect(allChats.map((chat) => chat.id)).toContain('dirty')
 
     const upgraded = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION)
