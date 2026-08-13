@@ -374,12 +374,16 @@ function assertRelativeSyncEnclavePath(path: string): void {
  */
 export function getSyncEnclaveClient(): Promise<SyncEnclaveClient> {
   if (!clientPromise) {
-    clientPromise = SyncEnclaveClient.create().catch((err) => {
+    const pendingClient = SyncEnclaveClient.create()
+    const trackedClient = pendingClient.catch((err) => {
       // Surface attestation failures to the UI and allow a retry on the
       // next call rather than caching a permanent rejection.
-      clientPromise = null
+      if (clientPromise === trackedClient) {
+        clientPromise = null
+      }
       throw err
     })
+    clientPromise = trackedClient
   }
   return clientPromise
 }

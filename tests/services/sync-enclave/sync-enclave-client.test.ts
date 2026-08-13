@@ -383,6 +383,25 @@ describe('SyncEnclaveClient', () => {
     expect(requestSignal?.aborted).toBe(true)
   })
 
+  it('does not let canceled initialization evict a fresh client', async () => {
+    mockReady
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockResolvedValueOnce(undefined)
+    const { abortSyncEnclaveRequests, getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    const canceledClient = getSyncEnclaveClient()
+
+    abortSyncEnclaveRequests()
+    const freshClient = getSyncEnclaveClient()
+
+    await expect(canceledClient).rejects.toMatchObject({
+      name: 'SyncRequestAbortedError',
+    })
+    await expect(freshClient).resolves.toBeDefined()
+    expect(getSyncEnclaveClient()).toBe(freshClient)
+    expect(mockSecureClientConstructor).toHaveBeenCalledTimes(2)
+  })
+
   it('exposes SyncEnclaveError as a real Error subclass', () => {
     const err = new SyncEnclaveError('boom', 409, 'CONFLICT', { foo: 'bar' })
     expect(err).toBeInstanceOf(Error)
