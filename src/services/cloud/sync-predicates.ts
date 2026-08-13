@@ -42,7 +42,7 @@ export function trustedChatClock(
  * - isLocalOnly === true (user explicitly chose local storage)
  * - isBlankChat === true (empty placeholder chat)
  * - decryptionFailed === true (would overwrite server data with placeholder)
- * - no messages (nothing to upload)
+ * - no messages (malformed or stale persisted chat, not an intentional blank)
  * - currently streaming (incomplete data)
  *
  * @param chat The chat to check
@@ -78,7 +78,7 @@ export function isUploadableChat(
   }
 
   const messageCount =
-    'messageCount' in chat ? chat.messageCount : chat.messages.length
+    'messages' in chat ? chat.messages.length : chat.messageCount
   if (messageCount === 0) {
     return false
   }

@@ -85,6 +85,16 @@ describe('Sync Predicates', () => {
       expect(isUploadableChat(minimalChat)).toBe(false)
     })
 
+    it('uses full chat messages instead of an incidental message count', () => {
+      const staleFullChat = {
+        ...baseChat,
+        messages: [],
+        messageCount: 4,
+      }
+
+      expect(isUploadableChat(staleFullChat)).toBe(false)
+    })
+
     it('returns false for metadata with no messages', () => {
       expect(
         isUploadableChat({
