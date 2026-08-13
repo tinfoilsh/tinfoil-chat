@@ -2076,8 +2076,9 @@ export class IndexedDBStorage {
         let applied = false
         let cancelled = false
         transaction.oncomplete = () => resolve({ applied })
-        transaction.onerror = () =>
-          reject(new Error('Failed to apply remote chat'))
+        transaction.onerror = () => {
+          if (!cancelled) reject(new Error('Failed to apply remote chat'))
+        }
         transaction.onabort = () => {
           if (cancelled) resolve({ applied: false })
           else reject(new Error('Remote chat transaction aborted'))
