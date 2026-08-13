@@ -73,6 +73,7 @@ describe('SyncEnclaveClient', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.clearAllMocks()
     vi.doUnmock('@/config')
     vi.resetModules()
@@ -105,6 +106,7 @@ describe('SyncEnclaveClient', () => {
     vi.doMock('@/config', () => ({
       SYNC_ENCLAVE_URL: 'http://sync.tinfoil.sh',
       SYNC_ENCLAVE_REPO: 'tinfoilsh/confidential-sync',
+      SYNC_ENCLAVE_TIMEOUTS: { READY_MS: 30000, REQUEST_MS: 30000 },
     }))
     const { getSyncEnclaveClient } =
       await import('@/services/sync-enclave/sync-enclave-client')
@@ -267,6 +269,98 @@ describe('SyncEnclaveClient', () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ ok: true }))
     const client = await getSyncEnclaveClient()
     expect(client).toBeDefined()
+  })
+
+  it('bounds hung attestation and allows a fresh client retry', async () => {
+    vi.useFakeTimers()
+    vi.resetModules()
+    vi.doMock('@/config', () => ({
+      SYNC_ENCLAVE_URL: 'https://sync.tinfoil.sh',
+      SYNC_ENCLAVE_REPO: 'tinfoilsh/confidential-sync',
+      SYNC_ENCLAVE_TIMEOUTS: { READY_MS: 25, REQUEST_MS: 25 },
+    }))
+    mockReady.mockReturnValueOnce(new Promise(() => {}))
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+
+    const timedOut = getSyncEnclaveClient()
+    const assertion = expect(timedOut).rejects.toMatchObject({
+      name: 'SyncAttestationTimeoutError',
+      code: 'NETWORK',
+    })
+    await vi.advanceTimersByTimeAsync(25)
+    await assertion
+
+    mockReady.mockResolvedValueOnce(undefined)
+    await expect(getSyncEnclaveClient()).resolves.toBeDefined()
+    expect(mockSecureClientConstructor).toHaveBeenCalledTimes(2)
+  })
+
+  it('aborts a hung fetch when the overall request budget expires', async () => {
+    vi.useFakeTimers()
+    vi.resetModules()
+    vi.doMock('@/config', () => ({
+      SYNC_ENCLAVE_URL: 'https://sync.tinfoil.sh',
+      SYNC_ENCLAVE_REPO: 'tinfoilsh/confidential-sync',
+      SYNC_ENCLAVE_TIMEOUTS: { READY_MS: 25, REQUEST_MS: 25 },
+    }))
+    let requestSignal: AbortSignal | null | undefined
+    mockFetch.mockImplementationOnce((_input, init) => {
+      requestSignal = init?.signal
+      return new Promise(() => {})
+    })
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    const client = await getSyncEnclaveClient()
+
+    const request = client.get('/api/keys/current')
+    const assertion = expect(request).rejects.toMatchObject({
+      name: 'SyncRequestTimeoutError',
+      code: 'NETWORK',
+    })
+    await vi.advanceTimersByTimeAsync(25)
+    await assertion
+    expect(requestSignal?.aborted).toBe(true)
+    expect(requestSignal?.reason).toMatchObject({
+      name: 'SyncRequestTimeoutError',
+    })
+  })
+
+  it('uses one overall budget for authentication refresh and replay', async () => {
+    vi.useFakeTimers()
+    vi.resetModules()
+    vi.doMock('@/config', () => ({
+      SYNC_ENCLAVE_URL: 'https://sync.tinfoil.sh',
+      SYNC_ENCLAVE_REPO: 'tinfoilsh/confidential-sync',
+      SYNC_ENCLAVE_TIMEOUTS: { READY_MS: 25, REQUEST_MS: 25 },
+    }))
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ code: 'AUTH' }, { status: 401 }),
+    )
+    mockRefreshToken.mockReturnValueOnce(new Promise(() => {}))
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    const client = await getSyncEnclaveClient()
+
+    const request = client.get('/api/keys/current')
+    const assertion = expect(request).rejects.toMatchObject({
+      name: 'SyncRequestTimeoutError',
+    })
+    await vi.advanceTimersByTimeAsync(25)
+    await assertion
+    expect(mockFetch).toHaveBeenCalledOnce()
+  })
+
+  it('cleans up request timers after a successful response', async () => {
+    vi.useFakeTimers()
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    mockFetch.mockResolvedValueOnce(jsonResponse({ ok: true }))
+    const client = await getSyncEnclaveClient()
+
+    await client.get('/api/keys/current')
+
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('exposes SyncEnclaveError as a real Error subclass', () => {

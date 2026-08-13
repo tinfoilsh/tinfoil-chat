@@ -31,6 +31,11 @@ export const SYNC_ENCLAVE_URL =
 export const SYNC_ENCLAVE_REPO =
   process.env.NEXT_PUBLIC_SYNC_ENCLAVE_REPO || 'tinfoilsh/confidential-sync'
 
+export const SYNC_ENCLAVE_TIMEOUTS = {
+  READY_MS: 30000,
+  REQUEST_MS: 30000,
+} as const
+
 // Pagination settings
 export const PAGINATION = {
   CHATS_PER_PAGE: 20,
@@ -43,9 +48,6 @@ export const CLOUD_SYNC = {
   PROFILE_SYNC_INTERVAL: 60000, // 60 seconds (1 minute) - frequency for syncing profile
   PROFILE_SYNC_DEBOUNCE: 2000,
   KEY_VALIDATION_PROBE_LIMIT: 3,
-  // Max time to wait for the cross-tab sync lock before giving up with
-  // SyncInProgressError. Bounded so a hung tab can't stall other tabs.
-  CROSS_TAB_SYNC_LOCK_TIMEOUT: 15000,
 } as const
 
 export const PASSKEY = {

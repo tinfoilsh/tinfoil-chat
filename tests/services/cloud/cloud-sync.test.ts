@@ -1,4 +1,3 @@
-import { CLOUD_SYNC } from '@/config'
 import {
   SYNC_CHAT_DELETES_WATERMARK,
   SYNC_CHAT_STATUS,
@@ -323,10 +322,7 @@ describe('CloudSyncService', () => {
     ).resolves.toBe('synced')
     expect(request).toHaveBeenCalledWith(
       CROSS_TAB_SYNC_LOCK,
-      expect.objectContaining({
-        mode: 'exclusive',
-        signal: expect.any(AbortSignal),
-      }),
+      { mode: 'exclusive' },
       expect.any(Function),
     )
   })
@@ -358,60 +354,54 @@ describe('CloudSyncService', () => {
     await expect(pending).resolves.toBe('synced')
   })
 
-  it('throws SyncInProgressError when waiting for the lock times out', async () => {
-    vi.useFakeTimers()
-    try {
-      const request = vi.fn(
-        (_name: string, options: LockOptions) =>
-          new Promise((_resolve, reject) => {
-            options.signal?.addEventListener('abort', () =>
-              reject(new DOMException('Aborted', 'AbortError')),
-            )
-          }),
-      )
-      vi.stubGlobal('navigator', { locks: { request } })
-      const service = new CloudSyncService()
+  it('preserves a queued deep sync and its pagination result', async () => {
+    let grantLock!: () => void
+    const leaderFinished = new Promise<void>((resolve) => {
+      grantLock = resolve
+    })
+    const request = vi.fn(
+      async (
+        _name: string,
+        _options: LockOptions,
+        callback: (lock: Lock) => Promise<unknown>,
+      ) => {
+        await leaderFinished
+        return callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' })
+      },
+    )
+    vi.stubGlobal('navigator', { locks: { request } })
+    mockNeedsRecoveryHistorySync.mockReturnValue(true)
+    mockGetUnsyncedChats.mockResolvedValue([])
+    mockGetAllChats.mockResolvedValue([])
+    mockGetChatSyncStatus.mockResolvedValue({
+      count: 2,
+      lastUpdated: '2026-08-12T00:00:00.000Z',
+    })
+    mockListChats
+      .mockResolvedValueOnce({
+        conversations: [{ id: 'first', syncVersion: 1 }],
+        hasMore: true,
+        nextContinuationToken: 'next',
+      })
+      .mockResolvedValueOnce({
+        conversations: [{ id: 'second', syncVersion: 1 }],
+        hasMore: false,
+      })
+    mockIngestRemoteChats.mockResolvedValue({
+      downloaded: 1,
+      errors: [],
+      savedIds: ['saved'],
+    })
+    const service = new CloudSyncService()
 
-      const pending = service.smartSync()
-      const assertion =
-        expect(pending).rejects.toBeInstanceOf(SyncInProgressError)
-      await vi.advanceTimersByTimeAsync(CLOUD_SYNC.CROSS_TAB_SYNC_LOCK_TIMEOUT)
-      await assertion
-      expect(mockIsAuthenticated).not.toHaveBeenCalled()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
+    const pending = service.smartSync()
+    await Promise.resolve()
+    expect(mockListChats).not.toHaveBeenCalled()
 
-  it('does not abort a sync that already acquired the lock', async () => {
-    vi.useFakeTimers()
-    try {
-      const request = vi.fn(
-        async (
-          _name: string,
-          _options: LockOptions,
-          callback: (lock: Lock) => Promise<string>,
-        ) => callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' }),
-      )
-      vi.stubGlobal('navigator', { locks: { request } })
-      const service = new CloudSyncService()
-
-      let finishSync!: () => void
-      const pending = (service as any).withSyncLock(
-        () =>
-          new Promise<string>((resolve) => {
-            finishSync = () => resolve('synced')
-          }),
-      ) as Promise<string>
-      await vi.advanceTimersByTimeAsync(
-        CLOUD_SYNC.CROSS_TAB_SYNC_LOCK_TIMEOUT * 2,
-      )
-
-      finishSync()
-      await expect(pending).resolves.toBe('synced')
-    } finally {
-      vi.useRealTimers()
-    }
+    grantLock()
+    await expect(pending).resolves.toMatchObject({ downloaded: 2 })
+    expect(mockListChats).toHaveBeenCalledTimes(2)
+    expect(mockListChats.mock.calls[1]?.[0]?.continuationToken).toBe('next')
   })
 
   it('throws SyncInProgressError for a reentrant sync in the same tab', async () => {
@@ -460,6 +450,26 @@ describe('CloudSyncService', () => {
 
     finishFirst()
     await expect(first).resolves.toBe('first')
+  })
+
+  it('releases tracked state when the Web Locks request is rejected', async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValue(
+        new DOMException('Document inactive', 'InvalidStateError'),
+      )
+    vi.stubGlobal('navigator', { locks: { request } })
+    const service = new CloudSyncService()
+
+    await expect(
+      (service as any).withSyncLock(async () => 'never'),
+    ).rejects.toMatchObject({ name: 'InvalidStateError' })
+    expect(service.syncing).toBe(false)
+
+    vi.stubGlobal('navigator', {})
+    await expect(
+      (service as any).withSyncLock(async () => 'fallback'),
+    ).resolves.toBe('fallback')
   })
 
   it('coalesces cross-tab storage updates into one chat refresh', async () => {

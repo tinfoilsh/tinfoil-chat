@@ -1,4 +1,4 @@
-import { CLOUD_SYNC, PAGINATION } from '@/config'
+import { PAGINATION } from '@/config'
 import {
   AUTH_ACTIVE_USER_ID,
   MIGRATION_EXHAUSTED_KEYSET_PREFIX,
@@ -222,42 +222,15 @@ export class CloudSyncService {
 
     // Queue for the cross-tab lock instead of skipping so callers that
     // need a real result (initial sync pagination, manual deep sync,
-    // post-eviction resync) still get one when another tab is mid-sync.
-    // The wait is bounded so a hung leader tab cannot stall sync in
-    // every other tab; on timeout we throw SyncInProgressError, which
-    // existing callers already handle. The timer only bounds the
-    // waiting phase: it is cleared once the lock is granted so a
-    // long-running sync of our own is never aborted. trackSync wraps
-    // the wait as well, so waitForCurrentSync() covers queued attempts.
+    // post-eviction resync) retain their intent while another tab syncs.
+    // trackSync wraps the wait as well, so waitForCurrentSync() covers
+    // queued attempts.
     return this.trackSync(async () => {
-      const abortController = new AbortController()
-      let acquired = false
-      const waitTimer = setTimeout(
-        () => abortController.abort(),
-        CLOUD_SYNC.CROSS_TAB_SYNC_LOCK_TIMEOUT,
+      return navigator.locks.request(
+        CROSS_TAB_SYNC_LOCK,
+        CROSS_TAB_SYNC_LOCK_OPTIONS,
+        () => fn(),
       )
-      try {
-        return await navigator.locks.request(
-          CROSS_TAB_SYNC_LOCK,
-          { ...CROSS_TAB_SYNC_LOCK_OPTIONS, signal: abortController.signal },
-          () => {
-            acquired = true
-            clearTimeout(waitTimer)
-            return fn()
-          },
-        )
-      } catch (error) {
-        if (!acquired && abortController.signal.aborted) {
-          logInfo('[CloudSync] Timed out waiting for sync in another tab', {
-            component: 'CloudSync',
-            action: 'withSyncLock',
-          })
-          throw new SyncInProgressError()
-        }
-        throw error
-      } finally {
-        clearTimeout(waitTimer)
-      }
     })
   }
 
