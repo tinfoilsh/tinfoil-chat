@@ -26,7 +26,7 @@ interface CreateUpdateChatWithHistoryCheckParams {
 
 interface UpdateChatOptions {
   skipCloudSync?: boolean
-  skipStorageSave?: boolean
+  skipIndexedDBSave?: boolean
   allowCloudSyncWhileStreaming?: boolean
   metadataPatch?: Partial<Chat>
 }
@@ -46,7 +46,7 @@ export function createUpdateChatWithHistoryCheck({
   ) {
     const {
       skipCloudSync = false,
-      skipStorageSave = false,
+      skipIndexedDBSave = false,
       allowCloudSyncWhileStreaming = false,
       metadataPatch = {},
     } = options
@@ -100,15 +100,15 @@ export function createUpdateChatWithHistoryCheck({
       return
     }
 
-    if (skipStorageSave) {
-      return
-    }
-
     if (storeHistory) {
       const shouldSkipCloudSync =
         skipCloudSync ||
         updatedChat.isLocalOnly ||
         (!allowCloudSyncWhileStreaming && streamingTracker.isStreaming(chatId))
+
+      if (skipIndexedDBSave) {
+        return
+      }
 
       logInfo('[persistence] Saving chat to storage', {
         component: 'chat-persistence',

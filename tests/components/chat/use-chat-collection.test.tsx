@@ -1,12 +1,17 @@
 import { createUpdateChatWithHistoryCheck } from '@/components/chat/hooks/chat-persistence'
 import { useChatCollection } from '@/components/chat/hooks/use-chat-collection'
 import type { Chat, Message } from '@/components/chat/types'
+import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/services/storage/session-storage', () => ({
   sessionChatStorage: { saveChat: vi.fn() },
+}))
+
+vi.mock('@/services/storage/chat-storage', () => ({
+  chatStorage: { saveChat: vi.fn() },
 }))
 
 function createChat(overrides: Partial<Chat> = {}): Chat {
@@ -185,19 +190,42 @@ describe('useChatCollection', () => {
     expect(result.current.chats[0].messages).toEqual([streamedMessage])
   })
 
-  it('does not synchronously persist guest chats during streaming updates', () => {
+  it('persists guest chats during streaming updates', () => {
     vi.mocked(sessionChatStorage.saveChat).mockClear()
     const chat = createChat()
+    const partialMessage: Message = {
+      role: 'assistant',
+      content: 'Partial response',
+      timestamp: new Date('2026-01-01T00:00:01.000Z'),
+    }
     const updateChat = createUpdateChatWithHistoryCheck({
       storeHistory: false,
       chatsRef: { current: [chat] },
       currentChatRef: { current: chat },
     })
 
-    updateChat(vi.fn(), chat, vi.fn(), chat.id, [], {
-      skipStorageSave: true,
+    updateChat(vi.fn(), chat, vi.fn(), chat.id, [partialMessage], {
+      skipIndexedDBSave: true,
     })
 
-    expect(sessionChatStorage.saveChat).not.toHaveBeenCalled()
+    expect(sessionChatStorage.saveChat).toHaveBeenCalledWith(
+      expect.objectContaining({ messages: [partialMessage] }),
+    )
+  })
+
+  it('skips IndexedDB during streaming updates', () => {
+    vi.mocked(chatStorage.saveChat).mockClear()
+    const chat = createChat()
+    const updateChat = createUpdateChatWithHistoryCheck({
+      storeHistory: true,
+      chatsRef: { current: [chat] },
+      currentChatRef: { current: chat },
+    })
+
+    updateChat(vi.fn(), chat, vi.fn(), chat.id, [], {
+      skipIndexedDBSave: true,
+    })
+
+    expect(chatStorage.saveChat).not.toHaveBeenCalled()
   })
 })

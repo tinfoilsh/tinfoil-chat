@@ -1111,7 +1111,7 @@ export function useChatMessaging({
               setCurrentChat,
               chatId,
               [...updatedMessages, message],
-              { skipStorageSave: true },
+              { skipIndexedDBSave: true },
             )
           },
           setIsThinking: setIsThinkingFor,
