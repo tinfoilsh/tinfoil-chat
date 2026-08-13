@@ -11,6 +11,7 @@ import { samePendingRecoveryEnvelope } from '@/types/chat-recovery'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { BLANK_LOCAL_QUEUE_ID, isBlankQueueId } from '../message-queue-identity'
 import type { Chat, PendingRecoveryEnvelope } from '../types'
 import {
   createBlankChat,
@@ -636,8 +637,8 @@ export function useChatStorage({
   const handleChatSelect = useCallback(
     (chatId: string) => {
       // Handle special blank chat identifiers
-      if (chatId === 'blank-local' || chatId === 'blank-cloud') {
-        const isLocal = chatId === 'blank-local'
+      if (isBlankQueueId(chatId)) {
+        const isLocal = chatId === BLANK_LOCAL_QUEUE_ID
         const selectedChat = chats.find(
           (chat) => chat.isBlankChat && chat.isLocalOnly === isLocal,
         )

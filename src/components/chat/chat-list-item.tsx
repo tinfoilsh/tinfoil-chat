@@ -21,6 +21,7 @@ import { FaLock } from '../icons/lazy-icons'
 import { RedactedText } from '../ui/redacted-text'
 import { cn } from '../ui/utils'
 import { formatRelativeTime } from './chat-list-utils'
+import { getBlankQueueId } from './message-queue-identity'
 import { TypingAnimation } from './typing-animation'
 
 const INITIAL_TURN_MESSAGE_COUNT = 2
@@ -54,7 +55,7 @@ export function getChatKey(chat: ChatItemData): string {
  * Generates the ID to pass to onSelectChat for blank chats
  */
 export function getBlankChatSelectId(chat: ChatItemData): string {
-  return chat.isLocalOnly ? 'blank-local' : 'blank-cloud'
+  return getBlankQueueId(chat.isLocalOnly === true)
 }
 
 export interface ProjectOption {

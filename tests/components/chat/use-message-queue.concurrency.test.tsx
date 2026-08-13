@@ -276,6 +276,39 @@ describe('useMessageQueue concurrency', () => {
     expect(handleQuery).toHaveBeenCalledTimes(1)
   })
 
+  it('retries a transiently blocked item when dispatch becomes available', async () => {
+    const handleQuery = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: 'not-started' as const,
+        reason: 'blocked' as const,
+      })
+      .mockResolvedValueOnce({ status: 'accepted' as const })
+    const { result, rerender } = renderHook(
+      ({ dispatchBlocked }) =>
+        useMessageQueue({
+          chatId: 'chat-a',
+          loadingState: 'idle' as LoadingState,
+          handleQuery,
+          isRateLimited: () => false,
+          dispatchBlocked,
+        }),
+      { initialProps: { dispatchBlocked: false } },
+    )
+
+    act(() => result.current.submit({ text: 'send after recovery' }))
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+    expect(result.current.queuedMessages).toHaveLength(1)
+
+    rerender({ dispatchBlocked: true })
+    rerender({ dispatchBlocked: false })
+    await flushMicrotasks()
+
+    expect(handleQuery).toHaveBeenCalledTimes(2)
+    expect(result.current.queuedMessages).toEqual([])
+  })
+
   it('re-keys a blank queue to the created chat id', async () => {
     let resolveFirst!: () => void
     const handleQuery = vi.fn((text: string) =>

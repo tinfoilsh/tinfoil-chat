@@ -145,6 +145,7 @@ import {
 } from './hooks/use-reasoning-effort'
 import { useSidebarChat } from './hooks/use-sidebar-chat'
 import { MessageQueue } from './message-queue'
+import { getBlankQueueId } from './message-queue-identity'
 import { ModelSelector } from './model-selector'
 import { QuoteSelectionPopover } from './quote-selection-popover'
 import { initializeRenderers } from './renderers/client'
@@ -1047,9 +1048,7 @@ export function ChatInterface({
     chatId: currentChat?.id ?? null,
     queueId: currentChat?.id
       ? currentChat.id
-      : currentChat?.isLocalOnly
-        ? 'blank-local'
-        : 'blank-cloud',
+      : getBlankQueueId(currentChat?.isLocalOnly === true),
     persistQueue: !isTemporaryMode,
     loadingState,
     handleQuery,

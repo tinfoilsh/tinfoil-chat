@@ -1,5 +1,6 @@
 import { MESSAGE_QUEUE_PREFIX } from '@/constants/storage-keys'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isBlankQueueId } from '../message-queue-identity'
 import type { Attachment, LoadingState, Message, QueuedMessage } from '../types'
 import type { ChatDispatchResult } from './use-chat-messaging'
 
@@ -46,10 +47,6 @@ export class QueueIdentifierUnavailableError extends Error {
 }
 
 const isBrowser = typeof window !== 'undefined'
-
-function isBlankQueueId(queueId: string): boolean {
-  return queueId === 'blank-local' || queueId === 'blank-cloud'
-}
 
 function storageKeyFor(
   queueId: string | null | undefined,
@@ -286,11 +283,16 @@ export function useMessageQueue({
   // blank id ('') and blocking the next new chat.
   const pumpsRef = useRef<Map<string, { id: string }>>(new Map())
   const rejectedQueuesRef = useRef<Set<string>>(new Set())
+  const blockedQueuesRef = useRef<Set<string>>(new Set())
 
   const runPump = useCallback(
     async (startId: string): Promise<void> => {
       if (startId == null) return
-      if (rejectedQueuesRef.current.has(startId)) return
+      if (
+        rejectedQueuesRef.current.has(startId) ||
+        blockedQueuesRef.current.has(startId)
+      )
+        return
       if (pumpsRef.current.has(startId)) return
       const pump = { id: startId }
       pumpsRef.current.set(startId, pump)
@@ -356,7 +358,11 @@ export function useMessageQueue({
               dispatchResult.reason !== 'chat-deleted'
             ) {
               setQueueFor(pump.id, [next, ...getQueue(pump.id)])
-              rejectedQueuesRef.current.add(pump.id)
+              if (dispatchResult.reason === 'chat-unavailable') {
+                rejectedQueuesRef.current.add(pump.id)
+              } else {
+                blockedQueuesRef.current.add(pump.id)
+              }
               rejectedBeforeDispatch = true
               return
             }
@@ -401,10 +407,14 @@ export function useMessageQueue({
     }
   }, [isRateLimited, getQueue, runPump])
 
+  const previousDispatchBlockedRef = useRef(dispatchBlocked)
   useEffect(() => {
+    const wasBlocked = previousDispatchBlockedRef.current
+    previousDispatchBlockedRef.current = dispatchBlocked
     if (dispatchBlocked) return
     const id = currentQueueIdRef.current
     if (id != null && getQueue(id).length > 0) {
+      if (wasBlocked) blockedQueuesRef.current.delete(id)
       void runPump(id)
     }
   }, [dispatchBlocked, getQueue, runPump])
@@ -423,6 +433,7 @@ export function useMessageQueue({
         quote: input.quote ?? undefined,
       }
       rejectedQueuesRef.current.delete(id)
+      blockedQueuesRef.current.delete(id)
       setQueueFor(id, [...getQueue(id), item])
       void runPump(id)
     },
@@ -459,6 +470,7 @@ export function useMessageQueue({
       queuesRef.current.delete(previousQueueId)
       persistentQueueIdsRef.current.delete(previousQueueId)
       rejectedQueuesRef.current.delete(previousQueueId)
+      blockedQueuesRef.current.delete(previousQueueId)
       writeToStorage(storageKeyFor(previousQueueId, true), [])
     }
 
@@ -546,6 +558,7 @@ export function useMessageQueue({
 
       setQueueFor(id, [item, ...currentQueue.filter((m) => m.id !== queuedId)])
       rejectedQueuesRef.current.delete(id)
+      blockedQueuesRef.current.delete(id)
       notifyGenerationCancelled(id)
       if (loadingStateRef.current !== 'idle') {
         void cancelGenerationRef.current?.(
