@@ -349,6 +349,11 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
       } | null = null
       let didSetKey = false
       let rolledBack = false
+      // Set when the new key must be kept despite a thrown error
+      // (start_fresh already wiped the cloud under the new key, so
+      // rolling back would strand the account on a key that matches
+      // nothing server-side).
+      let keepNewKeyOnError = false
       try {
         previousKeys = encryptionService.getAllKeys()
         // Check both encryptionService (source of truth for the crypto layer) and
@@ -399,6 +404,9 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
             rolledBack = true
             throw authorizationError
           }
+          // The cloud is wiped and the new key registered — from here
+          // on the old key is unusable, so no error may roll back.
+          keepNewKeyOnError = true
           // §H4 — `start_fresh` wipes the cloud, so any local
           // `syncVersion` numbers no longer match a row anywhere.
           // Reset them all so the next push goes up as a fresh
@@ -416,14 +424,6 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
                 action: 'setEncryptionKey.resetSyncMetadata',
               },
             )
-            // The cloud is already wiped and the NEW key registered.
-            // Rolling back to the previous key here would strand the
-            // account: the old key matches nothing on the server any
-            // more. Commit the new key and surface the reset failure;
-            // the stale local sync metadata self-heals through CAS
-            // 409s on the next sync.
-            rolledBack = true
-            encryptionService.persistCurrentKeyState()
             throw resetError
           }
         }
@@ -486,7 +486,19 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
 
         return false // Key didn't change
       } catch (error) {
-        if (didSetKey && previousKeys && !rolledBack) {
+        if (keepNewKeyOnError) {
+          // Commit the accepted key and re-encrypt the passkey backup
+          // so a partial start_fresh failure (e.g. the local metadata
+          // reset) leaves the account on a fully usable new key. Any
+          // chats with stale syncVersions will surface CAS conflicts
+          // in the sync UI, where re-uploading resolves them — worse
+          // than a clean reset, but recoverable; a rolled-back key
+          // would not be.
+          encryptionService.persistCurrentKeyState()
+          if (hasPasskeyBackup()) {
+            onKeyChangedRef.current?.()
+          }
+        } else if (didSetKey && previousKeys && !rolledBack) {
           try {
             await rollbackToPreviousKeys(previousKeys)
           } catch (rollbackError) {
