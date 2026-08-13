@@ -85,6 +85,10 @@ export const sessionChatStorage = {
         if (chat?.id) this.clearStreamingDraft(chat.id)
         return
       }
+      if (deletedChatsTracker.isDeleted(chat.id)) {
+        this.clearStreamingDraft(chat.id)
+        return
+      }
       sessionStorage.setItem(getDraftKey(chat.id), JSON.stringify(chat))
     } catch (error) {
       logError('Failed to save chat streaming draft', error, {
@@ -137,6 +141,7 @@ export const sessionChatStorage = {
       }
 
       if (deletedChatsTracker.isDeleted(chat.id)) {
+        this.clearStreamingDraft(chat.id)
         return
       }
 

@@ -899,6 +899,8 @@ export function useChatMessaging({
         // persist) a conversation containing only this turn. Hydrate from
         // storage first so the send builds on the full history.
         if (updatedChat.isMetadataOnly && storeHistory) {
+          const summaryUpdatedAt = updatedChat.updatedAt
+          const summaryMessageCount = updatedChat.messageCount
           let hydratedChat: Chat | null = null
           try {
             hydratedChat = await chatStorage.getChat(updatedChat.id)
@@ -908,6 +910,28 @@ export function useChatMessaging({
               action: 'handleQuery.hydrateBeforeSend',
               metadata: { chatId: updatedChat.id },
             })
+          }
+          const latestTarget =
+            currentChatRef.current.id === targetChatId
+              ? currentChatRef.current
+              : chatsRef.current.find((chat) => chat.id === targetChatId)
+          if (
+            hydratedChat &&
+            latestTarget?.isMetadataOnly &&
+            (latestTarget.updatedAt !== summaryUpdatedAt ||
+              latestTarget.messageCount !== summaryMessageCount)
+          ) {
+            try {
+              hydratedChat = await chatStorage.getChat(updatedChat.id)
+              updatedChat = latestTarget
+            } catch (error) {
+              hydratedChat = null
+              logError('Failed to refresh chat before sending', error, {
+                component: 'useChatMessaging',
+                action: 'handleQuery.refreshBeforeSend',
+                metadata: { chatId: updatedChat.id },
+              })
+            }
           }
           const targetStillExists =
             !deletedChatsTracker.isDeleted(targetChatId) &&

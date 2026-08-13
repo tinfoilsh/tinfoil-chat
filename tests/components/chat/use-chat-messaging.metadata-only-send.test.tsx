@@ -199,6 +199,67 @@ describe('useChatMessaging metadata-only sends', () => {
     ).toContain('Earlier question')
   })
 
+  it('refreshes hydration when the stored summary changes during the read', async () => {
+    let resolveFirstHydration!: (chat: Chat) => void
+    const initialSummary = {
+      ...metadataOnlyChat(),
+      updatedAt: '2026-08-12T00:00:02.000Z',
+    }
+    const refreshedMessages = [
+      ...storedMessages,
+      {
+        role: 'user' as const,
+        content: 'Remote question',
+        timestamp: new Date('2026-08-12T00:00:03.000Z'),
+      },
+      {
+        role: 'assistant' as const,
+        content: 'Remote answer',
+        timestamp: new Date('2026-08-12T00:00:04.000Z'),
+      },
+    ]
+    const refreshedSummary = {
+      ...initialSummary,
+      updatedAt: '2026-08-12T00:00:05.000Z',
+      messageCount: refreshedMessages.length,
+    }
+    getChatMock
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirstHydration = resolve
+        }),
+      )
+      .mockResolvedValueOnce({
+        ...refreshedSummary,
+        messages: refreshedMessages,
+        isMetadataOnly: false,
+      })
+    const { result } = renderMessaging(initialSummary)
+    let send!: Promise<unknown>
+
+    act(() => {
+      send = result.current.messaging.handleQuery(
+        'New prompt',
+      ) as Promise<unknown>
+    })
+    act(() => {
+      result.current.setChats([refreshedSummary])
+      result.current.setCurrentChat(refreshedSummary)
+    })
+    await act(async () => resolveFirstHydration(hydratedChat()))
+    await act(async () => send)
+
+    expect(getChatMock).toHaveBeenCalledTimes(2)
+    const firstSave = saveExistingChatMock.mock.calls[0][0] as Chat
+    expect(firstSave.messages.map(({ content }) => content)).toEqual([
+      'Earlier question',
+      'Earlier answer',
+      'Remote question',
+      'Remote answer',
+      'New prompt',
+    ])
+  })
+
   it('does not persist anything when hydration fails', async () => {
     getChatMock.mockResolvedValue(null)
     const { result } = renderMessaging(metadataOnlyChat())

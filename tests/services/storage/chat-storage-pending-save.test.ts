@@ -1,5 +1,4 @@
 import type { Chat } from '@/components/chat/types'
-import { SYNC_SESSION_CHATS } from '@/constants/storage-keys'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { setCloudSyncEnabled } from '@/utils/cloud-sync-settings'
@@ -103,11 +102,28 @@ describe('chatStorage pendingSave is not persisted', () => {
   })
 
   it('does not recreate deleted guest chats in session storage', () => {
+    const chat = makeChat()
+    sessionChatStorage.saveStreamingDraft(chat)
     isDeletedSpy.mockReturnValue(true)
 
-    sessionChatStorage.saveChat(makeChat())
+    sessionChatStorage.saveChat(chat)
 
-    expect(sessionStorage.getItem(SYNC_SESSION_CHATS)).toBeNull()
+    expect(sessionChatStorage.getAllChats()).toEqual([])
+  })
+
+  it('does not recreate a deleted guest chat from a late streaming draft', () => {
+    const chat = makeChat()
+    sessionChatStorage.saveStreamingDraft(chat)
+    isDeletedSpy.mockReturnValue(true)
+
+    sessionChatStorage.saveStreamingDraft({
+      ...chat,
+      messages: [
+        { role: 'assistant', content: 'Late result', timestamp: new Date() },
+      ],
+    })
+
+    expect(sessionChatStorage.getAllChats()).toEqual([])
   })
 
   it('drops a stale persisted pendingSave when listing chats', async () => {
@@ -151,6 +167,7 @@ describe('chatStorage pendingSave is not persisted', () => {
 describe('chatStorage local-only classification', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    isDeletedSpy.mockReturnValue(false)
   })
 
   it('stores chats as local-only and skips backup while cloud sync is disabled', async () => {
@@ -188,6 +205,7 @@ describe('chatStorage local-only classification', () => {
 describe('chatStorage convertChatToLocal rollback', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    isDeletedSpy.mockReturnValue(false)
   })
 
   it('restores cloud classification when the cloud delete fails', async () => {

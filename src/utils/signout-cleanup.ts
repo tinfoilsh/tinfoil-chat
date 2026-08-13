@@ -11,6 +11,7 @@ import { cloudSync } from '@/services/cloud/cloud-sync'
 import { resetEditClockCache } from '@/services/cloud/edit-clock'
 import { profileSync } from '@/services/cloud/profile-sync'
 import { invalidateProfileSyncGeneration } from '@/services/cloud/profile-sync-coordinator'
+import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { resetSyncHealth } from '@/services/cloud/sync-health'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { resetChatRecoveryState } from '@/services/inference/chat-recovery'
@@ -59,6 +60,7 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   invalidateProfileSyncGeneration(true)
   projectCache.invalidate()
   cloudSync.resetForAccountChange()
+  streamingTracker.reset()
   authTokenManager.reset()
 
   // Clear encryption key immediately (in-memory + localStorage) before any
