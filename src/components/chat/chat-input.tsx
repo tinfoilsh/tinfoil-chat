@@ -280,8 +280,31 @@ export function ChatInput({
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const recordingSessionRef = useRef(0)
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    const recordingSession = recordingSessionRef
+    return () => {
+      recordingSession.current++
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current)
+        recordingTimeoutRef.current = null
+      }
+      const recorder = mediaRecorderRef.current
+      if (recorder) {
+        recorder.ondataavailable = null
+        recorder.onstop = null
+        if (recorder.state !== 'inactive') recorder.stop()
+        mediaRecorderRef.current = null
+      }
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
+      mediaStreamRef.current = null
+      audioChunksRef.current = []
+    }
+  }, [])
 
   // --- Input options menu state (the "+" button) ---
   const [isInputMenuOpen, setIsInputMenuOpen] = useState(false)
@@ -539,8 +562,10 @@ export function ChatInput({
   }
 
   const startRecording = useCallback(async () => {
+    const recordingSession = ++recordingSessionRef.current
+    let stream: MediaStream | null = null
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
           sampleRate: 44100,
@@ -548,6 +573,11 @@ export function ChatInput({
           noiseSuppression: true,
         },
       })
+      if (recordingSession !== recordingSessionRef.current) {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
+      mediaStreamRef.current = stream
 
       if (!isWebMAudioSupported()) {
         throw new Error('WebM audio recording is not supported in this browser')
@@ -569,7 +599,8 @@ export function ChatInput({
       mediaRecorder.onstop = async () => {
         try {
           // Stop all tracks
-          stream.getTracks().forEach((track) => track.stop())
+          stream?.getTracks().forEach((track) => track.stop())
+          if (mediaStreamRef.current === stream) mediaStreamRef.current = null
 
           // Create WebM blob
           const webmBlob = new Blob(audioChunksRef.current, {
@@ -606,6 +637,9 @@ export function ChatInput({
         stopRecording()
       }, CONSTANTS.RECORDING_TIMEOUT_MS)
     } catch (err) {
+      stream?.getTracks().forEach((track) => track.stop())
+      if (mediaStreamRef.current === stream) mediaStreamRef.current = null
+      if (recordingSession !== recordingSessionRef.current) return
       toast({
         title: 'Recording Error',
         description:

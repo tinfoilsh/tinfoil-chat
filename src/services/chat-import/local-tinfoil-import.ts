@@ -1,10 +1,7 @@
-import { strFromU8, unzipSync } from 'fflate'
-
 import type { Attachment, Chat, Message } from '@/components/chat/types'
 import { uint8ArrayToBase64 } from '@/utils/binary-codec'
+import { LOCAL_IMPORT_WORKER_TIMEOUT_MS } from './constants'
 
-const CONVERSATIONS_FILE = 'conversations.json'
-const MANIFEST_FILE = 'manifest.json'
 export const LOCAL_IMPORT_MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 
 interface TinfoilExportedAttachment {
@@ -39,15 +36,58 @@ interface TinfoilExportedConversation {
 export interface LocalTinfoilImportOptions {
   generateChatId: (createdAt?: Date) => string
   isCloudSyncEnabled: boolean
+  signal?: AbortSignal
 }
 
-function isZip(file: File): boolean {
+interface ImportWorkerResponse {
+  ok: boolean
+  conversations?: TinfoilExportedConversation[]
+  entries?: Record<string, Uint8Array>
+  error?: string
+}
+
+export class LocalImportBackgroundProcessingUnavailableError extends Error {
+  readonly code = 'LOCAL_IMPORT_BACKGROUND_PROCESSING_UNAVAILABLE'
+
+  constructor(options?: ErrorOptions) {
+    super(
+      'Background file processing is unavailable in this browser. Please try a supported browser.',
+      options,
+    )
+    this.name = 'LocalImportBackgroundProcessingUnavailableError'
+  }
+}
+
+export class LocalImportWorkerTimeoutError extends Error {
+  constructor() {
+    super('The export took too long to process')
+    this.name = 'LocalImportWorkerTimeoutError'
+  }
+}
+
+function getAbortError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException('The import was cancelled', 'AbortError')
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw getAbortError(signal)
+}
+
+function isImportWorkerResponse(value: unknown): value is ImportWorkerResponse {
   return (
-    file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip'
+    typeof value === 'object' &&
+    value !== null &&
+    'ok' in value &&
+    typeof value.ok === 'boolean'
   )
 }
 
-async function readExport(file: File): Promise<{
+async function readExport(
+  file: File,
+  signal?: AbortSignal,
+): Promise<{
   conversations: TinfoilExportedConversation[]
   entries?: Record<string, Uint8Array>
 }> {
@@ -57,41 +97,120 @@ async function readExport(file: File): Promise<{
   if (file.size > LOCAL_IMPORT_MAX_ARCHIVE_BYTES) {
     throw new Error('The export file is too large')
   }
+  throwIfAborted(signal)
+  if (typeof Worker === 'undefined') {
+    throw new LocalImportBackgroundProcessingUnavailableError()
+  }
+  return readExportInWorker(file, signal)
+}
 
-  if (!isZip(file)) {
-    const conversations = JSON.parse(await file.text())
-    if (!Array.isArray(conversations)) {
-      throw new Error('Invalid Tinfoil export format')
-    }
-    return { conversations }
+async function readExportInWorker(
+  file: File,
+  signal?: AbortSignal,
+): Promise<{
+  conversations: TinfoilExportedConversation[]
+  entries?: Record<string, Uint8Array>
+}> {
+  throwIfAborted(signal)
+  const buffer = await file.arrayBuffer()
+  throwIfAborted(signal)
+  let worker: Worker
+  try {
+    worker = new Worker(
+      new URL('./local-tinfoil-import.worker.ts', import.meta.url),
+    )
+  } catch (error) {
+    throw new LocalImportBackgroundProcessingUnavailableError({ cause: error })
   }
 
-  let uncompressedBytes = 0
-  const entries = unzipSync(new Uint8Array(await file.arrayBuffer()), {
-    filter: (entry) => {
-      const isImportEntry =
-        entry.name === CONVERSATIONS_FILE ||
-        entry.name === MANIFEST_FILE ||
-        entry.name.startsWith('attachments/')
-      if (!isImportEntry) return false
+  return new Promise((resolve, reject) => {
+    let settled = false
+    let timeout: ReturnType<typeof setTimeout> | null = null
 
-      uncompressedBytes += entry.originalSize
-      if (uncompressedBytes > LOCAL_IMPORT_MAX_ARCHIVE_BYTES) {
-        throw new Error('The uncompressed export is too large')
+    const cleanup = () => {
+      if (timeout !== null) {
+        clearTimeout(timeout)
+        timeout = null
       }
-      return true
-    },
-  })
-  const conversationsEntry = entries[CONVERSATIONS_FILE]
-  if (!conversationsEntry) {
-    throw new Error('The Tinfoil export is missing conversations.json')
-  }
+      worker.onmessage = null
+      worker.onerror = null
+      worker.onmessageerror = null
+      signal?.removeEventListener('abort', handleAbort)
+      worker.terminate()
+    }
+    const settle = (action: () => void) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      action()
+    }
+    const handleAbort = () => {
+      settle(() => reject(getAbortError(signal!)))
+    }
 
-  const conversations = JSON.parse(strFromU8(conversationsEntry))
-  if (!Array.isArray(conversations)) {
-    throw new Error('Invalid Tinfoil export format')
-  }
-  return { conversations, entries }
+    worker.onmessage = (event: MessageEvent<ImportWorkerResponse>) => {
+      if (settled) return
+      const response: unknown = event.data
+      if (!isImportWorkerResponse(response)) {
+        settle(() =>
+          reject(new LocalImportBackgroundProcessingUnavailableError()),
+        )
+        return
+      }
+      const conversations = response.conversations
+      if (!response.ok || !conversations || !Array.isArray(conversations)) {
+        settle(() =>
+          reject(new Error(response.error ?? 'Invalid Tinfoil export format')),
+        )
+        return
+      }
+      settle(() =>
+        resolve({
+          conversations,
+          entries: response.entries,
+        }),
+      )
+    }
+    worker.onerror = (event) => {
+      settle(() =>
+        reject(
+          new LocalImportBackgroundProcessingUnavailableError({
+            cause: event.error,
+          }),
+        ),
+      )
+    }
+    worker.onmessageerror = () => {
+      settle(() =>
+        reject(new LocalImportBackgroundProcessingUnavailableError()),
+      )
+    }
+    timeout = setTimeout(() => {
+      settle(() => reject(new LocalImportWorkerTimeoutError()))
+    }, LOCAL_IMPORT_WORKER_TIMEOUT_MS)
+    if (signal?.aborted) {
+      handleAbort()
+      return
+    }
+    signal?.addEventListener('abort', handleAbort, { once: true })
+    try {
+      worker.postMessage(
+        {
+          buffer,
+          fileName: file.name,
+          mimeType: file.type,
+          maxArchiveBytes: LOCAL_IMPORT_MAX_ARCHIVE_BYTES,
+        },
+        [buffer],
+      )
+    } catch (error) {
+      settle(() =>
+        reject(
+          new LocalImportBackgroundProcessingUnavailableError({ cause: error }),
+        ),
+      )
+    }
+  })
 }
 
 function importAttachment(
@@ -123,7 +242,7 @@ export async function parseLocalTinfoilExport(
   file: File,
   options: LocalTinfoilImportOptions,
 ): Promise<Chat[]> {
-  const { conversations, entries } = await readExport(file)
+  const { conversations, entries } = await readExport(file, options.signal)
   const chats: Chat[] = []
 
   for (const conversation of conversations) {
