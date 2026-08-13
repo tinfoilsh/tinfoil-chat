@@ -7,6 +7,8 @@ import {
 } from '@/constants/storage-keys'
 import { AuthTokenUnavailableError } from '@/services/auth'
 import {
+  CloudSyncCoordinationUnavailableError,
+  CloudSyncDisabledError,
   CloudSyncLifecycleCanceledError,
   CloudSyncService,
   CROSS_TAB_SYNC_LOCK,
@@ -229,6 +231,15 @@ vi.mock('@/services/cloud/legacy-chat-eviction', () => ({
 describe('CloudSyncService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal('navigator', {
+      locks: {
+        request: async (
+          _name: string,
+          _options: LockOptions,
+          callback: (lock: Lock) => Promise<unknown>,
+        ) => callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' }),
+      },
+    })
     localStorage.setItem(SETTINGS_CLOUD_SYNC_ENABLED, 'true')
     localStorage.removeItem(SYNC_CHAT_STATUS)
     localStorage.removeItem(SYNC_CHAT_DELETES_WATERMARK)
@@ -442,24 +453,25 @@ describe('CloudSyncService', () => {
     await expect(first).resolves.toBe('first')
   })
 
-  it('falls back to the in-tab lock when Web Locks are unavailable', async () => {
+  it('fails before sync work when Web Locks are unavailable', async () => {
     vi.stubGlobal('navigator', {})
     const service = new CloudSyncService()
+    const sync = vi.fn(async () => 'synced')
 
-    let finishFirst!: () => void
-    const first = (service as any).withSyncLock(
-      () =>
-        new Promise<string>((resolve) => {
-          finishFirst = () => resolve('first')
-        }),
-    ) as Promise<string>
+    await expect((service as any).withSyncLock(sync)).rejects.toBeInstanceOf(
+      CloudSyncCoordinationUnavailableError,
+    )
+    expect(sync).not.toHaveBeenCalled()
+    expect(service.syncing).toBe(false)
+  })
+
+  it('handles non-browser sync callers without requiring Web Locks', async () => {
+    const service = new CloudSyncService()
+    vi.stubGlobal('window', undefined)
 
     await expect(
-      (service as any).withSyncLock(async () => 'second'),
-    ).rejects.toBeInstanceOf(SyncInProgressError)
-
-    finishFirst()
-    await expect(first).resolves.toBe('first')
+      (service as any).withSyncLock(async () => 'synced'),
+    ).rejects.toBeInstanceOf(CloudSyncDisabledError)
   })
 
   it('releases tracked state when the Web Locks request is rejected', async () => {
@@ -479,7 +491,8 @@ describe('CloudSyncService', () => {
     vi.stubGlobal('navigator', {})
     await expect(
       (service as any).withSyncLock(async () => 'fallback'),
-    ).resolves.toBe('fallback')
+    ).rejects.toBeInstanceOf(CloudSyncCoordinationUnavailableError)
+    expect(service.syncing).toBe(false)
   })
 
   it('cancels a never-granted lock on opt-out and syncs after re-enable', async () => {

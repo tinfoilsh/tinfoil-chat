@@ -9,15 +9,21 @@
 import { SYNC_EDIT_CLOCK } from '@/constants/storage-keys'
 import {
   deviceId,
+  EditClockRandomnessUnavailableError,
   nextClock,
   observe,
   resetEditClockCache,
 } from '@/services/cloud/edit-clock'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 beforeEach(() => {
   localStorage.clear()
   resetEditClockCache()
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('edit clock', () => {
@@ -51,6 +57,33 @@ describe('edit clock', () => {
     expect(id).toBeTruthy()
     expect(deviceId()).toBe(id)
     expect(nextClock().w).toBe(id)
+  })
+
+  it('fails explicitly when secure randomness is unavailable', () => {
+    vi.stubGlobal('crypto', {})
+
+    expect(() => deviceId()).toThrow(EditClockRandomnessUnavailableError)
+  })
+
+  it('uses strong in-memory IDs when local storage is unavailable', () => {
+    const randomUUID = vi
+      .spyOn(globalThis.crypto, 'randomUUID')
+      .mockReturnValueOnce('11111111-1111-4111-8111-111111111111')
+      .mockReturnValueOnce('22222222-2222-4222-8222-222222222222')
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('Storage unavailable', 'SecurityError')
+    })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage unavailable', 'SecurityError')
+    })
+
+    const id = deviceId()
+
+    expect(id).toBe(
+      '22222222-2222-4222-8222-222222222222.11111111-1111-4111-8111-111111111111',
+    )
+    expect(deviceId()).toBe(id)
+    expect(randomUUID).toHaveBeenCalledTimes(2)
   })
 
   it('persists the counter across cache resets via storage', () => {

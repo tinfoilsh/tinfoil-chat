@@ -92,6 +92,13 @@ export class CloudSyncDisabledError extends Error {
   }
 }
 
+export class CloudSyncCoordinationUnavailableError extends Error {
+  constructor() {
+    super('Cross-tab cloud synchronization coordination is unavailable')
+    this.name = 'CloudSyncCoordinationUnavailableError'
+  }
+}
+
 export class CloudSyncLifecycleCanceledError extends Error {
   readonly code = 'CLOUD_SYNC_LIFECYCLE_CANCELED'
 
@@ -296,8 +303,11 @@ export class CloudSyncService {
       return fn()
     }
 
-    if (typeof navigator === 'undefined' || !navigator.locks) {
+    if (typeof window === 'undefined') {
       return this.trackSync(runIfCurrent)
+    }
+    if (typeof navigator === 'undefined' || !navigator.locks) {
+      throw new CloudSyncCoordinationUnavailableError()
     }
 
     // Queue for the cross-tab lock instead of skipping so callers that

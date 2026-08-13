@@ -24,6 +24,13 @@ export interface EditClock {
   w: string
 }
 
+export class EditClockRandomnessUnavailableError extends Error {
+  constructor() {
+    super('Secure edit clock identifier generation is unavailable')
+    this.name = 'EditClockRandomnessUnavailableError'
+  }
+}
+
 // Upper bound for the logical counter. Far above any value a legitimate
 // edit history could reach, yet capped at the JS safe-integer ceiling so
 // the counter never loses precision and an observed remote value can
@@ -46,14 +53,12 @@ function safeCounter(value?: number | null): number {
 
 function randomId(): string {
   if (
-    typeof crypto !== 'undefined' &&
-    typeof crypto.randomUUID === 'function'
+    typeof crypto === 'undefined' ||
+    typeof crypto.randomUUID !== 'function'
   ) {
-    return crypto.randomUUID()
+    throw new EditClockRandomnessUnavailableError()
   }
-  // Non-crypto fallback for environments without randomUUID. The id is
-  // only a tiebreak label, never a security boundary.
-  return `dev-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  return crypto.randomUUID()
 }
 
 // Persisted per-installation id, reused for the life of the browser
