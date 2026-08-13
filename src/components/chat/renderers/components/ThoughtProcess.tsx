@@ -8,7 +8,16 @@ import {
 } from '@/utils/latex-processing'
 import { preprocessMarkdown } from '@/utils/markdown-preprocessing'
 import { sanitizeUrl } from '@braintree/sanitize-url'
-import { memo, useCallback, useEffect, useId, useRef, useState } from 'react'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useMathPlugins } from './use-math-plugins'
 
@@ -28,6 +37,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   thinkingDuration,
 }: ThoughtProcessProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [renderContent, setRenderContent] = useState(false)
   const contentId = useId()
 
   const contentRef = useRef<HTMLDivElement>(null)
@@ -44,6 +54,14 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   const handleToggle = () => {
     setIsExpanded((prev) => !prev)
   }
+
+  useEffect(() => {
+    if (isExpanded) {
+      setRenderContent(true)
+    } else if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setRenderContent(false)
+    }
+  }, [isExpanded])
 
   const generateSummary = useCallback(
     async (
@@ -221,8 +239,15 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   }, [isThinking])
 
   // Measure content height for smooth animation
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (contentRef.current) {
+      const measuredHeight = contentRef.current.scrollHeight
+      setContentHeight((prevHeight) =>
+        // Same never-shrink guard as the ResizeObserver below: this effect
+        // re-runs on every streaming chunk, and shrinking mid-stream causes
+        // scroll resets when content temporarily contracts.
+        isThinking ? Math.max(prevHeight, measuredHeight) : measuredHeight,
+      )
       const resizeObserver = new ResizeObserver(() => {
         if (contentRef.current) {
           setContentHeight((prevHeight) => {
@@ -239,12 +264,15 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       resizeObserver.observe(contentRef.current)
       return () => resizeObserver.disconnect()
     }
-  }, [thoughts, isThinking])
+  }, [thoughts, isThinking, isExpanded, renderContent])
 
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
-  const preprocessed = preprocessMarkdown(thoughts)
-  const processedThoughts = processLatexTags(preprocessed)
-  const sanitizedThoughts = sanitizeUnsupportedMathBlocks(processedThoughts)
+  const sanitizedThoughts = useMemo(() => {
+    if (!renderContent) return ''
+    const preprocessed = preprocessMarkdown(thoughts)
+    const processedThoughts = processLatexTags(preprocessed)
+    return sanitizeUnsupportedMathBlocks(processedThoughts)
+  }, [renderContent, thoughts])
 
   if (shouldDiscard || (!thoughts.trim() && !isThinking)) {
     return null
@@ -322,101 +350,108 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         style={{
           maxHeight: isExpanded ? `${contentHeight}px` : '0px',
         }}
+        onTransitionEnd={(event) => {
+          if (event.target === event.currentTarget && !isExpanded) {
+            setRenderContent(false)
+          }
+        }}
       >
-        <div
-          ref={contentRef}
-          className="ml-2 border-l-2 border-border-subtle py-2 pl-3 pr-1 text-sm text-content-primary/70"
-          translate="no"
-        >
-          <ReactMarkdown
-            remarkPlugins={remarkPlugins}
-            rehypePlugins={rehypePlugins}
-            components={{
-              p: ({ children }: { children?: React.ReactNode }) => (
-                <p className="mb-1.5 break-words last:mb-0">{children}</p>
-              ),
-              pre: ({ children }: { children?: React.ReactNode }) => (
-                <pre className="my-1.5 overflow-x-auto rounded-md border border-border-subtle bg-surface-chat p-2.5 font-mono text-[11px] text-content-primary">
-                  {children}
-                </pre>
-              ),
-              code: ({
-                inline,
-                children,
-              }: {
-                inline?: boolean
-                children?: React.ReactNode
-              }) =>
-                inline ? (
-                  <code className="inline break-words rounded border border-border-subtle bg-surface-chat px-1 py-0.5 align-baseline font-mono text-[11px] text-content-primary">
-                    {children}
-                  </code>
-                ) : (
-                  <code className="block break-all font-mono text-[11px] text-content-primary">
-                    {children}
-                  </code>
+        {renderContent && (
+          <div
+            ref={contentRef}
+            className="ml-2 border-l-2 border-border-subtle py-2 pl-3 pr-1 text-sm text-content-primary/70"
+            translate="no"
+          >
+            <ReactMarkdown
+              remarkPlugins={remarkPlugins}
+              rehypePlugins={rehypePlugins}
+              components={{
+                p: ({ children }: { children?: React.ReactNode }) => (
+                  <p className="mb-1.5 break-words last:mb-0">{children}</p>
                 ),
-              a: ({ children, href }: any) => {
-                if (href?.startsWith('#cite-')) {
-                  const tildeIndex = href.indexOf('~')
-                  if (tildeIndex !== -1) {
-                    const rest = href.slice(tildeIndex + 1)
-                    const secondTildeIndex = rest.indexOf('~')
-                    if (secondTildeIndex !== -1) {
-                      const url = rest.slice(0, secondTildeIndex)
-                      let title: string
-                      try {
-                        title = decodeURIComponent(
-                          rest.slice(secondTildeIndex + 1),
+                pre: ({ children }: { children?: React.ReactNode }) => (
+                  <pre className="my-1.5 overflow-x-auto rounded-md border border-border-subtle bg-surface-chat p-2.5 font-mono text-[11px] text-content-primary">
+                    {children}
+                  </pre>
+                ),
+                code: ({
+                  inline,
+                  children,
+                }: {
+                  inline?: boolean
+                  children?: React.ReactNode
+                }) =>
+                  inline ? (
+                    <code className="inline break-words rounded border border-border-subtle bg-surface-chat px-1 py-0.5 align-baseline font-mono text-[11px] text-content-primary">
+                      {children}
+                    </code>
+                  ) : (
+                    <code className="block break-all font-mono text-[11px] text-content-primary">
+                      {children}
+                    </code>
+                  ),
+                a: ({ children, href }: any) => {
+                  if (href?.startsWith('#cite-')) {
+                    const tildeIndex = href.indexOf('~')
+                    if (tildeIndex !== -1) {
+                      const rest = href.slice(tildeIndex + 1)
+                      const secondTildeIndex = rest.indexOf('~')
+                      if (secondTildeIndex !== -1) {
+                        const url = rest.slice(0, secondTildeIndex)
+                        let title: string
+                        try {
+                          title = decodeURIComponent(
+                            rest.slice(secondTildeIndex + 1),
+                          )
+                        } catch {
+                          title = rest.slice(secondTildeIndex + 1)
+                        }
+                        const sanitizedHref = sanitizeUrl(url)
+                        return (
+                          <a
+                            href={sanitizedHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mx-0.5 inline-flex h-[1.5em] items-center gap-1 whitespace-nowrap rounded-full bg-blue-500/10 px-1.5 !align-baseline text-[10px] font-medium text-blue-500 transition-colors hover:bg-blue-500/20"
+                            title={title || url}
+                          >
+                            {children}
+                          </a>
                         )
-                      } catch {
-                        title = rest.slice(secondTildeIndex + 1)
                       }
-                      const sanitizedHref = sanitizeUrl(url)
+                      const sanitizedHref = sanitizeUrl(rest)
                       return (
                         <a
                           href={sanitizedHref}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="mx-0.5 inline-flex h-[1.5em] items-center gap-1 whitespace-nowrap rounded-full bg-blue-500/10 px-1.5 !align-baseline text-[10px] font-medium text-blue-500 transition-colors hover:bg-blue-500/20"
-                          title={title || url}
                         >
                           {children}
                         </a>
                       )
                     }
-                    const sanitizedHref = sanitizeUrl(rest)
-                    return (
-                      <a
-                        href={sanitizedHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mx-0.5 inline-flex h-[1.5em] items-center gap-1 whitespace-nowrap rounded-full bg-blue-500/10 px-1.5 !align-baseline text-[10px] font-medium text-blue-500 transition-colors hover:bg-blue-500/20"
-                      >
-                        {children}
-                      </a>
-                    )
                   }
-                }
-                if (!href) {
-                  return <span>{children}</span>
-                }
-                return (
-                  <a
-                    href={sanitizeUrl(href)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 underline hover:text-blue-600"
-                  >
-                    {children}
-                  </a>
-                )
-              },
-            }}
-          >
-            {sanitizedThoughts}
-          </ReactMarkdown>
-        </div>
+                  if (!href) {
+                    return <span>{children}</span>
+                  }
+                  return (
+                    <a
+                      href={sanitizeUrl(href)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500 underline hover:text-blue-600"
+                    >
+                      {children}
+                    </a>
+                  )
+                },
+              }}
+            >
+              {sanitizedThoughts}
+            </ReactMarkdown>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -31,6 +31,23 @@ describe('AnimationFramePublisher', () => {
     await vi.waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(2))
   })
 
+  it('materializes only the latest queued frame value', async () => {
+    const onUpdate = vi.fn()
+    const staleFactory = vi.fn(() => 'stale')
+    const latestFactory = vi.fn(() => 'latest')
+    const publisher = new AnimationFramePublisher<string>(onUpdate)
+
+    publisher.publish('leading')
+    publisher.publishLazy(staleFactory)
+    publisher.publishLazy(latestFactory)
+    frames.shift()?.(performance.now())
+    await vi.waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(2))
+
+    expect(staleFactory).not.toHaveBeenCalled()
+    expect(latestFactory).toHaveBeenCalledOnce()
+    expect(onUpdate).toHaveBeenLastCalledWith('latest')
+  })
+
   it('publishes a final undefined value while hidden', async () => {
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
     const onUpdate = vi.fn()

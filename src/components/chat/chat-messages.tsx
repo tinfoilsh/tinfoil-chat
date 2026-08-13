@@ -327,6 +327,9 @@ export function ChatMessages({
   const printRef = useRef<HTMLDivElement>(null)
   const printReadyResolverRef = useRef<(() => void) | null>(null)
   const [printRequested, setPrintRequested] = useState(false)
+  const [expandedArchiveChatId, setExpandedArchiveChatId] = useState<
+    string | null
+  >(null)
 
   const preparePrint = useCallback(async () => {
     await new Promise<void>((resolve) => {
@@ -407,20 +410,16 @@ export function ChatMessages({
   }, [models, selectedModel])
 
   // Separate messages into archived and live sections - memoize this calculation
-  const { archivedMessages, liveMessages } = useMemo(() => {
+  const computedArchiveStartIndex = useMemo(() => {
     const budget = getHistoryTokenBudget(
       contextWindowTokens ??
         resolveContextWindowTokens(currentModel ?? undefined),
       pendingContextTokens,
     )
-    const startIndex = findContextStartIndex(messages, budget, {
+    return findContextStartIndex(messages, budget, {
       reasoningHistoryPolicy,
       keepMostRecent: pendingContextTokens === 0,
     })
-    return {
-      archivedMessages: messages.slice(0, startIndex),
-      liveMessages: messages.slice(startIndex),
-    }
   }, [
     messages,
     contextWindowTokens,
@@ -428,6 +427,55 @@ export function ChatMessages({
     reasoningHistoryPolicy,
     pendingContextTokens,
   ])
+  const [archiveBoundary, setArchiveBoundary] = useState(() => ({
+    chatId,
+    initialized: messages.length > 0,
+    startIndex: computedArchiveStartIndex,
+  }))
+  let archiveStartIndex: number
+  if (archiveBoundary.chatId !== chatId) {
+    archiveStartIndex = computedArchiveStartIndex
+    setArchiveBoundary({
+      chatId,
+      initialized: messages.length > 0,
+      startIndex: archiveStartIndex,
+    })
+  } else if (messages.length === 0) {
+    archiveStartIndex = 0
+    if (archiveBoundary.initialized || archiveBoundary.startIndex !== 0) {
+      setArchiveBoundary({
+        chatId,
+        initialized: false,
+        startIndex: 0,
+      })
+    }
+  } else if (!archiveBoundary.initialized && messages.length > 0) {
+    archiveStartIndex = computedArchiveStartIndex
+    setArchiveBoundary({
+      chatId,
+      initialized: true,
+      startIndex: archiveStartIndex,
+    })
+  } else {
+    archiveStartIndex = Math.min(
+      archiveBoundary.startIndex,
+      computedArchiveStartIndex,
+      messages.length,
+    )
+    if (archiveStartIndex !== archiveBoundary.startIndex) {
+      setArchiveBoundary({
+        ...archiveBoundary,
+        startIndex: archiveStartIndex,
+      })
+    }
+  }
+  const { archivedMessages, liveMessages } = useMemo(
+    () => ({
+      archivedMessages: messages.slice(0, archiveStartIndex),
+      liveMessages: messages.slice(archiveStartIndex),
+    }),
+    [archiveStartIndex, messages],
+  )
 
   useEffect(() => {
     setMounted(true)
@@ -510,6 +558,24 @@ export function ChatMessages({
       pendingRecoveryTurnIds.has(turnId),
     ),
   )
+  const activeOrDraftingRecoveryTurns = new Set(activeRecoveryTurns)
+  for (const draft of recoveryDrafts) {
+    if (pendingRecoveryTurnIds.has(draft.turnId)) {
+      activeOrDraftingRecoveryTurns.add(draft.turnId)
+    }
+  }
+  const archiveHasActiveRecovery = archivedMessages.some(
+    (message) =>
+      message.turnId !== undefined &&
+      activeOrDraftingRecoveryTurns.has(message.turnId),
+  )
+  // Latch the archive open while a recovery streams into it, so the recovered
+  // turn stays visible after its envelope clears instead of collapsing away.
+  if (archiveHasActiveRecovery && expandedArchiveChatId !== chatId) {
+    setExpandedArchiveChatId(chatId)
+  }
+  const showArchivedMessages =
+    expandedArchiveChatId === chatId || archiveHasActiveRecovery
   const hasActiveRecovery =
     activeRecoveryTurns.size > 0 ||
     recoveryDrafts.some((draft) => pendingRecoveryTurnIds.has(draft.turnId))
@@ -579,40 +645,56 @@ export function ChatMessages({
         {/* Archived Messages - only shown if there are more than the max prompt messages */}
         {archivedMessages.length > 0 && (
           <>
-            <div className={`opacity-70`}>
-              {archivedMessages.map((message, i) => {
-                const key = getMessageKey(`${chatId}-archived`, message, i)
-                const recoveryDraft = recoveryDraftForMessage(message)
-                return (
-                  <React.Fragment key={key}>
-                    <ChatMessage
-                      message={recoveryDraft ?? message}
-                      messageIndex={i}
-                      model={currentModel}
-                      isDarkMode={isDarkMode}
-                      isLastMessage={Boolean(recoveryDraft)}
-                      isStreaming={Boolean(recoveryDraft)}
-                      activeArtifactToolCallId={getMessageActiveArtifactToolCallId(
-                        recoveryDraft ?? message,
-                        activeArtifactToolCallId,
-                      )}
-                      onEditMessage={recoveryDraft ? undefined : onEditMessage}
-                      onRegenerateMessage={
-                        recoveryDraft ? undefined : onRegenerateMessage
-                      }
-                      onRetryToolCall={
-                        recoveryDraft ? undefined : onRetryToolCall
-                      }
-                    />
-                    {showRecoveryStatusAfter(message) && <RecoveryMessage />}
-                    {renderRecoveryAfter(message, i)}
-                  </React.Fragment>
-                )
-              })}
-            </div>
+            {!showArchivedMessages && (
+              <div className="flex justify-center px-4 pb-8">
+                <button
+                  type="button"
+                  onClick={() => setExpandedArchiveChatId(chatId)}
+                  className="hover:bg-surface-secondary rounded-full border border-border-subtle bg-surface-chat px-4 py-2 text-sm text-content-secondary transition-colors hover:text-content-primary"
+                >
+                  Show {archivedMessages.length} earlier messages
+                </button>
+              </div>
+            )}
+            {showArchivedMessages && (
+              <div className="opacity-70">
+                {archivedMessages.map((message, i) => {
+                  const key = getMessageKey(`${chatId}-archived`, message, i)
+                  const recoveryDraft = recoveryDraftForMessage(message)
+                  return (
+                    <React.Fragment key={key}>
+                      <ChatMessage
+                        message={recoveryDraft ?? message}
+                        messageIndex={i}
+                        model={currentModel}
+                        isDarkMode={isDarkMode}
+                        isLastMessage={Boolean(recoveryDraft)}
+                        isStreaming={Boolean(recoveryDraft)}
+                        activeArtifactToolCallId={getMessageActiveArtifactToolCallId(
+                          recoveryDraft ?? message,
+                          activeArtifactToolCallId,
+                        )}
+                        onEditMessage={
+                          recoveryDraft ? undefined : onEditMessage
+                        }
+                        onRegenerateMessage={
+                          recoveryDraft ? undefined : onRegenerateMessage
+                        }
+                        onRetryToolCall={
+                          recoveryDraft ? undefined : onRetryToolCall
+                        }
+                      />
+                      {showRecoveryStatusAfter(message) && <RecoveryMessage />}
+                      {renderRecoveryAfter(message, i)}
+                    </React.Fragment>
+                  )
+                })}
+              </div>
+            )}
 
-            {/* Separator */}
-            <MessagesSeparator isDarkMode={isDarkMode} />
+            {showArchivedMessages && (
+              <MessagesSeparator isDarkMode={isDarkMode} />
+            )}
           </>
         )}
 

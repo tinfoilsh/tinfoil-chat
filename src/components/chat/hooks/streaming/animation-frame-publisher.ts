@@ -3,8 +3,7 @@ type UpdateCallback<T> = (value: T) => void | Promise<void>
 export class AnimationFramePublisher<T> {
   private leadingPublished = false
   private cancelled = false
-  private pendingValue: T | undefined
-  private hasPendingValue = false
+  private pendingFactory: (() => T) | null = null
   private frameId: number | null = null
   private frameCompletion: Promise<void> | null = null
   private resolveFrame: (() => void) | null = null
@@ -13,14 +12,17 @@ export class AnimationFramePublisher<T> {
   constructor(private readonly onUpdate: UpdateCallback<T>) {}
 
   publish(value: T): void {
+    this.publishLazy(() => value)
+  }
+
+  publishLazy(factory: () => T): void {
     if (this.cancelled) return
     if (!this.leadingPublished) {
       this.leadingPublished = true
-      this.publication = this.invoke(value)
+      this.publication = this.invoke(factory())
       return
     }
-    this.pendingValue = value
-    this.hasPendingValue = true
+    this.pendingFactory = factory
     if (this.frameCompletion === null) this.scheduleFrame()
   }
 
@@ -29,8 +31,7 @@ export class AnimationFramePublisher<T> {
     if (!this.leadingPublished) {
       this.publish(value)
     } else {
-      this.pendingValue = value
-      this.hasPendingValue = true
+      this.pendingFactory = () => value
       if (document.visibilityState === 'hidden') this.publishPendingNow()
       else if (this.frameCompletion === null) this.scheduleFrame()
     }
@@ -49,8 +50,7 @@ export class AnimationFramePublisher<T> {
 
   cancel(): void {
     this.cancelled = true
-    this.pendingValue = undefined
-    this.hasPendingValue = false
+    this.pendingFactory = null
     if (this.frameId !== null) cancelAnimationFrame(this.frameId)
     this.frameId = null
     this.resolveFrame?.()
@@ -65,17 +65,15 @@ export class AnimationFramePublisher<T> {
     const completion = this.frameCompletion
     this.frameId = requestAnimationFrame(() => {
       this.frameId = null
-      const value = this.pendingValue
-      this.pendingValue = undefined
-      const hasValue = this.hasPendingValue
-      this.hasPendingValue = false
-      if (this.cancelled || !hasValue) {
+      const factory = this.pendingFactory
+      this.pendingFactory = null
+      if (this.cancelled || !factory) {
         this.finishFrame(completion)
         return
       }
       this.publication = this.publication.then(() => {
         if (this.cancelled) return
-        return this.onUpdate(value as T)
+        return this.onUpdate(factory())
       })
       void this.publication.then(
         () => this.finishFrame(completion),
@@ -97,11 +95,10 @@ export class AnimationFramePublisher<T> {
   }
 
   private publishPendingNow(): void {
-    if (!this.hasPendingValue) return
-    const value = this.pendingValue as T
+    const factory = this.pendingFactory
+    if (!factory) return
 
-    this.pendingValue = undefined
-    this.hasPendingValue = false
+    this.pendingFactory = null
     if (this.frameId !== null) cancelAnimationFrame(this.frameId)
     this.frameId = null
     this.resolveFrame?.()
@@ -109,7 +106,7 @@ export class AnimationFramePublisher<T> {
     this.frameCompletion = null
     this.publication = this.publication.then(() => {
       if (this.cancelled) return
-      return this.onUpdate(value)
+      return this.onUpdate(factory())
     })
   }
 
@@ -118,6 +115,6 @@ export class AnimationFramePublisher<T> {
     this.resolveFrame?.()
     this.resolveFrame = null
     this.frameCompletion = null
-    if (!this.cancelled && this.hasPendingValue) this.scheduleFrame()
+    if (!this.cancelled && this.pendingFactory) this.scheduleFrame()
   }
 }

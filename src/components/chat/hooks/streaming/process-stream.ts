@@ -47,7 +47,7 @@ export async function processStreamingResponse(
       if (ctx.signal?.aborted) break
       streamLogger?.logParsedEvent(chunk)
       if (session.processChunk(chunk, streamLogger)) {
-        publisher.publish(session.snapshot(ctx.turnId))
+        publisher.publishLazy(() => session.snapshot(ctx.turnId))
       }
     }
 

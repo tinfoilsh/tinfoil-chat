@@ -1,6 +1,8 @@
 import { ChatMessages } from '@/components/chat/chat-messages'
-import { render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const mockFindContextStartIndex = vi.hoisted(() => vi.fn(() => 0))
 
 vi.mock('@/config/models', () => ({
   findSelectableModel: (_id: string, models: unknown[]) => models[0],
@@ -43,7 +45,7 @@ vi.mock('@/hooks/use-chat-print', () => ({
 }))
 
 vi.mock('@/utils/token-estimation', () => ({
-  findContextStartIndex: () => 0,
+  findContextStartIndex: mockFindContextStartIndex,
   getContextTokenBudget: () => 1000,
   getHistoryTokenBudget: () => 1000,
   resolveContextWindowTokens: () => 1000,
@@ -82,6 +84,132 @@ const baseProps = {
 }
 
 describe('ChatMessages recovery indicator', () => {
+  beforeEach(() => {
+    mockFindContextStartIndex.mockReturnValue(0)
+  })
+
+  it('defers archived message rendering until requested', () => {
+    mockFindContextStartIndex.mockReturnValue(2)
+    const archivedMessages = [
+      { ...messages[0], turnId: 'archived-1', content: 'First' },
+      {
+        ...messages[0],
+        turnId: 'archived-2',
+        content: 'Second',
+        timestamp: new Date('2026-07-21T00:00:00.001Z'),
+      },
+      { ...messages[0], turnId: 'live', content: 'Latest' },
+    ]
+
+    render(
+      <ChatMessages
+        {...baseProps}
+        messages={archivedMessages}
+        pendingRecoveries={[]}
+      />,
+    )
+
+    expect(screen.queryByTestId('message-archived-1')).not.toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Show 2 earlier messages' }),
+    )
+    expect(screen.getByTestId('message-archived-1')).toBeInTheDocument()
+  })
+
+  it('keeps an archived recovering turn visible', () => {
+    mockFindContextStartIndex.mockReturnValue(1)
+    render(
+      <ChatMessages
+        {...baseProps}
+        messages={[
+          messages[0],
+          {
+            role: 'user',
+            turnId: 'turn-2',
+            content: 'Latest',
+            timestamp: new Date('2026-07-21T00:00:01.000Z'),
+          },
+        ]}
+        activeRecoveryTurnIds={['turn-1']}
+      />,
+    )
+
+    expect(screen.getByTestId('message-turn-1')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /earlier messages/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the archive expanded after an archived recovery completes', () => {
+    mockFindContextStartIndex.mockReturnValue(1)
+    const latestMessage = {
+      role: 'user' as const,
+      turnId: 'turn-2',
+      content: 'Latest',
+      timestamp: new Date('2026-07-21T00:00:01.000Z'),
+    }
+
+    const { rerender } = render(
+      <ChatMessages
+        {...baseProps}
+        messages={[messages[0], latestMessage]}
+        activeRecoveryTurnIds={['turn-1']}
+      />,
+    )
+
+    expect(screen.getByTestId('message-turn-1')).toBeInTheDocument()
+
+    // Recovery completes: the envelope clears and the recovered assistant
+    // message lands in the archived slice.
+    mockFindContextStartIndex.mockReturnValue(2)
+    rerender(
+      <ChatMessages
+        {...baseProps}
+        messages={[
+          messages[0],
+          {
+            role: 'assistant',
+            turnId: 'turn-1',
+            content: 'Recovered answer',
+            timestamp: new Date('2026-07-21T00:00:00.500Z'),
+          },
+          latestMessage,
+        ]}
+        pendingRecoveries={[]}
+      />,
+    )
+
+    expect(screen.getByText('user: Question')).toBeInTheDocument()
+    expect(screen.getByText('assistant: Recovered answer')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /earlier messages/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps a never-started archived recovery collapsed', () => {
+    mockFindContextStartIndex.mockReturnValue(1)
+
+    render(
+      <ChatMessages
+        {...baseProps}
+        messages={[
+          messages[0],
+          {
+            role: 'user',
+            turnId: 'turn-2',
+            content: 'Latest',
+            timestamp: new Date('2026-07-21T00:00:01.000Z'),
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.queryByTestId('message-turn-1')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Show 1 earlier messages' }),
+    ).toBeInTheDocument()
+  })
+
   it('renders the recovery widget immediately after its user turn', async () => {
     render(<ChatMessages {...baseProps} />)
 
