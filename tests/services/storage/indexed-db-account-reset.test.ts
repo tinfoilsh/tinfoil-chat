@@ -3,6 +3,7 @@ import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACCOUNT_RESET_SIGNAL,
 } from '@/constants/storage-keys'
+import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import {
   handleIndexedDBAccountResetStorageEvent,
   IndexedDBStorage,
@@ -135,6 +136,7 @@ describe('IndexedDBStorage account reset', () => {
     const reload = vi
       .spyOn(window.location, 'reload')
       .mockImplementation(() => {})
+    const clearDeletedChats = vi.spyOn(deletedChatsTracker, 'clear')
     sessionStorage.setItem(AUTH_ACCOUNT_RESET_FAILED, 'true')
 
     handleIndexedDBAccountResetStorageEvent(
@@ -147,6 +149,10 @@ describe('IndexedDBStorage account reset', () => {
 
     expect(reset).toHaveBeenCalledWith(false)
     await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1))
+    expect(clearDeletedChats).toHaveBeenCalledTimes(1)
+    expect(clearDeletedChats.mock.invocationCallOrder[0]).toBeLessThan(
+      reload.mock.invocationCallOrder[0],
+    )
     expect(sessionStorage.getItem(AUTH_ACCOUNT_RESET_FAILED)).toBeNull()
   })
 
@@ -156,6 +162,7 @@ describe('IndexedDBStorage account reset', () => {
       new Error('reset failed'),
     )
     const handleFailure = vi.fn()
+    const clearDeletedChats = vi.spyOn(deletedChatsTracker, 'clear')
     window.addEventListener(ACCOUNT_RESET_FAILED_EVENT, handleFailure)
 
     handleIndexedDBAccountResetStorageEvent(
@@ -168,6 +175,7 @@ describe('IndexedDBStorage account reset', () => {
 
     await vi.waitFor(() => expect(handleFailure).toHaveBeenCalledTimes(1))
     expect(sessionStorage.getItem(AUTH_ACCOUNT_RESET_FAILED)).toBe('true')
+    expect(clearDeletedChats).not.toHaveBeenCalled()
     window.removeEventListener(ACCOUNT_RESET_FAILED_EVENT, handleFailure)
   })
 

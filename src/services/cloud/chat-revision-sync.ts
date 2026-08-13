@@ -245,10 +245,17 @@ async function bootstrapFromSnapshot(
     userId,
   )
   for (const id of deletedIds) deletedChatsTracker.markAsDeleted(id)
+  const restoredIds: string[] = []
   for (const item of items) {
-    if (!pendingDeleteIds.has(item.id)) {
+    if (
+      !pendingDeleteIds.has(item.id) &&
       deletedChatsTracker.removeFromDeleted(item.id)
+    ) {
+      restoredIds.push(item.id)
     }
+  }
+  if (restoredIds.length > 0) {
+    chatEvents.emit({ reason: 'sync', ids: restoredIds })
   }
   if (deletedIds.length > 0) {
     chatEvents.emit({ reason: 'sync', ids: deletedIds })
@@ -326,10 +333,18 @@ async function applyEvents(
     throughRevision,
     userId,
   )
+  const restoredIds: string[] = []
   for (const state of committedStates) {
-    if (state.kind === 'upsert' && clearTombstoneIds.has(state.id)) {
+    if (
+      state.kind === 'upsert' &&
+      clearTombstoneIds.has(state.id) &&
       deletedChatsTracker.removeFromDeleted(state.id)
+    ) {
+      restoredIds.push(state.id)
     }
+  }
+  if (restoredIds.length > 0) {
+    chatEvents.emit({ reason: 'sync', ids: restoredIds })
   }
   return downloaded
 }

@@ -63,7 +63,7 @@ class DeletedChatsTracker {
     return this.deletedChats.has(chatId)
   }
 
-  removeFromDeleted(chatId: string): void {
+  removeFromDeleted(chatId: string): boolean {
     if (this.deletedChats.delete(chatId)) {
       this.saveToStorage()
 
@@ -72,7 +72,9 @@ class DeletedChatsTracker {
         action: 'removeFromDeleted',
         metadata: { chatId },
       })
+      return true
     }
+    return false
   }
 
   clear(): void {

@@ -22,6 +22,7 @@ const {
   ingestRemoteChats,
   markAsDeleted,
   removeFromDeleted,
+  emitChatEvent,
 } = vi.hoisted(() => ({
   getSyncState: vi.fn(),
   hasPendingSyncWork: vi.fn(),
@@ -40,6 +41,7 @@ const {
   ingestRemoteChats: vi.fn(),
   markAsDeleted: vi.fn(),
   removeFromDeleted: vi.fn(),
+  emitChatEvent: vi.fn(),
 }))
 
 vi.mock('@/services/storage/indexed-db', () => ({
@@ -68,7 +70,7 @@ vi.mock('@/services/cloud/cloud-storage', () => ({
 
 vi.mock('@/services/cloud/chat-ingestion', () => ({ ingestRemoteChats }))
 vi.mock('@/services/storage/chat-events', () => ({
-  chatEvents: { emit: vi.fn() },
+  chatEvents: { emit: emitChatEvent },
 }))
 vi.mock('@/services/storage/deleted-chats-tracker', () => ({
   deletedChatsTracker: { markAsDeleted, removeFromDeleted },
@@ -113,6 +115,7 @@ describe('chat revision synchronization', () => {
       downloaded: 0,
       errors: [],
     })
+    removeFromDeleted.mockReturnValue(false)
   })
 
   it('uses one summary request and stops when nothing changed', async () => {
@@ -297,11 +300,58 @@ describe('chat revision synchronization', () => {
     })
     getChat.mockResolvedValue({ id: 'restored-chat', syncVersion: 4 })
     reconcileRevisionSnapshot.mockResolvedValue(['deleted-chat'])
+    removeFromDeleted.mockImplementation((id: string) => id === 'restored-chat')
 
     await drainChatRevisionSync(adapter, userId)
 
     expect(markAsDeleted).toHaveBeenCalledWith('deleted-chat')
     expect(removeFromDeleted).toHaveBeenCalledWith('restored-chat')
+    expect(emitChatEvent).toHaveBeenCalledWith({
+      reason: 'sync',
+      ids: ['restored-chat'],
+    })
+  })
+
+  it('notifies once after committed replay upserts remove tombstones', async () => {
+    revisionSummary.mockResolvedValue({
+      current_revision: '9',
+      oldest_replayable_revision: '1',
+    })
+    revisionEvents.mockResolvedValue({
+      events: [
+        {
+          revision: '8',
+          kind: 'upsert',
+          id: 'restored-chat',
+          etag: '4',
+          key_id: 'key-1',
+          project_id: null,
+          updated_at: '2026-01-02T00:00:00Z',
+        },
+        {
+          revision: '9',
+          kind: 'upsert',
+          id: 'untombstoned-chat',
+          etag: '2',
+          key_id: 'key-1',
+          project_id: null,
+          updated_at: '2026-01-03T00:00:00Z',
+        },
+      ],
+    })
+    getChat.mockImplementation(async (id: string) => ({
+      id,
+      syncVersion: id === 'restored-chat' ? 4 : 2,
+    }))
+    removeFromDeleted.mockImplementation((id: string) => id === 'restored-chat')
+
+    await drainChatRevisionSync(adapter, userId)
+
+    expect(emitChatEvent).toHaveBeenCalledTimes(1)
+    expect(emitChatEvent).toHaveBeenCalledWith({
+      reason: 'sync',
+      ids: ['restored-chat'],
+    })
   })
 
   it('keeps a tombstone when a remote upsert has a pending local delete', async () => {
@@ -329,6 +379,7 @@ describe('chat revision synchronization', () => {
     await drainChatRevisionSync(adapter, userId)
 
     expect(removeFromDeleted).not.toHaveBeenCalledWith('deleted-chat')
+    expect(emitChatEvent).not.toHaveBeenCalled()
   })
 
   it('fails closed without uploads or checkpoint advancement', async () => {

@@ -15,6 +15,7 @@ import type { Project } from '@/types/project'
 import { logError, logWarning } from '@/utils/error-handling'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
+import { deletedChatsTracker } from './deleted-chats-tracker'
 
 export interface Chat extends Omit<ChatType, 'createdAt'> {
   createdAt: string
@@ -3639,6 +3640,7 @@ export function handleIndexedDBAccountResetStorageEvent(
     .resetForAccountChange(false)
     .then(() => {
       sessionStorage.removeItem(AUTH_ACCOUNT_RESET_FAILED)
+      deletedChatsTracker.clear()
       window.location.reload()
     })
     .catch((error) => {
