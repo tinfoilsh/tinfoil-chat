@@ -266,6 +266,17 @@ export function useChatStorage({
                   }
                 }
               }
+
+              if (
+                nextCurrent.isLocalOnly !== existingChat.isLocalOnly ||
+                nextCurrent.projectId !== existingChat.projectId
+              ) {
+                nextCurrent = {
+                  ...nextCurrent,
+                  isLocalOnly: existingChat.isLocalOnly,
+                  projectId: existingChat.projectId,
+                }
+              }
             }
           }
 
