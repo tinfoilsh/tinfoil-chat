@@ -10,7 +10,7 @@
 import { DEFAULT_CHAT_TITLE } from '@/constants/chat'
 import { ensureValidISODate } from '@/utils/chat-timestamps'
 import { logInfo } from '@/utils/error-handling'
-import type { StoredChat } from '../storage/indexed-db'
+import type { ChatSyncMetadata, StoredChat } from '../storage/indexed-db'
 import { observe } from './edit-clock'
 import { RemoteChatPlaintextSchema } from './schemas'
 
@@ -34,7 +34,7 @@ export interface ProcessedChatResult {
 }
 
 export interface ProcessRemoteChatOptions {
-  localChat?: StoredChat | null
+  localChat?: Pick<ChatSyncMetadata, 'projectId'> | null
   projectId?: string
 }
 
@@ -157,7 +157,7 @@ function createPlaceholderChat(options: PlaceholderOptions): StoredChat {
 
 export async function processRemoteChats(
   remoteChats: RemoteChatData[],
-  localChatMap: Map<string, StoredChat>,
+  localChatMap: Map<string, ChatSyncMetadata>,
 ): Promise<ProcessedChatResult[]> {
   const results: ProcessedChatResult[] = []
 

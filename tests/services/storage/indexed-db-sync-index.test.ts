@@ -119,6 +119,7 @@ function blockChatTransaction(
 
 describe('IndexedDB pending sync index', () => {
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
@@ -323,6 +324,111 @@ describe('IndexedDB pending sync index', () => {
     })
     expect(payloadCount).toBe(0)
     db.close()
+  })
+
+  it('hydrates all chats in key order with chat-scoped payload reads', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    for (const id of ['chat-b', 'chat-a']) {
+      await storage.saveChat(
+        storedChat(id, {
+          messages: [
+            {
+              role: 'user',
+              content: id,
+              timestamp: new Date('2026-08-12T00:00:00.000Z'),
+              attachments: [
+                {
+                  id: `${id}-attachment`,
+                  type: 'document',
+                  fileName: `${id}.txt`,
+                  textContent: `${id}-payload`,
+                },
+              ],
+            },
+          ],
+        }),
+      )
+    }
+
+    const db = (storage as any).db as IDBDatabase
+    const transaction = db.transaction('attachmentPayloads')
+    const payloadStore = transaction.objectStore('attachmentPayloads')
+    const storeGetAll = vi.spyOn(Object.getPrototypeOf(payloadStore), 'getAll')
+    const payloadIndex = payloadStore.index('chatId')
+    const indexGetAll = vi.spyOn(Object.getPrototypeOf(payloadIndex), 'getAll')
+
+    const chats = await storage.getAllChats()
+
+    expect(storeGetAll).not.toHaveBeenCalled()
+    expect(indexGetAll).toHaveBeenCalledTimes(2)
+    expect(
+      indexGetAll.mock.calls.map(([range]) => (range as IDBKeyRange).lower),
+    ).toEqual(['chat-a', 'chat-b'])
+    expect(chats.map((chat) => chat.id)).toEqual(['chat-a', 'chat-b'])
+    expect(
+      chats.map((chat) => chat.messages[0].attachments?.[0].textContent),
+    ).toEqual(['chat-a-payload', 'chat-b-payload'])
+  })
+
+  it('requests each chat payload only after the previous read resolves', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    const payloadText = 'payload'.repeat(8_000)
+    for (const id of ['chat-a', 'chat-b', 'chat-c']) {
+      await storage.saveChat(
+        storedChat(id, {
+          messages: [
+            {
+              role: 'user',
+              content: id,
+              timestamp: new Date('2026-08-12T00:00:00.000Z'),
+              attachments: [
+                {
+                  id: `${id}-attachment`,
+                  type: 'document',
+                  fileName: `${id}.txt`,
+                  textContent: `${id}-${payloadText}`,
+                },
+              ],
+            },
+          ],
+        }),
+      )
+    }
+
+    const db = (storage as any).db as IDBDatabase
+    const payloadIndex = db
+      .transaction('attachmentPayloads')
+      .objectStore('attachmentPayloads')
+      .index('chatId')
+    const events: string[] = []
+    const originalGetAll = Object.getPrototypeOf(payloadIndex).getAll
+    const getAllSpy = vi
+      .spyOn(Object.getPrototypeOf(payloadIndex), 'getAll')
+      .mockImplementation(function (this: IDBIndex, ...args: unknown[]) {
+        const query = args[0] as IDBValidKey | IDBKeyRange
+        const chatId = (query as IDBKeyRange).lower as string
+        events.push(`requested:${chatId}`)
+        const request = originalGetAll.call(this, query)
+        request.addEventListener('success', () => {
+          events.push(`resolved:${chatId}`)
+        })
+        return request
+      })
+
+    const chats = await storage.getAllChats()
+
+    expect(getAllSpy).toHaveBeenCalledTimes(3)
+    expect(events).toEqual([
+      'requested:chat-a',
+      'resolved:chat-a',
+      'requested:chat-b',
+      'resolved:chat-b',
+      'requested:chat-c',
+      'resolved:chat-c',
+    ])
+    expect(chats.map((chat) => chat.id)).toEqual(['chat-a', 'chat-b', 'chat-c'])
   })
 
   it('fails reads when a local attachment payload row is missing', async () => {

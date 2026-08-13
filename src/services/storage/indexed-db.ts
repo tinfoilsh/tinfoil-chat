@@ -42,6 +42,17 @@ export interface StoredChat extends Chat {
   clockVersion?: number
 }
 
+export interface ChatSyncMetadata {
+  id: string
+  projectId?: string
+  decryptionFailed?: boolean
+  locallyModified?: boolean
+  syncedAt?: number
+  updatedAt: string
+  isLocalOnly?: boolean
+  isBlankChat?: boolean
+}
+
 export interface SaveChatResult {
   saved: boolean
   isLocalOnly: boolean
@@ -157,6 +168,19 @@ function deserializeStoredChat(chat: StoredChat): StoredChat {
       timestamp: message.timestamp ? new Date(message.timestamp) : new Date(),
     })),
   } as StoredChat
+}
+
+function toChatSyncMetadata(chat: StoredChat): ChatSyncMetadata {
+  return {
+    id: chat.id,
+    projectId: chat.projectId,
+    decryptionFailed: chat.decryptionFailed,
+    locallyModified: chat.locallyModified,
+    syncedAt: chat.syncedAt,
+    updatedAt: chat.updatedAt,
+    isLocalOnly: chat.isLocalOnly,
+    isBlankChat: chat.isBlankChat,
+  }
 }
 
 /**
@@ -1743,49 +1767,67 @@ export class IndexedDBStorage {
         const request = store.openCursor(null, 'next') // Ascending order on reverse timestamp = most recent first
 
         const chats: StoredChat[] = []
-        let payloads: StoredAttachmentPayload[] = []
-        const payloadRequest = transaction
+        const payloadIndex = transaction
           .objectStore(ATTACHMENT_PAYLOADS_STORE)
-          .getAll()
-        payloadRequest.onsuccess = () => {
-          payloads = payloadRequest.result as StoredAttachmentPayload[]
-        }
-        payloadRequest.onerror = () =>
-          reject(new Error('Failed to get attachment payloads'))
+          .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
 
         request.onsuccess = (event) => {
-          const cursor = (event.target as IDBRequest).result
-          if (cursor) {
+          const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>)
+            .result
+          if (!cursor) return
+
+          const rawChat = cursor.value as StoredChat
+          const payloadRequest = payloadIndex.getAll(
+            IDBKeyRange.only(rawChat.id),
+          )
+          payloadRequest.onsuccess = () => {
             try {
-              chats.push(deserializeStoredChat(cursor.value as StoredChat))
+              const chat = deserializeStoredChat(rawChat)
+              chats.push(
+                hydrateAttachmentPayloads(
+                  chat,
+                  payloadRequest.result as StoredAttachmentPayload[],
+                ),
+              )
               cursor.continue()
             } catch (error) {
               reject(error)
             }
           }
+          payloadRequest.onerror = () =>
+            reject(new Error('Failed to get attachment payloads'))
         }
 
         request.onerror = () => reject(new Error('Failed to get all chats'))
-        transaction.oncomplete = () => {
-          try {
-            const payloadsByChat = new Map<string, StoredAttachmentPayload[]>()
-            for (const payload of payloads) {
-              const chatPayloads = payloadsByChat.get(payload.chatId)
-              if (chatPayloads) chatPayloads.push(payload)
-              else payloadsByChat.set(payload.chatId, [payload])
-            }
-            resolve(
-              chats.map((chat) =>
-                hydrateAttachmentPayloads(
-                  chat,
-                  payloadsByChat.get(chat.id) ?? [],
-                ),
-              ),
-            )
-          } catch (error) {
-            reject(error)
+        transaction.oncomplete = () => resolve(chats)
+        transaction.onerror = () => reject(new Error('Failed to get all chats'))
+        transaction.onabort = () =>
+          reject(new Error('Get all chats transaction aborted'))
+      }),
+    )
+  }
+
+  async getChatSyncMetadata(): Promise<ChatSyncMetadata[]> {
+    await this.waitForSaveQueue()
+    const db = await this.ensureDB()
+
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readonly')
+        const request = transaction.objectStore(CHATS_STORE).openCursor()
+        const metadata: ChatSyncMetadata[] = []
+
+        request.onsuccess = () => {
+          const cursor = request.result
+          if (!cursor) {
+            resolve(metadata)
+            return
           }
+          metadata.push(toChatSyncMetadata(cursor.value as StoredChat))
+          cursor.continue()
         }
+        request.onerror = () =>
+          reject(new Error('Failed to get chat sync metadata'))
       }),
     )
   }
@@ -1946,7 +1988,7 @@ export class IndexedDBStorage {
     return hydrated.filter((chat): chat is StoredChat => chat !== null)
   }
 
-  async getUnsyncedChatMetadata(): Promise<StoredChat[]> {
+  async getUnsyncedChatMetadata(): Promise<ChatSyncMetadata[]> {
     await this.ensureSyncPendingIndex()
     await this.waitForSaveQueue()
     const db = await this.ensureDB()
@@ -1955,14 +1997,19 @@ export class IndexedDBStorage {
       new Promise((resolve, reject) => {
         const transaction = db.transaction([CHATS_STORE], 'readonly')
         const store = transaction.objectStore(CHATS_STORE)
-        const request = store.index(CHATS_SYNC_PENDING_INDEX).getAll(1)
+        const request = store
+          .index(CHATS_SYNC_PENDING_INDEX)
+          .openCursor(IDBKeyRange.only(1))
+        const metadata: ChatSyncMetadata[] = []
 
         request.onsuccess = () => {
-          try {
-            resolve((request.result as StoredChat[]).map(deserializeStoredChat))
-          } catch (error) {
-            reject(error)
+          const cursor = request.result
+          if (!cursor) {
+            resolve(metadata)
+            return
           }
+          metadata.push(toChatSyncMetadata(cursor.value as StoredChat))
+          cursor.continue()
         }
         request.onerror = () =>
           reject(new Error('Failed to get unsynced chats'))

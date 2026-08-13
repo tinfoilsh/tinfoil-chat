@@ -9,7 +9,7 @@
 import { logError } from '@/utils/error-handling'
 import { chatEvents, type ChatChangeReason } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
-import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
+import { indexedDBStorage, type ChatSyncMetadata } from '../storage/indexed-db'
 import {
   processRemoteChat,
   type ProcessRemoteChatOptions,
@@ -41,7 +41,7 @@ export interface RemoteChatEntry {
 
 export interface IngestOptions {
   /** Pre-built map of local chats by ID. If omitted, each chat is fetched individually. */
-  localChatMap?: Map<string, StoredChat>
+  localChatMap?: Map<string, ChatSyncMetadata>
   /** Project ID to associate with ingested chats */
   projectId?: string
   /** When true, call shouldIngestRemoteChat to skip chats that are already up-to-date locally */

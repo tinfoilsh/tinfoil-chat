@@ -100,6 +100,23 @@ describe('Sync Predicates', () => {
     // (not local.updatedAt) because syncedAt represents when we last
     // got data from the server
 
+    it('makes the same decision from lightweight sync metadata', () => {
+      const remote = {
+        id: 'test-chat-1',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+      }
+      const metadata = {
+        id: 'test-chat-1',
+        projectId: 'project-1',
+        decryptionFailed: false,
+        locallyModified: false,
+        syncedAt: new Date('2024-01-01T00:00:00.000Z').getTime(),
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      }
+
+      expect(shouldIngestRemoteChat(remote, metadata)).toBe(true)
+    })
+
     it('returns true when no local chat exists', () => {
       const remote = {
         id: 'new-chat',

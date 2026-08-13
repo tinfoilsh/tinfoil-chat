@@ -6,7 +6,10 @@
  * can be uploaded, downloaded, or retried for decryption.
  */
 
-import type { StoredChat } from '@/services/storage/indexed-db'
+import type {
+  ChatSyncMetadata,
+  StoredChat,
+} from '@/services/storage/indexed-db'
 import type { EditClock } from './edit-clock'
 
 export function trustedChatClock(
@@ -46,7 +49,10 @@ export function trustedChatClock(
  * @returns true if the chat can be uploaded
  */
 export function isUploadableChat(
-  chat: StoredChat,
+  chat: Pick<
+    ChatSyncMetadata,
+    'id' | 'isLocalOnly' | 'isBlankChat' | 'decryptionFailed'
+  >,
   isStreaming?: (chatId: string) => boolean,
 ): boolean {
   if (chat.isLocalOnly === true) {
@@ -82,7 +88,13 @@ export function isUploadableChat(
  */
 export function shouldIngestRemoteChat(
   remote: { id: string; updatedAt?: string | null },
-  local: StoredChat | null | undefined,
+  local:
+    | Pick<
+        ChatSyncMetadata,
+        'decryptionFailed' | 'locallyModified' | 'syncedAt'
+      >
+    | null
+    | undefined,
 ): boolean {
   // If no local chat exists, always ingest
   if (!local) {

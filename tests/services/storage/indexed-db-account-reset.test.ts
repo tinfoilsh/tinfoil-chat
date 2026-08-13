@@ -302,6 +302,7 @@ describe('IndexedDBStorage account reset', () => {
   })
 
   it('rejects malformed stored chats instead of leaving reads pending', async () => {
+    vi.stubGlobal('IDBKeyRange', { only: (key: IDBValidKey) => key })
     const storage = new IndexedDBStorage()
     const cursorRequest = {
       onsuccess: null,
@@ -311,13 +312,21 @@ describe('IndexedDBStorage account reset', () => {
       onerror: (() => void) | null
     }
     const openCursor = vi.fn(() => cursorRequest)
-    const payloadRequest = { onsuccess: null, onerror: null, result: [] }
+    const payloadRequest = {
+      onsuccess: null,
+      onerror: null,
+      result: [],
+    } as {
+      onsuccess: (() => void) | null
+      onerror: (() => void) | null
+      result: unknown[]
+    }
     const transaction = {
       oncomplete: null,
       objectStore: (storeName: string) =>
         storeName === 'chats'
           ? { openCursor }
-          : { getAll: () => payloadRequest },
+          : { index: () => ({ getAll: () => payloadRequest }) },
     }
     vi.spyOn(storage as any, 'ensureDB').mockResolvedValue({
       transaction: () => transaction,
@@ -334,6 +343,8 @@ describe('IndexedDBStorage account reset', () => {
         },
       },
     })
+    await vi.waitFor(() => expect(payloadRequest.onsuccess).not.toBeNull())
+    payloadRequest.onsuccess?.()
 
     await expect(chats).rejects.toThrow('Stored chat has invalid messages')
   })

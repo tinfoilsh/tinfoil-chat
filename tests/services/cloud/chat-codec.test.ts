@@ -177,7 +177,11 @@ describe('Chat Codec - processRemoteChat', () => {
       const localChat = {
         id: 'remote-chat-1',
         projectId: 'local-project',
-      } as any
+        decryptionFailed: false,
+        locallyModified: false,
+        syncedAt: 0,
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      }
 
       const result = await processRemoteChat(baseRemoteChat, { localChat })
 
