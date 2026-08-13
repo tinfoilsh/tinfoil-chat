@@ -2491,10 +2491,16 @@ export function ChatInterface({
       setShowAddToProjectModal(false)
 
       // Then process uploads (UI will show upload progress)
-      for (const file of filesToUpload) {
-        if (addToProject) {
-          await addFileToProjectContext(file)
-        } else {
+      if (addToProject) {
+        // Start all uploads before awaiting so every file registers its
+        // "Uploading..." placeholder immediately, mirroring the sidebar's
+        // own upload path. A sequential loop would surface one row at a
+        // time as each upload finishes.
+        await Promise.all(
+          filesToUpload.map((file) => addFileToProjectContext(file)),
+        )
+      } else {
+        for (const file of filesToUpload) {
           await processFileForChat(file)
         }
       }
