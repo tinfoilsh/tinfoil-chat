@@ -462,6 +462,73 @@ describe('IndexedDB pending sync index', () => {
     expect(metadata[0]).not.toHaveProperty('messages')
   })
 
+  it('serves recurring metadata reads without hydrating full chat rows', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    const pendingRecovery = {
+      v: 1 as const,
+      turnId: 'turn-1',
+      keyId: '0123456789abcdef0123456789abcdef',
+      createdAt: '2026-08-12T00:00:00.000Z',
+      expiresAt: '2026-08-12T01:00:00.000Z',
+      nonce: 'AAAAAAAAAAAAAAAA',
+      ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAA',
+    }
+    await storage.saveChat(
+      storedChat('pending-recovery', {
+        projectId: 'project-1',
+        pendingRecoveries: [pendingRecovery],
+        messages: [
+          {
+            role: 'user',
+            content: 'Do not hydrate me',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+          },
+        ],
+      }),
+    )
+    await storage.saveChat(
+      storedChat('local-only', {
+        isLocalOnly: true,
+        projectId: 'project-1',
+      }),
+    )
+
+    await storage.getChatSummaries()
+    const db = (storage as any).db as IDBDatabase
+    const chatStore = db.transaction('chats').objectStore('chats')
+    const storePrototype = Object.getPrototypeOf(chatStore)
+    const originalOpenCursor = storePrototype.openCursor
+    const cursorStoreNames: string[] = []
+    vi.spyOn(storePrototype, 'openCursor').mockImplementation(function (
+      this: IDBObjectStore,
+      ...args: unknown[]
+    ) {
+      cursorStoreNames.push(this.name)
+      const [query, direction] = args as [
+        IDBValidKey | IDBKeyRange | null | undefined,
+        IDBCursorDirection | undefined,
+      ]
+      return originalOpenCursor.call(this, query, direction)
+    })
+
+    await expect(storage.getPendingChatRecoveries()).resolves.toEqual([
+      {
+        id: 'pending-recovery',
+        pendingRecoveries: [pendingRecovery],
+      },
+    ])
+    await expect(storage.hasPendingChatRecoveries()).resolves.toBe(true)
+    await expect(storage.getCloudChatCount()).resolves.toBe(1)
+    await expect(storage.getProjectChatCount('project-1')).resolves.toBe(1)
+    expect(cursorStoreNames).toEqual([
+      'chatSummaries',
+      'chatSummaries',
+      'chatSummaries',
+      'chatSummaries',
+    ])
+  })
+
   it('rejects malformed all-chat sync metadata', async () => {
     const storage = new IndexedDBStorage()
     await storage.initialize()

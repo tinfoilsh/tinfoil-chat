@@ -2,6 +2,7 @@ import type {
   Attachment,
   Chat as ChatType,
   Message,
+  PendingRecoveryEnvelope,
 } from '@/components/chat/types'
 import { ACCOUNT_RESET_FAILED_EVENT } from '@/constants/auth-events'
 import {
@@ -57,6 +58,11 @@ export interface ChatSyncMetadata {
 export interface SaveChatResult {
   saved: boolean
   isLocalOnly: boolean
+}
+
+export interface ChatRecoverySummary {
+  id: string
+  pendingRecoveries: PendingRecoveryEnvelope[]
 }
 
 interface StoredProject {
@@ -1745,13 +1751,14 @@ export class IndexedDBStorage {
   // local-only rows). Cheaper than getAllChats when the caller only
   // needs the total — avoids deserializing every stored message.
   async getCloudChatCount(): Promise<number> {
+    await this.ensureChatSummaries()
     await this.waitForSaveQueue()
     const db = await this.ensureDB()
 
     return this.protectRead(
       new Promise((resolve, reject) => {
-        const transaction = db.transaction([CHATS_STORE], 'readonly')
-        const store = transaction.objectStore(CHATS_STORE)
+        const transaction = db.transaction([CHAT_SUMMARIES_STORE], 'readonly')
+        const store = transaction.objectStore(CHAT_SUMMARIES_STORE)
         const request = store.openCursor()
         let count = 0
 
@@ -1774,16 +1781,15 @@ export class IndexedDBStorage {
   }
 
   async getProjectChatCount(projectId: string): Promise<number> {
+    await this.ensureChatSummaries()
     await this.waitForSaveQueue()
     const db = await this.ensureDB()
 
     return this.protectRead(
       new Promise((resolve, reject) => {
-        const transaction = db.transaction([CHATS_STORE], 'readonly')
-        const store = transaction.objectStore(CHATS_STORE)
-        const request = store
-          .index(CHATS_PROJECT_INDEX)
-          .openCursor(IDBKeyRange.only(projectId))
+        const transaction = db.transaction([CHAT_SUMMARIES_STORE], 'readonly')
+        const store = transaction.objectStore(CHAT_SUMMARIES_STORE)
+        const request = store.openCursor()
         let count = 0
 
         request.onsuccess = () => {
@@ -1793,7 +1799,7 @@ export class IndexedDBStorage {
             return
           }
           const chat = cursor.value as StoredChat
-          if (!chat.isLocalOnly) {
+          if (chat.projectId === projectId && !chat.isLocalOnly) {
             count += 1
           }
           cursor.continue()
@@ -1805,13 +1811,14 @@ export class IndexedDBStorage {
   }
 
   async hasPendingChatRecoveries(): Promise<boolean> {
+    await this.ensureChatSummaries()
     await this.waitForSaveQueue()
     const db = await this.ensureDB()
 
     return this.protectRead(
       new Promise((resolve, reject) => {
-        const transaction = db.transaction([CHATS_STORE], 'readonly')
-        const store = transaction.objectStore(CHATS_STORE)
+        const transaction = db.transaction([CHAT_SUMMARIES_STORE], 'readonly')
+        const store = transaction.objectStore(CHAT_SUMMARIES_STORE)
         const request = store.openCursor()
 
         request.onsuccess = (event) => {
@@ -1831,6 +1838,39 @@ export class IndexedDBStorage {
 
         request.onerror = () =>
           reject(new Error('Failed to inspect pending chat recoveries'))
+      }),
+    )
+  }
+
+  async getPendingChatRecoveries(): Promise<ChatRecoverySummary[]> {
+    await this.ensureChatSummaries()
+    await this.waitForSaveQueue()
+    const db = await this.ensureDB()
+
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHAT_SUMMARIES_STORE], 'readonly')
+        const store = transaction.objectStore(CHAT_SUMMARIES_STORE)
+        const request = store.openCursor()
+        const chats: ChatRecoverySummary[] = []
+
+        request.onsuccess = () => {
+          const cursor = request.result
+          if (!cursor) {
+            resolve(chats)
+            return
+          }
+          const chat = cursor.value as StoredChat
+          if (chat.pendingRecoveries?.length) {
+            chats.push({
+              id: chat.id,
+              pendingRecoveries: chat.pendingRecoveries,
+            })
+          }
+          cursor.continue()
+        }
+        request.onerror = () =>
+          reject(new Error('Failed to get pending chat recoveries'))
       }),
     )
   }

@@ -21,7 +21,7 @@ const setChatRecoveryDraft = vi.fn()
 const retryDeferredAlternativesFinalization = vi.fn()
 const parseRichStreamingResponse = vi.fn()
 const generateTitle = vi.fn()
-const getAllChats = vi.fn()
+const getPendingChatRecoveries = vi.fn()
 const getChat = vi.fn()
 let storedAlternatives: string[] = []
 let cloudSyncEnabled = true
@@ -106,7 +106,7 @@ vi.mock('@/services/encryption/encryption-service', () => ({
 
 vi.mock('@/services/storage/indexed-db', () => ({
   indexedDBStorage: {
-    getAllChats: () => getAllChats(),
+    getPendingChatRecoveries: () => getPendingChatRecoveries(),
     getChat: (...args: unknown[]) => getChat(...args),
   },
 }))
@@ -355,7 +355,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('streams a processing session and persists only after completion', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -429,7 +429,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('generates a title when the first response is recovered', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     getChat.mockResolvedValue({
@@ -489,7 +489,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('releases recovery activity before deleting the completed session', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -531,7 +531,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('ignores a stream update after recovery cancellation', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -581,7 +581,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('publishes the recovered replay from its first visible update', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -628,7 +628,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('releases recovery activity when checkpoint loading fails', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     getChat.mockRejectedValueOnce(new Error('IndexedDB unavailable'))
@@ -651,7 +651,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('preserves the partial response when recovery returns an upstream error', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -680,7 +680,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('keeps recovery active through repeated processing reconnects', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -732,7 +732,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('keeps streaming when a recovered response ends while processing', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -779,7 +779,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('reconnects when a recovered response transport terminates', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -826,7 +826,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('replays from zero when a completed response is truncated', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -895,7 +895,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('does not regress the visible draft while replaying after reconnect', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -974,7 +974,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('ignores a presentation checkpoint from a replaced session', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -1025,7 +1025,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('keeps a persisted partial visible until replay catches up', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     getChat.mockResolvedValue({
@@ -1090,7 +1090,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('reuses an in-flight recovery scan instead of restarting its stream', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -1133,7 +1133,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('queues refreshed discovery without restarting the active stream', async () => {
-    getAllChats
+    getPendingChatRecoveries
       .mockResolvedValueOnce([{ id: 'chat-1', pendingRecoveries: [envelope] }])
       .mockResolvedValueOnce([])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -1169,11 +1169,13 @@ describe('chat recovery lifecycle', () => {
       timestamp: new Date().toISOString(),
     })
     await activeScan
-    await vi.waitFor(() => expect(getAllChats).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() =>
+      expect(getPendingChatRecoveries).toHaveBeenCalledTimes(2),
+    )
   })
 
   it('saves the visible draft when cancelling a resumed recovery stream', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -1280,7 +1282,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('replays a completed response through progressive drafts', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -1324,7 +1326,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('recovers a device-local token directly from IndexedDB', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       {
         id: 'chat-1',
         isLocalOnly: true,
@@ -1367,7 +1369,7 @@ describe('chat recovery lifecycle', () => {
 
   it('stops an old account scan when recovery state is reset', async () => {
     let resolveChats: ((chats: unknown[]) => void) | undefined
-    getAllChats.mockReturnValueOnce(
+    getPendingChatRecoveries.mockReturnValueOnce(
       new Promise<unknown[]>((resolve) => {
         resolveChats = resolve
       }),
@@ -1379,14 +1381,14 @@ describe('chat recovery lifecycle', () => {
     await oldScan
 
     expect(decryptRecoveryEnvelope).not.toHaveBeenCalled()
-    getAllChats.mockResolvedValueOnce([])
+    getPendingChatRecoveries.mockResolvedValueOnce([])
     await expect(scanPendingChatRecoveries('new-user')).resolves.toBeUndefined()
   })
 
   it('aborts an aged scan before starting its replacement', async () => {
     let now = 1_000
     const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => now)
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -1440,7 +1442,7 @@ describe('chat recovery lifecycle', () => {
   it('replaces reconnects that report no forward progress', async () => {
     let now = 1_000
     const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => now)
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -1491,7 +1493,7 @@ describe('chat recovery lifecycle', () => {
   it('retains stale recovery ownership when replacement discovery fails', async () => {
     let now = 1_000
     const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => now)
-    getAllChats
+    getPendingChatRecoveries
       .mockResolvedValueOnce([{ id: 'chat-1', pendingRecoveries: [envelope] }])
       .mockRejectedValueOnce(new Error('IndexedDB unavailable'))
       .mockResolvedValueOnce([])
@@ -1550,7 +1552,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('does not invalidate a live attempt when a recovery scan starts', async () => {
-    getAllChats.mockResolvedValue([])
+    getPendingChatRecoveries.mockResolvedValue([])
     encryptRecoveryEnvelope.mockResolvedValue(envelope)
     startChatRecoveryAttempt('chat-1', 'turn-1', SESSION_ID)
 
@@ -1649,7 +1651,7 @@ describe('chat recovery lifecycle', () => {
   })
 
   it('removes a failed envelope before deleting its server session', async () => {
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope.mockResolvedValue({
@@ -1686,7 +1688,7 @@ describe('chat recovery lifecycle', () => {
 
   it('rewraps an envelope opened with a historical CEK', async () => {
     storedAlternatives = ['historical-key']
-    getAllChats.mockResolvedValue([
+    getPendingChatRecoveries.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
     decryptRecoveryEnvelope
