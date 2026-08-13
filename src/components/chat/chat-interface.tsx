@@ -1054,19 +1054,12 @@ export function ChatInterface({
     loadingState,
     handleQuery,
     isRateLimited,
-    // Sends need a resolvable model; while the model config is still
-    // loading behind the interactive shell, park messages in the queue
-    // instead of firing requests guaranteed to fail.
     isDispatchBlocked: () =>
-      models.length === 0 ||
       isChatHydrating ||
       hasPendingRecoveryRef.current ||
       (currentChatId ? isChatRecoveryActive(currentChatId) : false),
     dispatchBlocked:
-      models.length === 0 ||
-      isChatHydrating ||
-      hasPendingRecovery ||
-      activeRecoveryTurnIds.length > 0,
+      isChatHydrating || hasPendingRecovery || activeRecoveryTurnIds.length > 0,
     onRateLimited: handleQueueRateLimited,
     cancelGeneration,
   })
@@ -2898,10 +2891,9 @@ export function ChatInterface({
     }
   }, [currentChat?.messages])
 
-  // Deep links require auth classification before rendering their access state.
-  // Model configuration loads behind the interactive shell.
+  // Show loading while auth or config is still loading
   const needsAuthLoading = (initialChatId || initialProjectId) && !isAuthLoaded
-  const needsLoading = needsAuthLoading
+  const needsLoading = needsAuthLoading || isLoadingConfig
   if (needsLoading || !logoAnimDone) {
     return (
       <LogoLoading
@@ -2953,6 +2945,8 @@ export function ChatInterface({
       </div>
     )
   }
+
+  // Config loading is handled by the combined loading screen above.
 
   // Show decryption failed message when accessing a chat that couldn't be decrypted
   if (initialChatId && initialChatDecryptionFailed) {
