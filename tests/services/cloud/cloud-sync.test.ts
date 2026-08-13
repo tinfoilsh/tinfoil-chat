@@ -1,9 +1,11 @@
 import {
+  SETTINGS_CLOUD_SYNC_ENABLED,
   SYNC_CHAT_DELETES_WATERMARK,
   SYNC_CHAT_STATUS,
   SYNC_PROJECT_CHAT_STATUS_PREFIX,
 } from '@/constants/storage-keys'
 import {
+  CloudSyncDisabledError,
   CloudSyncService,
   CROSS_TAB_SYNC_LOCK,
   SyncInProgressError,
@@ -13,6 +15,7 @@ import {
   SyncEnclaveError,
   SyncNetworkError,
 } from '@/services/sync-enclave/sync-enclave-client'
+import { setCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockGetAllChats = vi.fn()
@@ -221,6 +224,7 @@ vi.mock('@/services/cloud/legacy-chat-eviction', () => ({
 describe('CloudSyncService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.setItem(SETTINGS_CLOUD_SYNC_ENABLED, 'true')
     localStorage.removeItem(SYNC_CHAT_STATUS)
     localStorage.removeItem(SYNC_CHAT_DELETES_WATERMARK)
     mockSaveChat.mockResolvedValue(undefined)
@@ -470,6 +474,93 @@ describe('CloudSyncService', () => {
     await expect(
       (service as any).withSyncLock(async () => 'fallback'),
     ).resolves.toBe('fallback')
+  })
+
+  it('cancels a queued lock callback when cloud sync is disabled locally', async () => {
+    let grantLock!: () => void
+    const leaderFinished = new Promise<void>((resolve) => {
+      grantLock = resolve
+    })
+    const request = vi.fn(
+      async (
+        _name: string,
+        _options: LockOptions,
+        callback: (lock: Lock) => Promise<unknown>,
+      ) => {
+        await leaderFinished
+        return callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' })
+      },
+    )
+    vi.stubGlobal('navigator', { locks: { request } })
+    const service = new CloudSyncService()
+    const pending = service.smartSync()
+
+    setCloudSyncEnabled(false)
+    setCloudSyncEnabled(true)
+    grantLock()
+
+    await expect(pending).rejects.toBeInstanceOf(CloudSyncDisabledError)
+    await expect(service.smartSync()).resolves.toMatchObject({
+      uploaded: 0,
+      downloaded: 0,
+    })
+  })
+
+  it('cancels queued work after another tab disables cloud sync', async () => {
+    let grantLock!: () => void
+    const leaderFinished = new Promise<void>((resolve) => {
+      grantLock = resolve
+    })
+    const request = vi.fn(
+      async (
+        _name: string,
+        _options: LockOptions,
+        callback: (lock: Lock) => Promise<unknown>,
+      ) => {
+        await leaderFinished
+        return callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' })
+      },
+    )
+    vi.stubGlobal('navigator', { locks: { request } })
+    const service = new CloudSyncService()
+    const pending = service.smartSync()
+
+    localStorage.setItem(SETTINGS_CLOUD_SYNC_ENABLED, 'false')
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: SETTINGS_CLOUD_SYNC_ENABLED }),
+    )
+    grantLock()
+
+    await expect(pending).rejects.toBeInstanceOf(CloudSyncDisabledError)
+    expect(mockIsAuthenticated).not.toHaveBeenCalled()
+  })
+
+  it('does not ingest a remote response after cloud sync is disabled', async () => {
+    let finishList:
+      | ((value: {
+          conversations: Array<{ id: string; content: string }>
+          hasMore: boolean
+        }) => void)
+      | undefined
+    mockGetUnsyncedChats.mockResolvedValue([])
+    mockGetAllChats.mockResolvedValue([])
+    mockListChats.mockReturnValue(
+      new Promise((resolve) => {
+        finishList = resolve
+      }),
+    )
+    const service = new CloudSyncService()
+    const sync = service.syncAllChats()
+    await vi.waitFor(() => expect(mockListChats).toHaveBeenCalledOnce())
+
+    setCloudSyncEnabled(false)
+    finishList?.({
+      conversations: [{ id: 'remote-after-opt-out', content: 'plaintext' }],
+      hasMore: false,
+    })
+
+    await expect(sync).resolves.toMatchObject({ downloaded: 0 })
+    expect(mockIngestRemoteChats).not.toHaveBeenCalled()
   })
 
   it('coalesces cross-tab storage updates into one chat refresh', async () => {

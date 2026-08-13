@@ -2,11 +2,16 @@ import { PAGINATION } from '@/config'
 import {
   AUTH_ACTIVE_USER_ID,
   MIGRATION_EXHAUSTED_KEYSET_PREFIX,
+  SETTINGS_CLOUD_SYNC_ENABLED,
   SYNC_ALL_CHATS_STATUS,
   SYNC_CHAT_STATUS,
   SYNC_PROJECT_CHAT_STATUS_PREFIX,
 } from '@/constants/storage-keys'
 import { AuthTokenUnavailableError } from '@/services/auth'
+import {
+  CLOUD_SYNC_SETTING_CHANGED_EVENT,
+  isCloudSyncEnabled,
+} from '@/utils/cloud-sync-settings'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { chatEvents } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
@@ -18,7 +23,10 @@ import {
 import { decideRecovery } from '../sync-enclave/enclave-error-recovery'
 import { passkeyEvents } from '../sync-enclave/passkey-events'
 import { keyCurrent, newIdempotencyKey } from '../sync-enclave/sync-api'
-import { SyncEnclaveError } from '../sync-enclave/sync-enclave-client'
+import {
+  abortSyncEnclaveRequests,
+  SyncEnclaveError,
+} from '../sync-enclave/sync-enclave-client'
 import {
   hasPrimaryKey,
   migrationKeySetFingerprint,
@@ -74,6 +82,13 @@ export class SyncInProgressError extends Error {
   }
 }
 
+export class CloudSyncDisabledError extends Error {
+  constructor() {
+    super('Cloud synchronization is disabled')
+    this.name = 'CloudSyncDisabledError'
+  }
+}
+
 export interface PaginatedChatsResult {
   chats: StoredChat[]
   hasMore: boolean
@@ -106,6 +121,7 @@ export class CloudSyncService {
   private streamingCallbacks: Set<string> = new Set()
   private accountGeneration = 0
   private crossTabReloadFrame: number | null = null
+  private cloudSyncEnabled = isCloudSyncEnabled()
   /**
    * Set once per session after the first successful syncAllChats so
    * the enclave-driven legacy-blob migration (§8.7.2 trigger 1) runs
@@ -132,8 +148,13 @@ export class CloudSyncService {
     )
     // Listen for storage changes from other tabs to invalidate sync status cache
     if (typeof window !== 'undefined') {
+      window.addEventListener(CLOUD_SYNC_SETTING_CHANGED_EVENT, () => {
+        this.handleCloudSyncSettingChange()
+      })
       window.addEventListener('storage', (e) => {
-        if (e.key === SYNC_CHAT_STATUS) {
+        if (e.key === SETTINGS_CLOUD_SYNC_ENABLED) {
+          this.handleCloudSyncSettingChange()
+        } else if (e.key === SYNC_CHAT_STATUS) {
           // Another tab updated sync status, invalidate our cache
           this.chatSyncCache.invalidate()
           this.queueCrossTabReload()
@@ -150,6 +171,26 @@ export class CloudSyncService {
           this.queueCrossTabReload()
         }
       })
+    }
+  }
+
+  private handleCloudSyncSettingChange(): void {
+    const enabled = isCloudSyncEnabled()
+    if (this.cloudSyncEnabled && !enabled) {
+      this.invalidateForCloudSyncDisable()
+    }
+    this.cloudSyncEnabled = enabled
+  }
+
+  private invalidateForCloudSyncDisable(): void {
+    this.accountGeneration++
+    this.uploadCoalescer.clear()
+    this.streamingCallbacks.clear()
+    this.legacyMigrationKicked = false
+    abortSyncEnclaveRequests()
+    if (this.crossTabReloadFrame !== null) {
+      cancelAnimationFrame(this.crossTabReloadFrame)
+      this.crossTabReloadFrame = null
     }
   }
 
@@ -216,8 +257,16 @@ export class CloudSyncService {
       throw new SyncInProgressError()
     }
 
+    const generation = this.accountGeneration
+    const runIfCurrent = () => {
+      if (!isCloudSyncEnabled() || !this.isCurrentGeneration(generation)) {
+        throw new CloudSyncDisabledError()
+      }
+      return fn()
+    }
+
     if (typeof navigator === 'undefined' || !navigator.locks) {
-      return this.trackSync(fn)
+      return this.trackSync(runIfCurrent)
     }
 
     // Queue for the cross-tab lock instead of skipping so callers that
@@ -229,7 +278,7 @@ export class CloudSyncService {
       return navigator.locks.request(
         CROSS_TAB_SYNC_LOCK,
         CROSS_TAB_SYNC_LOCK_OPTIONS,
-        () => fn(),
+        runIfCurrent,
       )
     })
   }

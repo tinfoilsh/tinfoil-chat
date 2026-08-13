@@ -363,6 +363,26 @@ describe('SyncEnclaveClient', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('aborts active requests during synchronization cleanup', async () => {
+    let requestSignal: AbortSignal | null | undefined
+    mockFetch.mockImplementationOnce((_input, init) => {
+      requestSignal = init?.signal
+      return new Promise(() => {})
+    })
+    const { abortSyncEnclaveRequests, getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    const client = await getSyncEnclaveClient()
+    const request = client.get('/api/keys/current')
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledOnce())
+
+    abortSyncEnclaveRequests()
+
+    await expect(request).rejects.toMatchObject({
+      name: 'SyncRequestAbortedError',
+    })
+    expect(requestSignal?.aborted).toBe(true)
+  })
+
   it('exposes SyncEnclaveError as a real Error subclass', () => {
     const err = new SyncEnclaveError('boom', 409, 'CONFLICT', { foo: 'bar' })
     expect(err).toBeInstanceOf(Error)
