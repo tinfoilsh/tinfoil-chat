@@ -583,6 +583,26 @@ describe('CloudSyncService', () => {
     expect(mockChatEventsEmit).toHaveBeenCalledWith({ reason: 'sync', ids: [] })
   })
 
+  it('refreshes follower chat state when another tab advances deletions', () => {
+    let publishFrame!: FrameRequestCallback
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        publishFrame = callback
+        return 1
+      }),
+    )
+    new CloudSyncService()
+
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: SYNC_CHAT_DELETES_WATERMARK }),
+    )
+    expect(mockChatEventsEmit).not.toHaveBeenCalled()
+    publishFrame(performance.now())
+
+    expect(mockChatEventsEmit).toHaveBeenCalledWith({ reason: 'sync', ids: [] })
+  })
+
   describe('backupChat', () => {
     it('skips local-only chats', async () => {
       mockGetChat.mockResolvedValue({

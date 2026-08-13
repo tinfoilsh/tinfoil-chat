@@ -4,6 +4,7 @@ import {
   MIGRATION_EXHAUSTED_KEYSET_PREFIX,
   SETTINGS_CLOUD_SYNC_ENABLED,
   SYNC_ALL_CHATS_STATUS,
+  SYNC_CHAT_DELETES_WATERMARK,
   SYNC_CHAT_STATUS,
   SYNC_PROJECT_CHAT_STATUS_PREFIX,
 } from '@/constants/storage-keys'
@@ -154,6 +155,8 @@ export class CloudSyncService {
       window.addEventListener('storage', (e) => {
         if (e.key === SETTINGS_CLOUD_SYNC_ENABLED) {
           this.handleCloudSyncSettingChange()
+        } else if (e.key === SYNC_CHAT_DELETES_WATERMARK) {
+          this.queueCrossTabReload()
         } else if (e.key === SYNC_CHAT_STATUS) {
           // Another tab updated sync status, invalidate our cache
           this.chatSyncCache.invalidate()
