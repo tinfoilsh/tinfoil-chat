@@ -1718,24 +1718,25 @@ export class IndexedDBStorage {
   private async updateLastAccessed(id: string): Promise<void> {
     return this.enqueueSave('updateLastAccessed', async () => {
       const db = await this.ensureDB()
-      const chat = await this.getStoredChatInternal(id)
+      return new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readwrite')
+        const store = transaction.objectStore(CHATS_STORE)
+        const request = store.get(id)
 
-      if (chat) {
-        return new Promise<void>((resolve, reject) => {
-          const transaction = db.transaction([CHATS_STORE], 'readwrite')
-          const store = transaction.objectStore(CHATS_STORE)
-
-          transaction.oncomplete = () => resolve()
-          transaction.onerror = () =>
-            reject(new Error('Failed to update last accessed'))
-
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () =>
+          reject(new Error('Failed to update last accessed'))
+        transaction.onabort = () =>
+          reject(new Error('Last accessed update transaction aborted'))
+        request.onerror = () =>
+          reject(new Error('Failed to read chat for last accessed update'))
+        request.onsuccess = () => {
+          const chat = request.result as StoredChat | undefined
+          if (!chat) return
           chat.lastAccessedAt = Date.now()
-          const request = store.put(updateSyncPending(chat))
-
-          request.onerror = () =>
-            reject(new Error('Failed to update last accessed'))
-        })
-      }
+          store.put(updateSyncPending(chat))
+        }
+      })
     })
   }
 
@@ -1826,29 +1827,30 @@ export class IndexedDBStorage {
   async markAsSynced(id: string, syncVersion: number): Promise<void> {
     return this.enqueueSave('markAsSynced', async () => {
       const db = await this.ensureDB()
-      const chat = await this.getStoredChatInternal(id)
+      return new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readwrite')
+        const store = transaction.objectStore(CHATS_STORE)
+        const request = store.get(id)
 
-      if (chat) {
-        return new Promise<void>((resolve, reject) => {
-          const transaction = db.transaction([CHATS_STORE], 'readwrite')
-          const store = transaction.objectStore(CHATS_STORE)
-
-          transaction.oncomplete = () => resolve()
-          transaction.onerror = () =>
-            reject(new Error('Failed to mark as synced'))
-
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () =>
+          reject(new Error('Failed to mark as synced'))
+        transaction.onabort = () =>
+          reject(new Error('Mark as synced transaction aborted'))
+        request.onerror = () =>
+          reject(new Error('Failed to read chat before marking as synced'))
+        request.onsuccess = () => {
+          const chat = request.result as StoredChat | undefined
+          if (!chat) return
           chat.syncedAt = Date.now()
           chat.locallyModified = false
           chat.syncVersion = syncVersion
           // The clock is now current as of this synced version, so a
           // later reader trusts it for arbitration.
           chat.clockVersion = syncVersion
-
-          const request = store.put(updateSyncPending(chat))
-
-          request.onerror = () => reject(new Error('Failed to mark as synced'))
-        })
-      }
+          store.put(updateSyncPending(chat))
+        }
+      })
     })
   }
 
@@ -1864,23 +1866,25 @@ export class IndexedDBStorage {
   async rebaseSyncVersion(id: string, syncVersion: number): Promise<void> {
     return this.enqueueSave('rebaseSyncVersion', async () => {
       const db = await this.ensureDB()
-      const chat = await this.getStoredChatInternal(id)
-      if (!chat) {
-        return
-      }
-
-      chat.syncVersion = syncVersion
-      chat.locallyModified = true
-
-      await new Promise<void>((resolve, reject) => {
+      return new Promise<void>((resolve, reject) => {
         const transaction = db.transaction([CHATS_STORE], 'readwrite')
         const store = transaction.objectStore(CHATS_STORE)
+        const request = store.get(id)
+
         transaction.oncomplete = () => resolve()
         transaction.onerror = () =>
           reject(new Error('Failed to rebase sync version'))
-        const request = store.put(updateSyncPending(chat))
+        transaction.onabort = () =>
+          reject(new Error('Sync version rebase transaction aborted'))
         request.onerror = () =>
-          reject(new Error('Failed to rebase sync version'))
+          reject(new Error('Failed to read chat before rebasing sync version'))
+        request.onsuccess = () => {
+          const chat = request.result as StoredChat | undefined
+          if (!chat) return
+          chat.syncVersion = syncVersion
+          chat.locallyModified = true
+          store.put(updateSyncPending(chat))
+        }
       })
     })
   }
@@ -1905,62 +1909,6 @@ export class IndexedDBStorage {
   }): Promise<void> {
     return this.enqueueSave('finalizeUpload', async () => {
       const db = await this.ensureDB()
-      const chat = await this.getStoredChatInternal(opts.chatId)
-      if (!chat) {
-        return
-      }
-
-      if (opts.rewrites.length > 0) {
-        const rewritesByPayloadId = new Map(
-          opts.rewrites
-            .filter((rewrite) => rewrite.storagePayloadId)
-            .map((rewrite) => [rewrite.storagePayloadId, rewrite]),
-        )
-        const rewritesByClientId = new Map<string, AttachmentRewrite[]>()
-        for (const rewrite of opts.rewrites) {
-          if (rewrite.storagePayloadId) continue
-          const rewrites = rewritesByClientId.get(rewrite.clientId) ?? []
-          rewrites.push(rewrite)
-          rewritesByClientId.set(rewrite.clientId, rewrites)
-        }
-        const appliedRewrites = new Set<AttachmentRewrite>()
-        for (const msg of chat.messages ?? []) {
-          for (const att of msg.attachments ?? []) {
-            const storedAttachment = att as StoredAttachmentReference
-            const rewriteByPayloadId = storedAttachment.storagePayloadId
-              ? rewritesByPayloadId.get(storedAttachment.storagePayloadId)
-              : undefined
-            const rewrite =
-              rewriteByPayloadId && !appliedRewrites.has(rewriteByPayloadId)
-                ? rewriteByPayloadId
-                : rewritesByClientId
-                    .get(att.id)
-                    ?.find((candidate) => !appliedRewrites.has(candidate))
-            if (rewrite) {
-              appliedRewrites.add(rewrite)
-              att.id = rewrite.serverId
-              att.encryptionKey = rewrite.encryptionKey
-            }
-          }
-        }
-      }
-
-      const concurrentEdit =
-        opts.preUploadUpdatedAt !== undefined &&
-        chat.updatedAt !== opts.preUploadUpdatedAt
-
-      chat.syncVersion = opts.syncVersion
-      if (!concurrentEdit) {
-        chat.locallyModified = false
-        chat.syncedAt = Date.now()
-        // Clock is current as of the uploaded version. On a concurrent
-        // edit the chat stays dirty and clockVersion intentionally lags
-        // so the next upload re-stamps it.
-        chat.clockVersion = opts.syncVersion
-      }
-      const normalizedAttachments = normalizeAttachmentPayloads(chat)
-      chat.messages = normalizedAttachments.messages
-
       return new Promise<void>((resolve, reject) => {
         const transaction = db.transaction(
           [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
@@ -1968,36 +1916,94 @@ export class IndexedDBStorage {
         )
         const store = transaction.objectStore(CHATS_STORE)
         const payloadStore = transaction.objectStore(ATTACHMENT_PAYLOADS_STORE)
+        const chatRequest = store.get(opts.chatId)
         transaction.oncomplete = () => resolve()
         transaction.onerror = () =>
           reject(new Error('Failed to finalize upload'))
+        transaction.onabort = () =>
+          reject(new Error('Upload finalization transaction aborted'))
+        chatRequest.onerror = () =>
+          reject(new Error('Failed to read chat before finalizing upload'))
+        chatRequest.onsuccess = () => {
+          const chat = chatRequest.result as StoredChat | undefined
+          if (!chat) return
 
-        const writeChatAndPayloads = () => {
-          for (const payload of normalizedAttachments.payloads) {
-            payloadStore.put(payload)
-          }
-          const request = store.put(updateSyncPending(chat))
-          request.onerror = () => reject(new Error('Failed to finalize upload'))
-        }
-        const payloadCursor = payloadStore
-          .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
-          .openCursor(IDBKeyRange.only(chat.id))
-        payloadCursor.onerror = () =>
-          reject(new Error('Failed to reconcile finalized attachments'))
-        payloadCursor.onsuccess = () => {
-          const cursor = payloadCursor.result
-          if (cursor) {
-            if (
-              !normalizedAttachments.referencedPayloadIds.has(
-                String(cursor.primaryKey),
-              )
-            ) {
-              cursor.delete()
+          if (opts.rewrites.length > 0) {
+            const rewritesByPayloadId = new Map(
+              opts.rewrites
+                .filter((rewrite) => rewrite.storagePayloadId)
+                .map((rewrite) => [rewrite.storagePayloadId, rewrite]),
+            )
+            const rewritesByClientId = new Map<string, AttachmentRewrite[]>()
+            for (const rewrite of opts.rewrites) {
+              if (rewrite.storagePayloadId) continue
+              const rewrites = rewritesByClientId.get(rewrite.clientId) ?? []
+              rewrites.push(rewrite)
+              rewritesByClientId.set(rewrite.clientId, rewrites)
             }
-            cursor.continue()
-            return
+            const appliedRewrites = new Set<AttachmentRewrite>()
+            for (const msg of chat.messages ?? []) {
+              for (const att of msg.attachments ?? []) {
+                const storedAttachment = att as StoredAttachmentReference
+                const rewriteByPayloadId = storedAttachment.storagePayloadId
+                  ? rewritesByPayloadId.get(storedAttachment.storagePayloadId)
+                  : undefined
+                const rewrite =
+                  rewriteByPayloadId && !appliedRewrites.has(rewriteByPayloadId)
+                    ? rewriteByPayloadId
+                    : rewritesByClientId
+                        .get(att.id)
+                        ?.find((candidate) => !appliedRewrites.has(candidate))
+                if (rewrite) {
+                  appliedRewrites.add(rewrite)
+                  att.id = rewrite.serverId
+                  att.encryptionKey = rewrite.encryptionKey
+                }
+              }
+            }
           }
-          writeChatAndPayloads()
+
+          const concurrentEdit =
+            opts.preUploadUpdatedAt !== undefined &&
+            chat.updatedAt !== opts.preUploadUpdatedAt
+          chat.syncVersion = opts.syncVersion
+          if (!concurrentEdit) {
+            chat.locallyModified = false
+            chat.syncedAt = Date.now()
+            // Clock is current as of the uploaded version. On a concurrent
+            // edit the chat stays dirty and clockVersion intentionally lags
+            // so the next upload re-stamps it.
+            chat.clockVersion = opts.syncVersion
+          }
+          const normalizedAttachments = normalizeAttachmentPayloads(chat)
+          chat.messages = normalizedAttachments.messages
+
+          const writeChatAndPayloads = () => {
+            for (const payload of normalizedAttachments.payloads) {
+              payloadStore.put(payload)
+            }
+            store.put(updateSyncPending(chat))
+          }
+          const payloadCursor = payloadStore
+            .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
+            .openCursor(IDBKeyRange.only(chat.id))
+          payloadCursor.onerror = () =>
+            reject(new Error('Failed to reconcile finalized attachments'))
+          payloadCursor.onsuccess = () => {
+            const cursor = payloadCursor.result
+            if (cursor) {
+              if (
+                !normalizedAttachments.referencedPayloadIds.has(
+                  String(cursor.primaryKey),
+                )
+              ) {
+                cursor.delete()
+              }
+              cursor.continue()
+              return
+            }
+            writeChatAndPayloads()
+          }
         }
       })
     })
@@ -2032,97 +2038,103 @@ export class IndexedDBStorage {
       if (!isCurrent()) return { applied: false }
       const db = await this.ensureDB()
       if (!isCurrent()) return { applied: false }
-      const existing = await this.getStoredChatInternal(opts.chat.id)
-      if (!isCurrent()) return { applied: false }
-
-      if (opts.expectedLocalUpdatedAt !== undefined) {
-        if (opts.expectedLocalUpdatedAt === null) {
-          if (existing) {
-            return { applied: false }
-          }
-        } else if (
-          !existing ||
-          existing.updatedAt !== opts.expectedLocalUpdatedAt ||
-          (existing.locallyModified === true && !opts.allowLocallyModified)
-        ) {
-          return { applied: false }
-        }
-      }
-
-      const normalizedAttachments = normalizeAttachmentPayloads(
-        inheritAttachmentPayloadReferences(opts.chat, existing),
-      )
-      const messagesForStorage = normalizedAttachments.messages.map((msg) => ({
-        ...msg,
-        timestamp:
-          msg.timestamp instanceof Date
-            ? msg.timestamp.toISOString()
-            : msg.timestamp,
-      }))
-
-      const storedChat: StoredChat = {
-        ...opts.chat,
-        messages: messagesForStorage as any,
-        lastAccessedAt: Date.now(),
-        syncedAt: Date.now(),
-        locallyModified: false,
-        syncPending: 0,
-        syncVersion: opts.syncVersion,
-        version: 1,
-        loadedAt: opts.setLoadedAt
-          ? Date.now()
-          : ((opts.chat as StoredChat).loadedAt ?? existing?.loadedAt),
-        isLocalOnly: (opts.chat as any).isLocalOnly ?? false,
-      }
-
-      if (!isCurrent()) return { applied: false }
-      await new Promise<void>((resolve, reject) => {
+      return new Promise<{ applied: boolean }>((resolve, reject) => {
         const transaction = db.transaction(
           [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
           'readwrite',
         )
         const store = transaction.objectStore(CHATS_STORE)
         const payloadStore = transaction.objectStore(ATTACHMENT_PAYLOADS_STORE)
-        transaction.oncomplete = () => resolve()
+        const chatRequest = store.get(opts.chat.id)
+        let applied = false
+        let cancelled = false
+        transaction.oncomplete = () => resolve({ applied })
         transaction.onerror = () =>
           reject(new Error('Failed to apply remote chat'))
-
-        const writeChatAndPayloads = () => {
-          for (const payload of normalizedAttachments.payloads) {
-            const payloadRequest = payloadStore.put(payload)
-            payloadRequest.onerror = () =>
-              reject(
-                payloadRequest.error ??
-                  new Error('Failed to save remote attachment payload'),
-              )
-          }
-          const request = store.put(storedChat)
-          request.onerror = () =>
-            reject(new Error('Failed to apply remote chat'))
+        transaction.onabort = () => {
+          if (cancelled) resolve({ applied: false })
+          else reject(new Error('Remote chat transaction aborted'))
         }
+        chatRequest.onerror = () =>
+          reject(new Error('Failed to read local chat before remote apply'))
+        chatRequest.onsuccess = () => {
+          if (!isCurrent()) return
+          const existing = chatRequest.result as StoredChat | undefined
 
-        const payloadCursor = payloadStore
-          .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
-          .openCursor(IDBKeyRange.only(opts.chat.id))
-        payloadCursor.onerror = () =>
-          reject(new Error('Failed to reconcile remote attachment payloads'))
-        payloadCursor.onsuccess = () => {
-          const cursor = payloadCursor.result
-          if (cursor) {
-            if (
-              !normalizedAttachments.referencedPayloadIds.has(
-                String(cursor.primaryKey),
-              )
+          if (opts.expectedLocalUpdatedAt !== undefined) {
+            if (opts.expectedLocalUpdatedAt === null) {
+              if (existing) return
+            } else if (
+              !existing ||
+              existing.updatedAt !== opts.expectedLocalUpdatedAt ||
+              (existing.locallyModified === true && !opts.allowLocallyModified)
             ) {
-              cursor.delete()
+              return
             }
-            cursor.continue()
-            return
           }
-          writeChatAndPayloads()
+
+          const normalizedAttachments = normalizeAttachmentPayloads(
+            inheritAttachmentPayloadReferences(opts.chat, existing),
+          )
+          const messagesForStorage = normalizedAttachments.messages.map(
+            (msg) => ({
+              ...msg,
+              timestamp:
+                msg.timestamp instanceof Date
+                  ? msg.timestamp.toISOString()
+                  : msg.timestamp,
+            }),
+          )
+          const storedChat: StoredChat = {
+            ...opts.chat,
+            messages: messagesForStorage as any,
+            lastAccessedAt: Date.now(),
+            syncedAt: Date.now(),
+            locallyModified: false,
+            syncPending: 0,
+            syncVersion: opts.syncVersion,
+            version: 1,
+            loadedAt: opts.setLoadedAt
+              ? Date.now()
+              : ((opts.chat as StoredChat).loadedAt ?? existing?.loadedAt),
+            isLocalOnly: (opts.chat as any).isLocalOnly ?? false,
+          }
+          if (!isCurrent()) return
+
+          const writeChatAndPayloads = () => {
+            for (const payload of normalizedAttachments.payloads) {
+              payloadStore.put(payload)
+            }
+            store.put(storedChat)
+            applied = true
+          }
+          const payloadCursor = payloadStore
+            .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
+            .openCursor(IDBKeyRange.only(opts.chat.id))
+          payloadCursor.onerror = () =>
+            reject(new Error('Failed to reconcile remote attachment payloads'))
+          payloadCursor.onsuccess = () => {
+            if (!isCurrent()) {
+              cancelled = true
+              transaction.abort()
+              return
+            }
+            const cursor = payloadCursor.result
+            if (cursor) {
+              if (
+                !normalizedAttachments.referencedPayloadIds.has(
+                  String(cursor.primaryKey),
+                )
+              ) {
+                cursor.delete()
+              }
+              cursor.continue()
+              return
+            }
+            writeChatAndPayloads()
+          }
         }
       })
-      return { applied: true }
     })
   }
 

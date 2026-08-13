@@ -5,7 +5,7 @@ import {
   type StoredChat,
 } from '@/services/storage/indexed-db'
 import { IDBKeyRange as FakeIDBKeyRange, IDBFactory } from 'fake-indexeddb'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 function storedChat(
   id: string,
@@ -51,6 +51,59 @@ async function seedVersionThree(chats: StoredChat[]): Promise<void> {
     transaction.onerror = () => reject(transaction.error)
   })
   db.close()
+}
+
+function blockChatTransaction(
+  storage: IndexedDBStorage,
+  chatId: string,
+  mutation: (chat: StoredChat, transaction: IDBTransaction) => void,
+): {
+  ready: Promise<void>
+  release: () => void
+  complete: Promise<void>
+} {
+  const db = (storage as any).db as IDBDatabase
+  const transaction = db.transaction(
+    ['chats', 'attachmentPayloads'],
+    'readwrite',
+  )
+  const store = transaction.objectStore('chats')
+  let released = false
+  let readyResolved = false
+  let resolveReady!: () => void
+  const ready = new Promise<void>((resolve) => {
+    resolveReady = resolve
+  })
+  const complete = new Promise<void>((resolve, reject) => {
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error)
+    transaction.onabort = () => reject(transaction.error)
+  })
+
+  const keepAlive = () => {
+    const request = store.get(chatId)
+    request.onerror = () => transaction.abort()
+    request.onsuccess = () => {
+      if (!readyResolved) {
+        readyResolved = true
+        resolveReady()
+      }
+      if (!released) {
+        keepAlive()
+        return
+      }
+      mutation(request.result as StoredChat, transaction)
+    }
+  }
+  keepAlive()
+
+  return {
+    ready,
+    release: () => {
+      released = true
+    },
+    complete,
+  }
 }
 
 describe('IndexedDB pending sync index', () => {
@@ -561,5 +614,327 @@ describe('IndexedDB pending sync index', () => {
       { id: 'server-first', key: 'key-first', base64: 'first-image' },
       { id: 'server-second', key: 'key-second', base64: 'second-image' },
     ])
+  })
+
+  it('serializes metadata updates after a concurrent tab write', async () => {
+    const writer = new IndexedDBStorage()
+    const metadataWriter = new IndexedDBStorage()
+    await Promise.all([writer.initialize(), metadataWriter.initialize()])
+    await writer.saveChat(
+      storedChat('metadata-race', {
+        locallyModified: true,
+        messages: [
+          {
+            role: 'user',
+            content: 'Original',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'attachment',
+                type: 'document',
+                fileName: 'document.txt',
+                textContent: 'Keep this payload',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+
+    const blocker = blockChatTransaction(
+      writer,
+      'metadata-race',
+      (chat, transaction) => {
+        chat.messages.push({
+          role: 'assistant',
+          content: 'Newer tab message',
+          timestamp: new Date('2026-08-12T00:00:01.000Z'),
+        })
+        chat.updatedAt = '2026-08-12T00:00:01.000Z'
+        transaction.objectStore('chats').put(chat)
+      },
+    )
+    await blocker.ready
+    const metadataDb = (metadataWriter as any).db as IDBDatabase
+    const transactionSpy = vi.spyOn(metadataDb, 'transaction')
+    const marking = metadataWriter.markAsSynced('metadata-race', 3)
+    await vi.waitFor(() =>
+      expect(transactionSpy).toHaveBeenCalledWith(['chats'], 'readwrite'),
+    )
+    blocker.release()
+    await Promise.all([blocker.complete, marking])
+
+    const result = await writer.getChat('metadata-race')
+    expect(result?.messages.map((message) => message.content)).toEqual([
+      'Original',
+      'Newer tab message',
+    ])
+    expect(result?.messages[0].attachments?.[0].textContent).toBe(
+      'Keep this payload',
+    )
+    expect(result).toMatchObject({
+      locallyModified: false,
+      syncVersion: 3,
+      clockVersion: 3,
+    })
+  })
+
+  it('uses one chat transaction for every metadata-only mutation', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat(storedChat('metadata-transactions'))
+    const db = (storage as any).db as IDBDatabase
+    const transactionSpy = vi.spyOn(db, 'transaction')
+
+    await (storage as any).updateLastAccessed('metadata-transactions')
+    expect(transactionSpy).toHaveBeenCalledTimes(1)
+    expect(transactionSpy).toHaveBeenLastCalledWith(['chats'], 'readwrite')
+
+    transactionSpy.mockClear()
+    await storage.markAsSynced('metadata-transactions', 2)
+    expect(transactionSpy).toHaveBeenCalledTimes(1)
+    expect(transactionSpy).toHaveBeenLastCalledWith(['chats'], 'readwrite')
+
+    transactionSpy.mockClear()
+    await storage.rebaseSyncVersion('metadata-transactions', 3)
+    expect(transactionSpy).toHaveBeenCalledTimes(1)
+    expect(transactionSpy).toHaveBeenLastCalledWith(['chats'], 'readwrite')
+  })
+
+  it('finalizes against the latest cross-tab messages and payloads', async () => {
+    const writer = new IndexedDBStorage()
+    const finalizer = new IndexedDBStorage()
+    await Promise.all([writer.initialize(), finalizer.initialize()])
+    await writer.saveChat(
+      storedChat('finalize-race', {
+        locallyModified: true,
+        messages: [
+          {
+            role: 'user',
+            content: 'Uploaded message',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'uploaded-attachment',
+                type: 'image',
+                fileName: 'uploaded.png',
+                base64: 'uploaded-payload',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    const uploaded = await writer.getChat('finalize-race')
+    if (!uploaded) throw new Error('Expected stored chat')
+    const uploadedPayloadId = (
+      uploaded.messages[0].attachments?.[0] as {
+        storagePayloadId?: string
+      }
+    ).storagePayloadId
+
+    const blocker = blockChatTransaction(
+      writer,
+      uploaded.id,
+      (chat, transaction) => {
+        const newPayloadId = 'cross-tab-new-payload'
+        chat.messages.push({
+          role: 'user',
+          content: 'Newer tab message',
+          timestamp: new Date('2026-08-12T00:00:01.000Z'),
+          attachments: [
+            {
+              id: 'new-attachment',
+              type: 'document',
+              fileName: 'new.txt',
+              storagePayloadId: newPayloadId,
+            } as any,
+          ],
+        })
+        chat.updatedAt = '2026-08-12T00:00:01.000Z'
+        chat.locallyModified = true
+        transaction.objectStore('attachmentPayloads').put({
+          id: newPayloadId,
+          chatId: chat.id,
+          textContent: 'Newer tab payload',
+        })
+        transaction.objectStore('chats').put(chat)
+      },
+    )
+    await blocker.ready
+    const finalizerDb = (finalizer as any).db as IDBDatabase
+    const transactionSpy = vi.spyOn(finalizerDb, 'transaction')
+    const finalizing = finalizer.finalizeUpload({
+      chatId: uploaded.id,
+      rewrites: [
+        {
+          clientId: 'uploaded-attachment',
+          serverId: 'server-attachment',
+          encryptionKey: 'server-key',
+          storagePayloadId: uploadedPayloadId,
+        },
+      ],
+      preUploadUpdatedAt: uploaded.updatedAt,
+      syncVersion: 4,
+    })
+    await vi.waitFor(() =>
+      expect(transactionSpy).toHaveBeenCalledWith(
+        ['chats', 'attachmentPayloads'],
+        'readwrite',
+      ),
+    )
+    blocker.release()
+    await Promise.all([blocker.complete, finalizing])
+
+    const result = await writer.getChat(uploaded.id)
+    expect(result?.messages.map((message) => message.content)).toEqual([
+      'Uploaded message',
+      'Newer tab message',
+    ])
+    expect(result?.messages[0].attachments?.[0]).toMatchObject({
+      id: 'server-attachment',
+      encryptionKey: 'server-key',
+      base64: 'uploaded-payload',
+    })
+    expect(result?.messages[1].attachments?.[0].textContent).toBe(
+      'Newer tab payload',
+    )
+    expect(result?.locallyModified).toBe(true)
+    expect(result?.syncVersion).toBe(4)
+  })
+
+  it('rechecks remote apply CAS after an overlapping tab transaction', async () => {
+    const writer = new IndexedDBStorage()
+    const remoteWriter = new IndexedDBStorage()
+    await Promise.all([writer.initialize(), remoteWriter.initialize()])
+    await writer.saveChat(
+      storedChat('remote-race', {
+        locallyModified: false,
+        messages: [
+          {
+            role: 'user',
+            content: 'Original',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'attachment',
+                type: 'document',
+                fileName: 'original.txt',
+                textContent: 'Original payload',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    const expectedUpdatedAt = '2026-08-12T00:00:00.000Z'
+    const blocker = blockChatTransaction(
+      writer,
+      'remote-race',
+      (chat, transaction) => {
+        chat.messages.push({
+          role: 'assistant',
+          content: 'Local tab won',
+          timestamp: new Date('2026-08-12T00:00:01.000Z'),
+        })
+        chat.updatedAt = '2026-08-12T00:00:01.000Z'
+        chat.locallyModified = true
+        transaction.objectStore('chats').put(chat)
+      },
+    )
+    await blocker.ready
+    const remoteDb = (remoteWriter as any).db as IDBDatabase
+    const transactionSpy = vi.spyOn(remoteDb, 'transaction')
+    const applying = remoteWriter.applyRemoteChatIfFresh({
+      chat: storedChat('remote-race', {
+        updatedAt: '2026-08-12T00:00:02.000Z',
+        messages: [
+          {
+            role: 'assistant',
+            content: 'Remote replacement',
+            timestamp: new Date('2026-08-12T00:00:02.000Z'),
+          },
+        ],
+      }),
+      syncVersion: 5,
+      expectedLocalUpdatedAt: expectedUpdatedAt,
+    })
+    await vi.waitFor(() =>
+      expect(transactionSpy).toHaveBeenCalledWith(
+        ['chats', 'attachmentPayloads'],
+        'readwrite',
+      ),
+    )
+    blocker.release()
+    const [applyResult] = await Promise.all([applying, blocker.complete])
+
+    expect(applyResult).toEqual({ applied: false })
+    const result = await writer.getChat('remote-race')
+    expect(result?.messages.map((message) => message.content)).toEqual([
+      'Original',
+      'Local tab won',
+    ])
+    expect(result?.messages[0].attachments?.[0].textContent).toBe(
+      'Original payload',
+    )
+  })
+
+  it('rolls back payload reconciliation when a remote apply becomes stale', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat(
+      storedChat('cancelled-remote-apply', {
+        locallyModified: false,
+        messages: [
+          {
+            role: 'user',
+            content: 'Original',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'first',
+                type: 'document',
+                fileName: 'first.txt',
+                textContent: 'First payload',
+              },
+              {
+                id: 'second',
+                type: 'document',
+                fileName: 'second.txt',
+                textContent: 'Second payload',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    let currentCheckCount = 0
+    const result = await storage.applyRemoteChatIfFresh({
+      chat: storedChat('cancelled-remote-apply', {
+        updatedAt: '2026-08-12T00:00:01.000Z',
+        messages: [
+          {
+            role: 'assistant',
+            content: 'Remote replacement',
+            timestamp: new Date('2026-08-12T00:00:01.000Z'),
+          },
+        ],
+      }),
+      syncVersion: 2,
+      expectedLocalUpdatedAt: undefined,
+      isCurrent: () => {
+        currentCheckCount += 1
+        return currentCheckCount < 6
+      },
+    })
+
+    expect(result).toEqual({ applied: false })
+    const stored = await storage.getChat('cancelled-remote-apply')
+    expect(stored?.messages[0].content).toBe('Original')
+    expect(
+      stored?.messages[0].attachments?.map(
+        (attachment) => attachment.textContent,
+      ),
+    ).toEqual(['First payload', 'Second payload'])
   })
 })
