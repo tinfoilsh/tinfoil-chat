@@ -1,5 +1,12 @@
-import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
-import { CloudSyncService } from '@/services/cloud/cloud-sync'
+import {
+  AUTH_ACTIVE_USER_ID,
+  SETTINGS_CLOUD_SYNC_ENABLED,
+} from '@/constants/storage-keys'
+import {
+  CloudSyncService,
+  CROSS_TAB_SYNC_LOCK,
+  CROSS_TAB_SYNC_LOCK_OPTIONS,
+} from '@/services/cloud/cloud-sync'
 import { SyncEnclaveError } from '@/services/sync-enclave/sync-enclave-client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -91,7 +98,17 @@ vi.mock('@/utils/error-handling', () => ({
 describe('CloudSyncService revision coordinator routing', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: {
+        request: vi.fn(async (...args: unknown[]) => {
+          const operation = args[2] as () => Promise<unknown>
+          return operation()
+        }),
+      },
+    })
     localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-1')
+    localStorage.setItem(SETTINGS_CLOUD_SYNC_ENABLED, 'true')
     isAuthenticated.mockResolvedValue(true)
     clearRevisionSyncState.mockResolvedValue(undefined)
     canWriteToCloud.mockResolvedValue(false)
@@ -112,6 +129,11 @@ describe('CloudSyncService revision coordinator routing', () => {
     const result = await new CloudSyncService().smartSync('project-1')
 
     expect(result).toEqual({ uploaded: 1, downloaded: 2, errors: [] })
+    expect(navigator.locks.request).toHaveBeenCalledWith(
+      CROSS_TAB_SYNC_LOCK,
+      expect.objectContaining(CROSS_TAB_SYNC_LOCK_OPTIONS),
+      expect.any(Function),
+    )
     expect(drainChatRevisionSync).toHaveBeenCalledTimes(1)
     expect(drainChatRevisionSync.mock.calls[0][1]).toBe('user-1')
   })
