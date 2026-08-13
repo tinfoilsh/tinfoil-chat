@@ -57,6 +57,7 @@ describe('IndexedDBStorage account reset', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('bypasses a stalled write queue and closes the old connection', async () => {

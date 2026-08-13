@@ -44,6 +44,7 @@ export interface StoredChat extends Chat {
 
 export interface ChatSyncMetadata {
   id: string
+  messageCount: number
   projectId?: string
   decryptionFailed?: boolean
   locallyModified?: boolean
@@ -145,6 +146,12 @@ const ACCOUNT_CHANGE_RESET_TIMEOUT_MS = 10_000
 const ACCOUNT_CHANGE_READ_ERROR = 'IndexedDB read superseded by account change'
 const ACCOUNT_CHANGE_WRITE_ERROR =
   'IndexedDB write superseded by account change'
+const CHAT_SYNC_BOOLEAN_FIELDS = [
+  'decryptionFailed',
+  'locallyModified',
+  'isLocalOnly',
+  'isBlankChat',
+] as const
 let isUpgradeBlocked = false
 const textEncoder = new TextEncoder()
 
@@ -170,16 +177,52 @@ function deserializeStoredChat(chat: StoredChat): StoredChat {
   } as StoredChat
 }
 
-function toChatSyncMetadata(chat: StoredChat): ChatSyncMetadata {
+function toChatSyncMetadata(chat: unknown): ChatSyncMetadata {
+  if (!chat || typeof chat !== 'object') {
+    throw new Error('Stored chat has invalid sync metadata')
+  }
+
+  const rawChat = chat as Record<string, unknown>
+  if (typeof rawChat.id !== 'string' || rawChat.id.trim().length === 0) {
+    throw new Error('Stored chat has invalid sync metadata: id')
+  }
+  if (!Array.isArray(rawChat.messages)) {
+    throw new Error('Stored chat has invalid sync metadata: messages')
+  }
+  if (
+    typeof rawChat.updatedAt !== 'string' ||
+    rawChat.updatedAt.trim().length === 0
+  ) {
+    throw new Error('Stored chat has invalid sync metadata: updatedAt')
+  }
+  if (
+    rawChat.projectId !== undefined &&
+    typeof rawChat.projectId !== 'string'
+  ) {
+    throw new Error('Stored chat has invalid sync metadata: projectId')
+  }
+  if (
+    rawChat.syncedAt !== undefined &&
+    (typeof rawChat.syncedAt !== 'number' || !Number.isFinite(rawChat.syncedAt))
+  ) {
+    throw new Error('Stored chat has invalid sync metadata: syncedAt')
+  }
+  for (const field of CHAT_SYNC_BOOLEAN_FIELDS) {
+    if (rawChat[field] !== undefined && typeof rawChat[field] !== 'boolean') {
+      throw new Error(`Stored chat has invalid sync metadata: ${field}`)
+    }
+  }
+
   return {
-    id: chat.id,
-    projectId: chat.projectId,
-    decryptionFailed: chat.decryptionFailed,
-    locallyModified: chat.locallyModified,
-    syncedAt: chat.syncedAt,
-    updatedAt: chat.updatedAt,
-    isLocalOnly: chat.isLocalOnly,
-    isBlankChat: chat.isBlankChat,
+    id: rawChat.id,
+    messageCount: rawChat.messages.length,
+    projectId: rawChat.projectId as string | undefined,
+    decryptionFailed: rawChat.decryptionFailed as boolean | undefined,
+    locallyModified: rawChat.locallyModified as boolean | undefined,
+    syncedAt: rawChat.syncedAt as number | undefined,
+    updatedAt: rawChat.updatedAt,
+    isLocalOnly: rawChat.isLocalOnly as boolean | undefined,
+    isBlankChat: rawChat.isBlankChat as boolean | undefined,
   }
 }
 
@@ -1818,13 +1861,17 @@ export class IndexedDBStorage {
         const metadata: ChatSyncMetadata[] = []
 
         request.onsuccess = () => {
-          const cursor = request.result
-          if (!cursor) {
-            resolve(metadata)
-            return
+          try {
+            const cursor = request.result
+            if (!cursor) {
+              resolve(metadata)
+              return
+            }
+            metadata.push(toChatSyncMetadata(cursor.value))
+            cursor.continue()
+          } catch (error) {
+            reject(error)
           }
-          metadata.push(toChatSyncMetadata(cursor.value as StoredChat))
-          cursor.continue()
         }
         request.onerror = () =>
           reject(new Error('Failed to get chat sync metadata'))
@@ -2003,13 +2050,17 @@ export class IndexedDBStorage {
         const metadata: ChatSyncMetadata[] = []
 
         request.onsuccess = () => {
-          const cursor = request.result
-          if (!cursor) {
-            resolve(metadata)
-            return
+          try {
+            const cursor = request.result
+            if (!cursor) {
+              resolve(metadata)
+              return
+            }
+            metadata.push(toChatSyncMetadata(cursor.value))
+            cursor.continue()
+          } catch (error) {
+            reject(error)
           }
-          metadata.push(toChatSyncMetadata(cursor.value as StoredChat))
-          cursor.continue()
         }
         request.onerror = () =>
           reject(new Error('Failed to get unsynced chats'))

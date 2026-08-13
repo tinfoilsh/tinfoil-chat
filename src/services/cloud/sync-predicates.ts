@@ -42,6 +42,7 @@ export function trustedChatClock(
  * - isLocalOnly === true (user explicitly chose local storage)
  * - isBlankChat === true (empty placeholder chat)
  * - decryptionFailed === true (would overwrite server data with placeholder)
+ * - no messages (nothing to upload)
  * - currently streaming (incomplete data)
  *
  * @param chat The chat to check
@@ -49,10 +50,19 @@ export function trustedChatClock(
  * @returns true if the chat can be uploaded
  */
 export function isUploadableChat(
-  chat: Pick<
-    ChatSyncMetadata,
-    'id' | 'isLocalOnly' | 'isBlankChat' | 'decryptionFailed'
-  >,
+  chat:
+    | Pick<
+        ChatSyncMetadata,
+        | 'id'
+        | 'messageCount'
+        | 'isLocalOnly'
+        | 'isBlankChat'
+        | 'decryptionFailed'
+      >
+    | Pick<
+        StoredChat,
+        'id' | 'messages' | 'isLocalOnly' | 'isBlankChat' | 'decryptionFailed'
+      >,
   isStreaming?: (chatId: string) => boolean,
 ): boolean {
   if (chat.isLocalOnly === true) {
@@ -64,6 +74,12 @@ export function isUploadableChat(
   }
 
   if (chat.decryptionFailed === true) {
+    return false
+  }
+
+  const messageCount =
+    'messageCount' in chat ? chat.messageCount : chat.messages.length
+  if (messageCount === 0) {
     return false
   }
 

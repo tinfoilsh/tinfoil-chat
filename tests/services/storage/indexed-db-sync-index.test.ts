@@ -431,6 +431,68 @@ describe('IndexedDB pending sync index', () => {
     expect(chats.map((chat) => chat.id)).toEqual(['chat-a', 'chat-b', 'chat-c'])
   })
 
+  it('derives sync message counts without copying messages into metadata', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat(
+      storedChat('metadata-count', {
+        messages: [
+          {
+            role: 'user',
+            content: 'Count me',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+          },
+        ],
+      }),
+    )
+
+    const metadata = await storage.getChatSyncMetadata()
+
+    expect(metadata).toEqual([
+      expect.objectContaining({ id: 'metadata-count', messageCount: 1 }),
+    ])
+    expect(metadata[0]).not.toHaveProperty('messages')
+  })
+
+  it('rejects malformed all-chat sync metadata', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    const db = (storage as any).db as IDBDatabase
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('chats', 'readwrite')
+      transaction.objectStore('chats').put({
+        ...storedChat('invalid-project'),
+        projectId: 42,
+      })
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+    })
+
+    await expect(storage.getChatSyncMetadata()).rejects.toThrow(
+      'Stored chat has invalid sync metadata: projectId',
+    )
+  })
+
+  it('rejects malformed unsynced sync metadata', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    const db = (storage as any).db as IDBDatabase
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('chats', 'readwrite')
+      transaction.objectStore('chats').put({
+        ...storedChat('invalid-messages'),
+        messages: null,
+        syncPending: 1,
+      })
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+    })
+
+    await expect(storage.getUnsyncedChatMetadata()).rejects.toThrow(
+      'Stored chat has invalid sync metadata: messages',
+    )
+  })
+
   it('fails reads when a local attachment payload row is missing', async () => {
     const storage = new IndexedDBStorage()
     await storage.initialize()

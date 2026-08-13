@@ -7,6 +7,7 @@
  * - isLocalOnly !== true
  * - isBlankChat !== true
  * - decryptionFailed !== true
+ * - has at least one message
  * - not currently streaming
  */
 
@@ -71,7 +72,7 @@ describe('Sync Predicates', () => {
       expect(isUploadableChat(baseChat, isStreaming)).toBe(true)
     })
 
-    it('handles undefined/missing optional fields', () => {
+    it('returns false for full chats without messages', () => {
       const minimalChat = {
         id: 'minimal',
         title: 'Minimal',
@@ -81,7 +82,19 @@ describe('Sync Predicates', () => {
         lastAccessedAt: Date.now(),
         // No optional fields set
       } as StoredChat
-      expect(isUploadableChat(minimalChat)).toBe(true)
+      expect(isUploadableChat(minimalChat)).toBe(false)
+    })
+
+    it('returns false for metadata with no messages', () => {
+      expect(
+        isUploadableChat({
+          id: 'empty-metadata',
+          messageCount: 0,
+          isLocalOnly: false,
+          isBlankChat: false,
+          decryptionFailed: false,
+        }),
+      ).toBe(false)
     })
 
     it('handles false vs undefined for boolean flags', () => {
