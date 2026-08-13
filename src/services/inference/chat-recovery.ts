@@ -893,10 +893,10 @@ export function scanPendingChatRecoveries(
   const controller = new AbortController()
   const promise = (async () => {
     try {
-      const chats = await indexedDBStorage.getAllChats()
+      const chats = await indexedDBStorage.getPendingChatRecoveries()
       if (generation !== recoveryScanGeneration) return
       const pending = chats.flatMap((chat) =>
-        (chat.pendingRecoveries ?? []).map((envelope) => ({
+        chat.pendingRecoveries.map((envelope) => ({
           chatId: chat.id,
           envelope,
         })),
