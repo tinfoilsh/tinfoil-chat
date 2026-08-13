@@ -160,9 +160,7 @@ describe('useChatMessaging retryLastMessage', () => {
         systemPrompt: '',
         rules: '',
         storeHistory: false,
-        // handleQuery refuses to dispatch before the model config loads,
-        // so the retry path needs at least one available model.
-        models: [{ modelName: 'test-model' } as BaseModel],
+        models: [],
         selectedModel: 'test-model',
         chats: [chat],
         currentChat: chat,
