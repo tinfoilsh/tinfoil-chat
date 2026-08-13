@@ -1,6 +1,7 @@
 import { MESSAGE_QUEUE_PREFIX } from '@/constants/storage-keys'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Attachment, LoadingState, Message, QueuedMessage } from '../types'
+import type { ChatDispatchResult } from './use-chat-messaging'
 
 type HandleQuery = (
   query: string,
@@ -8,7 +9,7 @@ type HandleQuery = (
   systemPromptOverride?: string,
   baseMessages?: Message[],
   quote?: string,
-) => void | Promise<unknown>
+) => void | ChatDispatchResult | Promise<void | ChatDispatchResult>
 
 export type QueueSubmitInput = {
   text: string
@@ -19,6 +20,7 @@ export type QueueSubmitInput = {
 type UseMessageQueueArgs = {
   chatId: string | null | undefined
   queueId?: string | null
+  persistQueue?: boolean
   loadingState: LoadingState
   handleQuery: HandleQuery
   isRateLimited: () => boolean
@@ -42,8 +44,11 @@ function isBlankQueueId(queueId: string): boolean {
   return queueId === 'blank-local' || queueId === 'blank-cloud'
 }
 
-function storageKeyFor(queueId: string | null | undefined): string | null {
-  return queueId && !isBlankQueueId(queueId)
+function storageKeyFor(
+  queueId: string | null | undefined,
+  persistQueue: boolean,
+): string | null {
+  return persistQueue && queueId && !isBlankQueueId(queueId)
     ? `${MESSAGE_QUEUE_PREFIX}${queueId}`
     : null
 }
@@ -122,6 +127,7 @@ function writeToStorage(key: string | null, queue: QueuedMessage[]): void {
 export function useMessageQueue({
   chatId,
   queueId = chatId,
+  persistQueue = true,
   loadingState,
   handleQuery,
   isRateLimited,
@@ -133,6 +139,10 @@ export function useMessageQueue({
   // Per-chat queues so several conversations can hold pending messages at
   // once. Hydrated lazily from sessionStorage on first access.
   const queuesRef = useRef<Map<string, QueuedMessage[]>>(new Map())
+  const persistentQueueIdsRef = useRef<Map<string, boolean>>(new Map())
+  if (queueId != null) {
+    persistentQueueIdsRef.current.set(queueId, persistQueue)
+  }
 
   const getQueue = useCallback(
     (id: string | null | undefined): QueuedMessage[] => {
@@ -142,7 +152,9 @@ export function useMessageQueue({
       if (id == null) return []
       let q = queuesRef.current.get(id)
       if (!q) {
-        q = loadFromStorage(storageKeyFor(id))
+        q = loadFromStorage(
+          storageKeyFor(id, persistentQueueIdsRef.current.get(id) !== false),
+        )
         queuesRef.current.set(id, q)
       }
       return q
@@ -161,7 +173,11 @@ export function useMessageQueue({
 
   const setQueueFor = useCallback((id: string, next: QueuedMessage[]) => {
     queuesRef.current.set(id, next)
-    writeToStorage(storageKeyFor(id), next)
+    const shouldPersist = persistentQueueIdsRef.current.get(id) !== false
+    writeToStorage(storageKeyFor(id, shouldPersist), next)
+    if (!shouldPersist) {
+      writeToStorage(storageKeyFor(id, true), [])
+    }
     if (id === currentQueueIdRef.current) setQueue(next)
   }, [])
 
@@ -259,13 +275,16 @@ export function useMessageQueue({
   // re-key in the chat-sync effect) instead of staying parked on the shared
   // blank id ('') and blocking the next new chat.
   const pumpsRef = useRef<Map<string, { id: string }>>(new Map())
+  const rejectedQueuesRef = useRef<Set<string>>(new Set())
 
   const runPump = useCallback(
     async (startId: string): Promise<void> => {
       if (startId == null) return
+      if (rejectedQueuesRef.current.has(startId)) return
       if (pumpsRef.current.has(startId)) return
       const pump = { id: startId }
       pumpsRef.current.set(startId, pump)
+      let rejectedBeforeDispatch = false
       try {
         while (getQueue(pump.id).length > 0) {
           // Only the chat on screen can dispatch; pause otherwise.
@@ -295,6 +314,7 @@ export function useMessageQueue({
               undefined,
               next.quote,
             )
+            let dispatchResult: void | ChatDispatchResult = undefined
             if (
               result &&
               typeof (result as Promise<unknown>).then === 'function'
@@ -304,15 +324,31 @@ export function useMessageQueue({
               // the race the pump would wedge on it and stop draining.
               const cancelWaiter = armCancelWaiter(pump.id)
               try {
-                await Promise.race([
-                  (result as Promise<unknown>).catch(() => {
-                    /* errors are surfaced by the chat itself; keep draining */
-                  }),
-                  cancelWaiter.promise,
+                const settled = await Promise.race([
+                  (result as Promise<void | ChatDispatchResult>)
+                    .then((value) => ({ type: 'result' as const, value }))
+                    .catch(() => ({ type: 'error' as const })),
+                  cancelWaiter.promise.then(() => ({
+                    type: 'cancelled' as const,
+                  })),
                 ])
+                if (settled.type === 'result') {
+                  dispatchResult = settled.value
+                }
               } finally {
                 cancelWaiter.disarm()
               }
+            } else {
+              dispatchResult = result as void | ChatDispatchResult
+            }
+            if (
+              dispatchResult?.status === 'not-started' &&
+              dispatchResult.reason !== 'chat-deleted'
+            ) {
+              setQueueFor(pump.id, [next, ...getQueue(pump.id)])
+              rejectedQueuesRef.current.add(pump.id)
+              rejectedBeforeDispatch = true
+              return
             }
           } catch {
             /* errors are surfaced by the chat itself; keep draining */
@@ -329,6 +365,7 @@ export function useMessageQueue({
         if (
           pump.id === currentQueueIdRef.current &&
           getQueue(pump.id).length > 0 &&
+          !rejectedBeforeDispatch &&
           !isRateLimitedRef.current() &&
           !isDispatchBlockedRef.current?.()
         ) {
@@ -375,6 +412,7 @@ export function useMessageQueue({
             : undefined,
         quote: input.quote ?? undefined,
       }
+      rejectedQueuesRef.current.delete(id)
       setQueueFor(id, [...getQueue(id), item])
       void runPump(id)
     },
@@ -386,6 +424,7 @@ export function useMessageQueue({
   // server/local id on its first message).
   const prevChatIdRef = useRef<string | null | undefined>(chatId)
   const prevQueueIdRef = useRef<string | null | undefined>(queueId)
+  const prevPersistQueueRef = useRef(persistQueue)
 
   // Sync the rendered queue to the active chat and resume draining it (e.g.
   // messages left in sessionStorage, or queued while the chat was in the
@@ -393,8 +432,25 @@ export function useMessageQueue({
   useEffect(() => {
     const prev = prevChatIdRef.current
     const previousQueueId = prevQueueIdRef.current
+    const previousPersistQueue = prevPersistQueueRef.current
     prevChatIdRef.current = chatId
     prevQueueIdRef.current = queueId
+    prevPersistQueueRef.current = persistQueue
+
+    if (queueId != null && !persistQueue) {
+      writeToStorage(storageKeyFor(queueId, true), [])
+    }
+
+    if (
+      previousQueueId != null &&
+      !previousPersistQueue &&
+      (previousQueueId !== queueId || persistQueue)
+    ) {
+      queuesRef.current.delete(previousQueueId)
+      persistentQueueIdsRef.current.delete(previousQueueId)
+      rejectedQueuesRef.current.delete(previousQueueId)
+      writeToStorage(storageKeyFor(previousQueueId, true), [])
+    }
 
     // Blank chats all share the empty-string id. When one converts to a
     // real id, re-key its in-flight pump and queue so the freed blank id is
@@ -415,7 +471,13 @@ export function useMessageQueue({
           ...(queuesRef.current.get(chatId) ?? []),
           ...pending,
         ])
-        writeToStorage(storageKeyFor(chatId), queuesRef.current.get(chatId)!)
+        writeToStorage(
+          storageKeyFor(
+            chatId,
+            persistentQueueIdsRef.current.get(chatId) !== false,
+          ),
+          queuesRef.current.get(chatId)!,
+        )
       }
       queuesRef.current.delete(previousQueueId)
       if (pump) {
@@ -441,7 +503,7 @@ export function useMessageQueue({
     if (queueId != null && getQueue(queueId).length > 0) {
       void runPump(queueId)
     }
-  }, [chatId, queueId, getQueue, runPump])
+  }, [chatId, queueId, persistQueue, getQueue, runPump])
 
   const removeQueuedMessage = useCallback(
     (queuedId: string): void => {
@@ -473,6 +535,7 @@ export function useMessageQueue({
       if (!item) return
 
       setQueueFor(id, [item, ...currentQueue.filter((m) => m.id !== queuedId)])
+      rejectedQueuesRef.current.delete(id)
       notifyGenerationCancelled(id)
       if (loadingStateRef.current !== 'idle') {
         void cancelGenerationRef.current?.(

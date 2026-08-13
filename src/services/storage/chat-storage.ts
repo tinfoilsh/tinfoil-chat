@@ -61,7 +61,9 @@ export class ChatStorageService {
     skipCloudSync: boolean,
     requireExisting: boolean,
   ): Promise<Chat | null> {
+    if (deletedChatsTracker.isDeleted(chat.id)) return null
     await this.initialize()
+    if (deletedChatsTracker.isDeleted(chat.id)) return null
 
     // Never save blank chats to storage
     if (chat.isBlankChat) {

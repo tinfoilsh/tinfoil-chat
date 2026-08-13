@@ -1,5 +1,5 @@
 import { useMessageQueue } from '@/components/chat/hooks/use-message-queue'
-import type { LoadingState } from '@/components/chat/types'
+import type { Attachment, LoadingState } from '@/components/chat/types'
 import { MESSAGE_QUEUE_PREFIX } from '@/constants/storage-keys'
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -158,6 +158,91 @@ describe('useMessageQueue concurrency', () => {
     await flushMicrotasks()
     expect(handleQuery).toHaveBeenCalledTimes(2)
     expect(handleQuery.mock.calls[1][0]).toBe('local message')
+  })
+
+  it('never persists a temporary chat queue and clears it on mode exit', async () => {
+    const handleQuery = vi.fn(() => Promise.resolve())
+    const { result, rerender } = renderHook(
+      ({ queueId, persistQueue }) =>
+        useMessageQueue({
+          chatId: queueId,
+          queueId,
+          persistQueue,
+          loadingState: 'loading' as LoadingState,
+          handleQuery,
+          isRateLimited: () => false,
+        }),
+      {
+        initialProps: {
+          queueId: 'temporary-chat',
+          persistQueue: false as boolean,
+        },
+      },
+    )
+    const attachment = {
+      id: 'private-image',
+      type: 'image',
+      fileName: 'private.png',
+      mimeType: 'image/png',
+      base64: 'private-payload',
+    } as Attachment
+
+    act(() => {
+      result.current.submit({
+        text: 'private text',
+        attachments: [attachment],
+      })
+    })
+
+    expect(
+      window.sessionStorage.getItem(`${MESSAGE_QUEUE_PREFIX}temporary-chat`),
+    ).toBeNull()
+    expect(result.current.queuedMessages).toHaveLength(1)
+
+    rerender({ queueId: 'permanent-chat', persistQueue: true })
+    expect(result.current.queuedMessages).toEqual([])
+    expect(window.sessionStorage.length).toBe(0)
+  })
+
+  it('requeues the complete item once when dispatch never starts', async () => {
+    const attachment = {
+      id: 'document-1',
+      type: 'document',
+      fileName: 'notes.txt',
+      textContent: 'full attachment',
+    } as Attachment
+    const handleQuery = vi.fn(async () => ({
+      status: 'not-started' as const,
+      reason: 'chat-unavailable' as const,
+    }))
+    const { result } = renderHook(() =>
+      useMessageQueue({
+        chatId: 'chat-a',
+        loadingState: 'idle' as LoadingState,
+        handleQuery,
+        isRateLimited: () => false,
+      }),
+    )
+
+    act(() => {
+      result.current.submit({
+        text: 'keep me',
+        attachments: [attachment],
+        quote: 'quoted context',
+      })
+    })
+    await flushMicrotasks()
+
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+    expect(result.current.queuedMessages).toEqual([
+      expect.objectContaining({
+        text: 'keep me',
+        attachments: [attachment],
+        quote: 'quoted context',
+      }),
+    ])
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(1)
   })
 
   it('re-keys a blank queue to the created chat id', async () => {
