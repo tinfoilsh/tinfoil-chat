@@ -1,4 +1,5 @@
 import {
+  AttachmentPayloadIdUnavailableError,
   chatContentFingerprint,
   DB_NAME,
   DB_VERSION,
@@ -701,68 +702,102 @@ describe('IndexedDB pending sync index', () => {
     ])
   })
 
-  it('keeps fallback payload ids unique across module reloads and chats', async () => {
+  it('rejects duplicate payload saves atomically without randomUUID', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat(
+      storedChat('uuid-required', {
+        title: 'Original',
+        messages: [
+          {
+            role: 'user',
+            content: 'Original',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'shared',
+                type: 'image',
+                fileName: 'original.png',
+                base64: 'original',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+
     vi.stubGlobal('crypto', {})
-    vi.resetModules()
-    const { IndexedDBStorage: FirstStorage } =
-      await import('@/services/storage/indexed-db')
-    const firstStorage = new FirstStorage()
-    await firstStorage.initialize()
-    await firstStorage.saveChat(
-      storedChat('first/chat', {
+    await expect(
+      storage.saveChat(
+        storedChat('uuid-required', {
+          title: 'Changed',
+          messages: [
+            {
+              role: 'user',
+              content: 'Changed',
+              timestamp: new Date('2026-08-12T00:00:00.000Z'),
+              attachments: [
+                {
+                  id: 'shared',
+                  type: 'image',
+                  fileName: 'changed.png',
+                  base64: 'changed',
+                },
+                {
+                  id: 'shared',
+                  type: 'image',
+                  fileName: 'duplicate.png',
+                  base64: 'duplicate',
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    ).rejects.toBeInstanceOf(AttachmentPayloadIdUnavailableError)
+
+    const stored = await storage.getChat('uuid-required')
+    expect(stored?.title).toBe('Original')
+    expect(stored?.messages[0].content).toBe('Original')
+    expect(stored?.messages[0].attachments).toEqual([
+      expect.objectContaining({
+        fileName: 'original.png',
+        base64: 'original',
+      }),
+    ])
+  })
+
+  it('uses deterministic legacy payload ids without randomUUID', async () => {
+    vi.stubGlobal('crypto', {})
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat(
+      storedChat('legacy-only', {
         messages: [
           {
             role: 'user',
-            content: 'First',
+            content: 'Legacy',
             timestamp: new Date('2026-08-12T00:00:00.000Z'),
             attachments: [
-              { id: 'shared', type: 'image', fileName: 'a.png', base64: 'a' },
-              { id: 'shared', type: 'image', fileName: 'b.png', base64: 'b' },
+              {
+                id: 'unique',
+                type: 'image',
+                fileName: 'legacy.png',
+                base64: 'legacy',
+              },
             ],
           },
         ],
       }),
     )
 
-    vi.resetModules()
-    const { IndexedDBStorage: SecondStorage } =
-      await import('@/services/storage/indexed-db')
-    const secondStorage = new SecondStorage()
-    await secondStorage.initialize()
-    await secondStorage.saveChat(
-      storedChat('second:chat', {
-        messages: [
-          {
-            role: 'user',
-            content: 'Second',
-            timestamp: new Date('2026-08-12T00:00:00.000Z'),
-            attachments: [
-              { id: 'shared', type: 'image', fileName: 'c.png', base64: 'c' },
-              { id: 'shared', type: 'image', fileName: 'd.png', base64: 'd' },
-            ],
-          },
-        ],
+    const stored = await storage.getChat('legacy-only')
+    expect(stored?.messages[0].attachments).toEqual([
+      expect.objectContaining({
+        storagePayloadId: 'legacy-only:unique',
+        base64: 'legacy',
       }),
-    )
-
-    const first = await secondStorage.getChat('first/chat')
-    const second = await secondStorage.getChat('second:chat')
-    const firstAttachments = first?.messages[0].attachments ?? []
-    const secondAttachments = second?.messages[0].attachments ?? []
-
-    expect(firstAttachments.map((attachment) => attachment.base64)).toEqual([
-      'a',
-      'b',
     ])
-    expect(secondAttachments.map((attachment) => attachment.base64)).toEqual([
-      'c',
-      'd',
-    ])
-    expect(
-      (firstAttachments[1] as { storagePayloadId?: string }).storagePayloadId,
-    ).not.toBe(
-      (secondAttachments[1] as { storagePayloadId?: string }).storagePayloadId,
-    )
   })
 
   it('finalizes duplicate client ids using their payload identities', async () => {

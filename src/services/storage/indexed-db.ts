@@ -81,6 +81,15 @@ export interface AttachmentRewrite {
   storagePayloadId?: string
 }
 
+export class AttachmentPayloadIdUnavailableError extends Error {
+  readonly code = 'ATTACHMENT_PAYLOAD_ID_UNAVAILABLE'
+
+  constructor() {
+    super('Secure random UUID generation is unavailable')
+    this.name = 'AttachmentPayloadIdUnavailableError'
+  }
+}
+
 export const DB_NAME = 'tinfoil-chat'
 export const DB_VERSION = 5
 export const INDEXED_DB_UPGRADE_BLOCKED_EVENT = 'indexedDBUpgradeBlocked'
@@ -305,15 +314,15 @@ function attachmentHasPayload(attachment: Attachment): boolean {
   )
 }
 
-let fallbackAttachmentPayloadId = 0
-
 function createAttachmentPayloadId(
   chatId: string,
   reservedPayloadIds: Set<string>,
 ): string {
-  const token =
-    globalThis.crypto?.randomUUID?.() ??
-    `fallback-${fallbackAttachmentPayloadId++}`
+  if (typeof globalThis.crypto?.randomUUID !== 'function') {
+    throw new AttachmentPayloadIdUnavailableError()
+  }
+
+  const token = globalThis.crypto.randomUUID()
   const encodedChatId = bytesToHex(textEncoder.encode(chatId))
   const baseId = `${GENERATED_ATTACHMENT_PAYLOAD_PREFIX}${encodedChatId}:${token}`
   let payloadId = baseId
@@ -391,6 +400,20 @@ function normalizeAttachmentPayloads(chat: Chat): {
     messages,
     payloads,
     referencedPayloadIds,
+  }
+}
+
+function normalizeAttachmentPayloadsInTransaction(
+  chat: Chat,
+  transaction: IDBTransaction,
+  reject: (reason?: unknown) => void,
+): ReturnType<typeof normalizeAttachmentPayloads> | null {
+  try {
+    return normalizeAttachmentPayloads(chat)
+  } catch (error) {
+    transaction.abort()
+    reject(error)
+    return null
   }
 }
 
@@ -954,7 +977,13 @@ export class IndexedDBStorage {
             version: 1,
           }
           const mutated = updateSyncPending(output)
-          const normalizedAttachments = normalizeAttachmentPayloads(mutated)
+          const normalizedAttachments =
+            normalizeAttachmentPayloadsInTransaction(
+              mutated,
+              transaction,
+              reject,
+            )
+          if (!normalizedAttachments) return
           const writeChatAndPayloads = () => {
             for (const payload of normalizedAttachments.payloads) {
               const putRequest = payloadStore.put(payload)
@@ -1067,7 +1096,12 @@ export class IndexedDBStorage {
           return
         }
 
-        const normalizedAttachments = normalizeAttachmentPayloads(chat)
+        const normalizedAttachments = normalizeAttachmentPayloadsInTransaction(
+          chat,
+          transaction,
+          reject,
+        )
+        if (!normalizedAttachments) return
         const messagesForStorage = normalizedAttachments.messages.map(
           (msg) => ({
             ...msg,
@@ -2093,7 +2127,9 @@ export class IndexedDBStorage {
             // so the next upload re-stamps it.
             chat.clockVersion = opts.syncVersion
           }
-          const normalizedAttachments = normalizeAttachmentPayloads(chat)
+          const normalizedAttachments =
+            normalizeAttachmentPayloadsInTransaction(chat, transaction, reject)
+          if (!normalizedAttachments) return
           chat.messages = normalizedAttachments.messages
 
           const writeChatAndPayloads = () => {
@@ -2192,9 +2228,13 @@ export class IndexedDBStorage {
             }
           }
 
-          const normalizedAttachments = normalizeAttachmentPayloads(
-            inheritAttachmentPayloadReferences(opts.chat, existing),
-          )
+          const normalizedAttachments =
+            normalizeAttachmentPayloadsInTransaction(
+              inheritAttachmentPayloadReferences(opts.chat, existing),
+              transaction,
+              reject,
+            )
+          if (!normalizedAttachments) return
           const messagesForStorage = normalizedAttachments.messages.map(
             (msg) => ({
               ...msg,
