@@ -1,5 +1,8 @@
 import {
   AttachmentPayloadIdUnavailableError,
+  AttachmentPayloadMissingError,
+  AttachmentPayloadReferenceAmbiguityError,
+  AttachmentPayloadReferenceMissingError,
   chatContentFingerprint,
   DB_NAME,
   DB_VERSION,
@@ -322,6 +325,122 @@ describe('IndexedDB pending sync index', () => {
     db.close()
   })
 
+  it('fails reads when a local attachment payload row is missing', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat(
+      storedChat('missing-payload', {
+        messages: [
+          {
+            role: 'user',
+            content: 'Read this',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'document-1',
+                type: 'document',
+                fileName: 'document.pdf',
+                textContent: 'Important document text',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    const stored = await storage.getChat('missing-payload')
+    const payloadId = (
+      stored?.messages[0].attachments?.[0] as { storagePayloadId?: string }
+    ).storagePayloadId
+    if (!payloadId) throw new Error('Expected attachment payload id')
+
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION)
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result)
+    })
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('attachmentPayloads', 'readwrite')
+      transaction.objectStore('attachmentPayloads').delete(payloadId)
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+    })
+    db.close()
+
+    await expect(storage.getChat('missing-payload')).rejects.toBeInstanceOf(
+      AttachmentPayloadMissingError,
+    )
+  })
+
+  it('keeps remotely retrievable images metadata-only until lazy loading', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+
+    await expect(
+      storage.applyRemoteChatIfFresh({
+        chat: storedChat('lazy-image', {
+          messages: [
+            {
+              role: 'assistant',
+              content: 'Generated image',
+              timestamp: new Date('2026-08-12T00:00:00.000Z'),
+              attachments: [
+                {
+                  id: 'remote-image',
+                  type: 'image',
+                  fileName: 'image.png',
+                  mimeType: 'image/png',
+                  encryptionKey: 'remote-image-key',
+                },
+              ],
+            },
+          ],
+        }),
+        syncVersion: 1,
+        expectedLocalUpdatedAt: null,
+      }),
+    ).resolves.toEqual({ applied: true })
+
+    const attachment = (await storage.getChat('lazy-image'))?.messages[0]
+      .attachments?.[0] as
+      ({ storagePayloadId?: string } & Record<string, unknown>) | undefined
+    expect(attachment).toMatchObject({
+      id: 'remote-image',
+      type: 'image',
+      encryptionKey: 'remote-image-key',
+    })
+    expect(attachment?.storagePayloadId).toBeTruthy()
+    expect(attachment?.base64).toBeUndefined()
+  })
+
+  it('rejects remote attachments without payload or retrieval identity', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+
+    await expect(
+      storage.applyRemoteChatIfFresh({
+        chat: storedChat('missing-remote-payload', {
+          messages: [
+            {
+              role: 'user',
+              content: 'Missing document',
+              timestamp: new Date('2026-08-12T00:00:00.000Z'),
+              attachments: [
+                {
+                  id: 'document-1',
+                  type: 'document',
+                  fileName: 'document.pdf',
+                },
+              ],
+            },
+          ],
+        }),
+        syncVersion: 1,
+        expectedLocalUpdatedAt: null,
+      }),
+    ).rejects.toBeInstanceOf(AttachmentPayloadReferenceMissingError)
+    await expect(storage.getChat('missing-remote-payload')).resolves.toBeNull()
+  })
+
   it('hydrates attachment payloads through mutateChat without reinlining them', async () => {
     const storage = new IndexedDBStorage()
     await storage.initialize()
@@ -576,6 +695,92 @@ describe('IndexedDB pending sync index', () => {
     )
   })
 
+  it('rejects ambiguous remote payload inheritance without changing local data', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat(
+      storedChat('ambiguous-payloads', {
+        title: 'Local title',
+        messages: [
+          {
+            role: 'user',
+            content: 'Local content',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'duplicate-id',
+                type: 'document',
+                fileName: 'same.pdf',
+                mimeType: 'application/pdf',
+                fileSize: 4,
+                textContent: 'first payload',
+              },
+              {
+                id: 'duplicate-id',
+                type: 'document',
+                fileName: 'same.pdf',
+                mimeType: 'application/pdf',
+                fileSize: 4,
+                textContent: 'second payload',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+
+    await expect(
+      storage.applyRemoteChatIfFresh({
+        chat: storedChat('ambiguous-payloads', {
+          title: 'Remote title',
+          messages: [
+            {
+              role: 'user',
+              content: 'Remote content',
+              timestamp: new Date('2026-08-12T00:00:00.000Z'),
+              attachments: [
+                {
+                  id: 'duplicate-id',
+                  type: 'document',
+                  fileName: 'same.pdf',
+                  mimeType: 'application/pdf',
+                  fileSize: 4,
+                },
+              ],
+            },
+          ],
+        }),
+        syncVersion: 2,
+        expectedLocalUpdatedAt: undefined,
+      }),
+    ).rejects.toBeInstanceOf(AttachmentPayloadReferenceAmbiguityError)
+
+    const preserved = await storage.getChat('ambiguous-payloads')
+    expect(preserved?.title).toBe('Local title')
+    expect(preserved?.messages[0].content).toBe('Local content')
+    expect(
+      preserved?.messages[0].attachments?.map(
+        (attachment) => attachment.textContent,
+      ),
+    ).toEqual(['first payload', 'second payload'])
+
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION)
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result)
+    })
+    const payloadCount = await new Promise<number>((resolve, reject) => {
+      const request = db
+        .transaction('attachmentPayloads')
+        .objectStore('attachmentPayloads')
+        .count()
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result)
+    })
+    expect(payloadCount).toBe(2)
+    db.close()
+  })
+
   it('reserves an exact legacy payload match before duplicate fallback', async () => {
     const storage = new IndexedDBStorage()
     await storage.initialize()
@@ -615,6 +820,7 @@ describe('IndexedDB pending sync index', () => {
                 fileName: 'new.png',
                 mimeType: 'image/png',
                 fileSize: 3,
+                encryptionKey: 'new-image-key',
               },
             ],
           },
