@@ -99,6 +99,30 @@ describe('IndexedDB metadata-only chat saves', () => {
     })
   })
 
+  it('recreates an evicted decryption placeholder without marking it dirty', async () => {
+    const storage = new IndexedDBStorage()
+    const placeholder = storedChat('locked-chat', {
+      decryptionFailed: true,
+      locallyModified: false,
+      syncPending: 0,
+      syncVersion: 7,
+    })
+
+    await storage.saveChat(placeholder)
+    await storage.deleteChat(placeholder.id)
+    expect(await storage.getChat(placeholder.id)).toBeNull()
+
+    await storage.restoreDecryptionPlaceholder(placeholder)
+
+    expect(await storage.getChat(placeholder.id)).toMatchObject({
+      id: placeholder.id,
+      decryptionFailed: true,
+      locallyModified: false,
+      syncPending: 0,
+      syncVersion: 7,
+    })
+  })
+
   it('does not resurrect a deleted chat from a stale summary save', async () => {
     const storage = new IndexedDBStorage()
     await storage.saveChat(

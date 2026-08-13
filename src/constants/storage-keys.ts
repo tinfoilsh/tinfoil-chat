@@ -126,6 +126,7 @@ export const SYNC_CHAT_STATUS = 'tinfoil-sync-chat-status'
 // a disposable freshness snapshot, while this watermark encodes durable
 // reconciliation progress and must never advance past an unapplied tombstone.
 export const SYNC_CHAT_DELETES_WATERMARK = 'tinfoil-sync-chat-deletes-watermark'
+export const SYNC_CHAT_DELETION_REVISION = 'tinfoil-sync-chat-deletion-revision'
 export const SYNC_ALL_CHATS_STATUS = 'tinfoil-sync-all-chats-status'
 export const SYNC_PROJECT_CHAT_STATUS_PREFIX =
   'tinfoil-sync-project-chat-status-'

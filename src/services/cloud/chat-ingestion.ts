@@ -18,6 +18,7 @@ import {
 import {
   advanceChatDeletesWatermark,
   loadChatDeletesWatermark,
+  publishChatDeletionRevision,
 } from './chat-deletes-watermark'
 import { cloudStorage } from './cloud-storage'
 import { shouldIngestRemoteChat } from './sync-predicates'
@@ -315,6 +316,7 @@ export async function syncRemoteDeletions(
     }
     if (successfulIds.length > 0 && isCurrent()) {
       chatEvents.emit({ reason: 'sync', ids: successfulIds })
+      publishChatDeletionRevision()
     }
     if (allResolved && Number.isFinite(latestEventAtMs) && isCurrent()) {
       advanceChatDeletesWatermark(latestEventAtMs)

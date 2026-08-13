@@ -1,4 +1,7 @@
-import { SYNC_CHAT_DELETES_WATERMARK } from '@/constants/storage-keys'
+import {
+  SYNC_CHAT_DELETES_WATERMARK,
+  SYNC_CHAT_DELETION_REVISION,
+} from '@/constants/storage-keys'
 import {
   CHAT_DELETES_WATERMARK_EPOCH,
   CHAT_DELETES_WATERMARK_OVERLAP_MS,
@@ -67,6 +70,7 @@ describe('syncRemoteDeletions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.removeItem(SYNC_CHAT_DELETES_WATERMARK)
+    localStorage.removeItem(SYNC_CHAT_DELETION_REVISION)
     mockDeleteChatIfUnchanged.mockResolvedValue(true)
     mockApplyRemoteChatIfFresh.mockResolvedValue({ applied: true })
     mockIsDeleted.mockReturnValue(false)
@@ -221,6 +225,28 @@ describe('syncRemoteDeletions', () => {
           CHAT_DELETES_WATERMARK_OVERLAP_MS,
       ).toISOString(),
     )
+  })
+
+  it('publishes a deletion revision when an equal watermark cannot advance', async () => {
+    const existingWatermark = new Date(
+      Date.parse(deletedAt) - CHAT_DELETES_WATERMARK_OVERLAP_MS,
+    ).toISOString()
+    localStorage.setItem(SYNC_CHAT_DELETES_WATERMARK, existingWatermark)
+    mockListChatEventsSince.mockResolvedValue(
+      events([{ id: 'gone-at-equal-watermark', deletedAt }]),
+    )
+    mockGetChat.mockResolvedValue({
+      id: 'gone-at-equal-watermark',
+      isLocalOnly: false,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+
+    await syncRemoteDeletions('test')
+
+    expect(localStorage.getItem(SYNC_CHAT_DELETES_WATERMARK)).toBe(
+      existingWatermark,
+    )
+    expect(localStorage.getItem(SYNC_CHAT_DELETION_REVISION)).not.toBeNull()
   })
 
   it('holds the watermark when applying a tombstone fails', async () => {

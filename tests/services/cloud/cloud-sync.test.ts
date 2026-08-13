@@ -1,11 +1,13 @@
 import {
   SETTINGS_CLOUD_SYNC_ENABLED,
   SYNC_CHAT_DELETES_WATERMARK,
+  SYNC_CHAT_DELETION_REVISION,
   SYNC_CHAT_STATUS,
   SYNC_PROJECT_CHAT_STATUS_PREFIX,
 } from '@/constants/storage-keys'
+import { AuthTokenUnavailableError } from '@/services/auth'
 import {
-  CloudSyncDisabledError,
+  CloudSyncLifecycleCanceledError,
   CloudSyncService,
   CROSS_TAB_SYNC_LOCK,
   SyncInProgressError,
@@ -27,6 +29,7 @@ const mockGetChatSyncMetadata = vi.fn()
 const mockGetChat = vi.fn()
 const mockSaveChat = vi.fn()
 const mockSaveExistingChat = vi.fn()
+const mockRestoreDecryptionPlaceholder = vi.fn()
 const mockMarkAsSynced = vi.fn()
 const mockFinalizeUpload = vi.fn()
 const mockApplyRemoteChatIfFresh = vi.fn()
@@ -97,6 +100,8 @@ vi.mock('@/services/storage/indexed-db', () => ({
       mockGetUnsyncedChatMetadata(...args),
     saveChat: (...args: any[]) => mockSaveChat(...args),
     saveExistingChat: (...args: any[]) => mockSaveExistingChat(...args),
+    restoreDecryptionPlaceholder: (...args: any[]) =>
+      mockRestoreDecryptionPlaceholder(...args),
     markAsSynced: (...args: any[]) => mockMarkAsSynced(...args),
     finalizeUpload: (...args: any[]) => mockFinalizeUpload(...args),
     applyRemoteChatIfFresh: (...args: any[]) =>
@@ -229,6 +234,7 @@ describe('CloudSyncService', () => {
     localStorage.removeItem(SYNC_CHAT_DELETES_WATERMARK)
     mockSaveChat.mockResolvedValue(undefined)
     mockSaveExistingChat.mockResolvedValue(undefined)
+    mockRestoreDecryptionPlaceholder.mockResolvedValue(undefined)
     mockMarkAsSynced.mockResolvedValue(undefined)
     mockFinalizeUpload.mockResolvedValue(undefined)
     mockApplyRemoteChatIfFresh.mockResolvedValue({ applied: true })
@@ -326,7 +332,7 @@ describe('CloudSyncService', () => {
     ).resolves.toBe('synced')
     expect(request).toHaveBeenCalledWith(
       CROSS_TAB_SYNC_LOCK,
-      { mode: 'exclusive' },
+      { mode: 'exclusive', signal: expect.any(AbortSignal) },
       expect.any(Function),
     )
   })
@@ -476,34 +482,58 @@ describe('CloudSyncService', () => {
     ).resolves.toBe('fallback')
   })
 
-  it('cancels a queued lock callback when cloud sync is disabled locally', async () => {
-    let grantLock!: () => void
-    const leaderFinished = new Promise<void>((resolve) => {
-      grantLock = resolve
-    })
+  it('cancels a never-granted lock on opt-out and syncs after re-enable', async () => {
     const request = vi.fn(
-      async (
+      (
         _name: string,
-        _options: LockOptions,
+        options: LockOptions,
         callback: (lock: Lock) => Promise<unknown>,
-      ) => {
-        await leaderFinished
-        return callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' })
-      },
+      ) =>
+        request.mock.calls.length === 1
+          ? new Promise((_resolve, reject) => {
+              options.signal?.addEventListener('abort', () =>
+                reject(new DOMException('Canceled', 'AbortError')),
+              )
+            })
+          : callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' }),
     )
     vi.stubGlobal('navigator', { locks: { request } })
     const service = new CloudSyncService()
     const pending = service.smartSync()
 
     setCloudSyncEnabled(false)
+    await expect(pending).rejects.toBeInstanceOf(
+      CloudSyncLifecycleCanceledError,
+    )
     setCloudSyncEnabled(true)
-    grantLock()
 
-    await expect(pending).rejects.toBeInstanceOf(CloudSyncDisabledError)
     await expect(service.smartSync()).resolves.toMatchObject({
       uploaded: 0,
       downloaded: 0,
     })
+  })
+
+  it('cancels a queued lock when the account resets', async () => {
+    const request = vi.fn(
+      (_name: string, options: LockOptions) =>
+        new Promise((_resolve, reject) => {
+          options.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Canceled', 'AbortError')),
+          )
+        }),
+    )
+    vi.stubGlobal('navigator', { locks: { request } })
+    const service = new CloudSyncService()
+    const pending = service.smartSync()
+
+    service.resetForAccountChange()
+
+    await expect(pending).rejects.toMatchObject({
+      name: 'CloudSyncLifecycleCanceledError',
+      code: 'CLOUD_SYNC_LIFECYCLE_CANCELED',
+      reason: 'account-reset',
+    })
+    expect(service.syncing).toBe(false)
   })
 
   it('cancels queued work after another tab disables cloud sync', async () => {
@@ -531,7 +561,9 @@ describe('CloudSyncService', () => {
     )
     grantLock()
 
-    await expect(pending).rejects.toBeInstanceOf(CloudSyncDisabledError)
+    await expect(pending).rejects.toBeInstanceOf(
+      CloudSyncLifecycleCanceledError,
+    )
     expect(mockIsAuthenticated).not.toHaveBeenCalled()
   })
 
@@ -583,7 +615,7 @@ describe('CloudSyncService', () => {
     expect(mockChatEventsEmit).toHaveBeenCalledWith({ reason: 'sync', ids: [] })
   })
 
-  it('refreshes follower chat state when another tab advances deletions', () => {
+  it('refreshes follower chat state when another tab publishes a deletion', () => {
     let publishFrame!: FrameRequestCallback
     vi.stubGlobal(
       'requestAnimationFrame',
@@ -595,7 +627,7 @@ describe('CloudSyncService', () => {
     new CloudSyncService()
 
     window.dispatchEvent(
-      new StorageEvent('storage', { key: SYNC_CHAT_DELETES_WATERMARK }),
+      new StorageEvent('storage', { key: SYNC_CHAT_DELETION_REVISION }),
     )
     expect(mockChatEventsEmit).not.toHaveBeenCalled()
     publishFrame(performance.now())
@@ -992,6 +1024,32 @@ describe('CloudSyncService', () => {
       expect(result.errors).toHaveLength(1)
       expect(mockFinalizeUpload).not.toHaveBeenCalled()
     })
+
+    it('does not count an unavailable auth token as uploaded', async () => {
+      const chat = {
+        id: 'auth-pending-chat',
+        title: 'Unsynced',
+        messages: [{ role: 'user', content: 'hi' }],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        isBlankChat: false,
+        isLocalOnly: false,
+        locallyModified: true,
+        syncVersion: 1,
+      }
+      mockGetUnsyncedChats.mockResolvedValue([chat])
+      mockGetChat.mockResolvedValue(chat)
+      mockUploadChat.mockRejectedValue(
+        new AuthTokenUnavailableError('not-initialized'),
+      )
+
+      const result = await new CloudSyncService().backupUnsyncedChats()
+
+      expect(result.uploaded).toBe(0)
+      expect(result.errors).toHaveLength(1)
+      expect(mockUploadChat).toHaveBeenCalledOnce()
+      expect(mockFinalizeUpload).not.toHaveBeenCalled()
+    })
   })
 
   describe('checkSyncStatus', () => {
@@ -1351,7 +1409,15 @@ describe('CloudSyncService', () => {
             messages: [{ role: 'user' }],
           },
         ])
-      mockGetChat.mockResolvedValue(null)
+      mockGetChat.mockImplementation(async (id: string) =>
+        id === failedOne.id
+          ? {
+              ...failedOne,
+              decryptionFailed: false,
+              messages: [{ role: 'user' }],
+            }
+          : null,
+      )
       mockGetUnsyncedChats.mockResolvedValue([])
       mockListChats
         .mockResolvedValueOnce({
@@ -1374,7 +1440,7 @@ describe('CloudSyncService', () => {
       expect(mockDeleteChat).toHaveBeenCalledTimes(2)
       expect(mockListChats).toHaveBeenCalledTimes(2)
       expect(mockListChats.mock.calls[1]?.[0]?.continuationToken).toBe('older')
-      expect(mockSaveExistingChat).toHaveBeenCalledWith(failedTwo)
+      expect(mockRestoreDecryptionPlaceholder).toHaveBeenCalledWith(failedTwo)
     })
 
     it('restores placeholders and reports zero when the deep pull fails', async () => {
@@ -1387,7 +1453,22 @@ describe('CloudSyncService', () => {
       await expect(service.retryDecryptionWithNewKey()).resolves.toBe(0)
 
       expect(mockListChats).toHaveBeenCalledTimes(2)
-      expect(mockSaveExistingChat).toHaveBeenCalledWith(failedOne)
+      expect(mockRestoreDecryptionPlaceholder).toHaveBeenCalledWith(failedOne)
+    })
+
+    it('restores an evicted placeholder when opt-out invalidates the generation', async () => {
+      mockGetAllChats.mockResolvedValueOnce([failedOne])
+      mockGetChat.mockResolvedValue(null)
+      mockDeleteChat.mockImplementationOnce(async () => {
+        setCloudSyncEnabled(false)
+      })
+      const service = new CloudSyncService()
+
+      await expect(service.retryDecryptionWithNewKey()).resolves.toBe(0)
+
+      expect(mockRestoreDecryptionPlaceholder).toHaveBeenCalledWith(failedOne)
+      expect(localStorage.getItem(SYNC_CHAT_STATUS)).toBeNull()
+      expect(mockListChats).not.toHaveBeenCalled()
     })
   })
 

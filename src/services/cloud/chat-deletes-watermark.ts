@@ -13,7 +13,10 @@
  * resurrectable on this device.
  */
 
-import { SYNC_CHAT_DELETES_WATERMARK } from '@/constants/storage-keys'
+import {
+  SYNC_CHAT_DELETES_WATERMARK,
+  SYNC_CHAT_DELETION_REVISION,
+} from '@/constants/storage-keys'
 
 /**
  * Seed for devices with no persisted watermark. The first pass replays every
@@ -69,6 +72,15 @@ export function clearChatDeletesWatermark(): void {
   if (typeof window === 'undefined') return
   try {
     localStorage.removeItem(SYNC_CHAT_DELETES_WATERMARK)
+  } catch {
+    // best-effort
+  }
+}
+
+export function publishChatDeletionRevision(): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(SYNC_CHAT_DELETION_REVISION, crypto.randomUUID())
   } catch {
     // best-effort
   }

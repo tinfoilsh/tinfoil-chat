@@ -383,6 +383,41 @@ describe('SyncEnclaveClient', () => {
     expect(requestSignal?.aborted).toBe(true)
   })
 
+  it('keeps public requests alive when cloud sync requests are canceled', async () => {
+    let cloudSignal: AbortSignal | null | undefined
+    let publicSignal: AbortSignal | null | undefined
+    let resolvePublic!: (response: Response) => void
+    mockFetch.mockImplementation((input, init) => {
+      if (input.includes('/v1/share/open')) {
+        publicSignal = init?.signal
+        return new Promise<Response>((resolve) => {
+          resolvePublic = resolve
+        })
+      }
+      cloudSignal = init?.signal
+      return new Promise(() => {})
+    })
+    const { abortSyncEnclaveRequests, getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    const client = await getSyncEnclaveClient()
+    const cloudRequest = client.post('/v1/sync/pull', {}, undefined, {
+      requestScope: 'cloud-sync',
+    })
+    const cloudAssertion = expect(cloudRequest).rejects.toMatchObject({
+      name: 'SyncRequestAbortedError',
+    })
+    const publicRequest = client.postPublic('/v1/share/open', {})
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
+
+    abortSyncEnclaveRequests('cloud-sync')
+
+    await cloudAssertion
+    expect(cloudSignal?.aborted).toBe(true)
+    expect(publicSignal?.aborted).toBe(false)
+    resolvePublic(jsonResponse({ ok: true }))
+    await expect(publicRequest).resolves.toEqual({ ok: true })
+  })
+
   it('does not let canceled initialization evict a fresh client', async () => {
     mockReady
       .mockReturnValueOnce(new Promise(() => {}))

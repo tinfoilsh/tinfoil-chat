@@ -21,6 +21,11 @@ import { SecureClient } from 'tinfoil'
 
 let clientPromise: Promise<SyncEnclaveClient> | null = null
 const activeOperationControllers = new Set<AbortController>()
+export type SyncEnclaveRequestScope = 'cloud-sync'
+const requestScopeControllers = new Map<
+  SyncEnclaveRequestScope,
+  AbortController
+>()
 const SYNC_ENCLAVE_REQUIRED_PROTOCOL = 'https:'
 const ABSOLUTE_URL_PROTOCOL_PATTERN = /^[a-z][a-z\d+\-.]*:/i
 
@@ -84,7 +89,10 @@ export class SyncRequestAbortedError extends Error {
 type SyncRequestInit = Omit<RequestInit, 'body'> & {
   body?: string
   skipAuth?: boolean
+  requestScope?: SyncEnclaveRequestScope
 }
+
+type SyncRequestOptions = Pick<SyncRequestInit, 'requestScope' | 'signal'>
 
 export class SyncEnclaveClient {
   private constructor(private readonly secure: SecureClient) {}
@@ -138,7 +146,12 @@ export class SyncEnclaveClient {
     init: SyncRequestInit = {},
   ): Promise<T> {
     assertRelativeSyncEnclavePath(path)
-    const { skipAuth: _skipAuth, signal: callerSignal, ...fetchInit } = init
+    const {
+      skipAuth: _skipAuth,
+      signal: callerSignal,
+      requestScope,
+      ...fetchInit
+    } = init
     const requestUrl = new URL(path, SYNC_ENCLAVE_URL).toString()
     const baseHeaders = new Headers(init.headers)
     baseHeaders.set('Accept', 'application/json')
@@ -232,7 +245,7 @@ export class SyncEnclaveClient {
       },
       SYNC_ENCLAVE_TIMEOUTS.REQUEST_MS,
       () => new SyncRequestTimeoutError(),
-      callerSignal ?? undefined,
+      [callerSignal, requestScope ? getRequestScopeSignal(requestScope) : null],
     )
   }
 
@@ -245,11 +258,17 @@ export class SyncEnclaveClient {
     return this.request<T>(path, { method: 'GET', headers })
   }
 
-  post<T>(path: string, body?: unknown, headers?: Record<string, string>) {
+  post<T>(
+    path: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+    options: SyncRequestOptions = {},
+  ) {
     return this.request<T>(path, {
       method: 'POST',
       body: body !== undefined ? JSON.stringify(body) : undefined,
       headers,
+      ...options,
     })
   }
 
@@ -304,13 +323,18 @@ async function runBoundedOperation<T>(
   operation: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number,
   timeoutError: () => Error,
-  callerSignal?: AbortSignal,
+  callerSignals: Array<AbortSignal | null | undefined> = [],
 ): Promise<T> {
   const controller = new AbortController()
-  const abortFromCaller = () =>
-    controller.abort(callerSignal?.reason ?? new SyncRequestAbortedError())
-  if (callerSignal?.aborted) abortFromCaller()
-  else callerSignal?.addEventListener('abort', abortFromCaller, { once: true })
+  const signalListeners = callerSignals
+    .filter((signal): signal is AbortSignal => signal !== null && !!signal)
+    .map((signal) => {
+      const abortFromSignal = () =>
+        controller.abort(signal.reason ?? new SyncRequestAbortedError())
+      if (signal.aborted) abortFromSignal()
+      else signal.addEventListener('abort', abortFromSignal, { once: true })
+      return { signal, abortFromSignal }
+    })
 
   activeOperationControllers.add(controller)
   const timer = setTimeout(() => controller.abort(timeoutError()), timeoutMs)
@@ -321,15 +345,46 @@ async function runBoundedOperation<T>(
     )
   } finally {
     clearTimeout(timer)
-    callerSignal?.removeEventListener('abort', abortFromCaller)
+    for (const { signal, abortFromSignal } of signalListeners) {
+      signal.removeEventListener('abort', abortFromSignal)
+    }
     activeOperationControllers.delete(controller)
   }
 }
 
-export function abortSyncEnclaveRequests(): void {
+function getRequestScopeSignal(scope: SyncEnclaveRequestScope): AbortSignal {
+  let controller = requestScopeControllers.get(scope)
+  if (!controller) {
+    controller = new AbortController()
+    requestScopeControllers.set(scope, controller)
+  }
+  return controller.signal
+}
+
+export function resetSyncEnclaveRequestScope(
+  scope: SyncEnclaveRequestScope,
+): void {
+  requestScopeControllers.set(scope, new AbortController())
+}
+
+export function abortSyncEnclaveRequests(
+  scope?: SyncEnclaveRequestScope,
+): void {
+  if (scope) {
+    const controller = requestScopeControllers.get(scope)
+    if (controller) {
+      controller.abort(new SyncRequestAbortedError())
+    } else {
+      const abortedController = new AbortController()
+      abortedController.abort(new SyncRequestAbortedError())
+      requestScopeControllers.set(scope, abortedController)
+    }
+    return
+  }
   for (const controller of activeOperationControllers) {
     controller.abort(new SyncRequestAbortedError())
   }
+  requestScopeControllers.clear()
   clientPromise = null
 }
 
