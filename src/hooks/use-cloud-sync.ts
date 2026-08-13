@@ -495,6 +495,14 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
           // than a clean reset, but recoverable; a rolled-back key
           // would not be.
           encryptionService.persistCurrentKeyState()
+          // Keep the hook state in step with the persisted key so the
+          // settings UI and passkey hook don't keep serving the old one.
+          if (isMountedRef.current) {
+            setState((prev) => ({
+              ...prev,
+              encryptionKey: encryptionService.getKey(),
+            }))
+          }
           if (hasPasskeyBackup()) {
             onKeyChangedRef.current?.()
           }
