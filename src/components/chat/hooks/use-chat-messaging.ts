@@ -53,6 +53,7 @@ import {
 import { generateTitle, getTitleContent } from '@/services/inference/title'
 import { chatEvents } from '@/services/storage/chat-events'
 import { chatStorage } from '@/services/storage/chat-storage'
+import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
@@ -565,6 +566,10 @@ export function useChatMessaging({
         })
         return
       }
+      const targetChat = currentChat
+      const targetChatId = targetChat.id
+      const requireExistingChat =
+        storeHistory && targetChat.isMetadataOnly === true
 
       // Free-tier daily quota gate. Every send path funnels through here
       // (queue dispatches, regenerate/edit, URL-hash sends), so an exhausted
@@ -588,7 +593,7 @@ export function useChatMessaging({
       // This stream owns its own id tracker and title promise so it never
       // collides with other in-flight streams. Scoped setters always target
       // the (possibly swapped) id of this stream.
-      const streamChatIdRef = { current: currentChat.id }
+      const streamChatIdRef = { current: targetChatId }
       let earlyTitlePromise: Promise<string> | null = null
       let initialSavePromise: Promise<void> | undefined
       let recoveryLocalSavePromise: Promise<Chat> | undefined
@@ -627,6 +632,28 @@ export function useChatMessaging({
         streamingTracker.beginPendingStream(id)
       }
       markPendingStream(streamChatIdRef.current)
+      const abortPendingSend = (showLoadError: boolean) => {
+        if (showLoadError && currentChatRef.current.id === targetChatId) {
+          setInput(query)
+        }
+        if (showLoadError) {
+          setStreamErrorFor({
+            message: 'Failed to load this chat. Please try again.',
+            code: null,
+          })
+        }
+        if (pendingStreamId !== null) {
+          streamingTracker.endPendingStream(pendingStreamId)
+          pendingStreamId = null
+        }
+        patchStatus(streamChatIdRef.current, {
+          loadingState: 'idle',
+          isWaitingForResponse: false,
+          isStreaming: false,
+          isThinking: false,
+        })
+        clearController(streamChatIdRef.current, controller)
+      }
 
       // Only create a user message if there's actual query content
       // When using system prompt override with empty query, skip user message
@@ -660,14 +687,14 @@ export function useChatMessaging({
         : null
 
       // Track if this is the first message for a blank chat
-      let updatedChat = { ...currentChat }
-      const isBlankChat = currentChat.isBlankChat === true
+      let updatedChat = { ...targetChat }
+      const isBlankChat = targetChat.isBlankChat === true
       // Metadata-only chats haven't loaded their messages, so consult the
       // stored count: treating them as first-message would regenerate the
       // title over an existing conversation.
-      const isFirstMessage = currentChat.isMetadataOnly
-        ? (currentChat.messageCount ?? 0) === 0
-        : currentChat.messages.length === 0
+      const isFirstMessage = targetChat.isMetadataOnly
+        ? (targetChat.messageCount ?? 0) === 0
+        : targetChat.messages.length === 0
       let updatedMessages: Message[] = []
 
       // Reset title generation for new chats
@@ -861,23 +888,12 @@ export function useChatMessaging({
               metadata: { chatId: updatedChat.id },
             })
           }
-          if (!hydratedChat) {
-            // Nothing was sent or shown yet, so give the typed text back.
-            setInput(query)
-            setStreamErrorFor({
-              message: 'Failed to load this chat. Please try again.',
-              code: null,
-            })
-            if (pendingStreamId !== null) {
-              streamingTracker.endPendingStream(pendingStreamId)
-            }
-            patchStatus(streamChatIdRef.current, {
-              loadingState: 'idle',
-              isWaitingForResponse: false,
-              isStreaming: false,
-              isThinking: false,
-            })
-            clearController(streamChatIdRef.current, controller)
+          const targetStillExists =
+            !deletedChatsTracker.isDeleted(targetChatId) &&
+            (currentChatRef.current.id === targetChatId ||
+              chatsRef.current.some((chat) => chat.id === targetChatId))
+          if (!hydratedChat || !targetStillExists) {
+            abortPendingSend(!deletedChatsTracker.isDeleted(targetChatId))
             return
           }
           updatedChat = {
@@ -904,15 +920,17 @@ export function useChatMessaging({
         }
         recoveryEligible = canRecoverTurn(updatedChat)
 
-        setCurrentChat(updatedChat)
+        setCurrentChat((previous) =>
+          previous.id === targetChatId ? updatedChat : previous,
+        )
         setChats((prevChats) =>
           prevChats.map((chat) =>
-            chat.id === currentChat.id ? updatedChat : chat,
+            chat.id === targetChatId ? updatedChat : chat,
           ),
         )
 
         // Scroll after state update and DOM renders
-        if (scrollToBottom) {
+        if (scrollToBottom && viewedChatIdRef.current === targetChatId) {
           setTimeout(() => scrollToBottom(), 50)
         }
 
@@ -921,7 +939,20 @@ export function useChatMessaging({
           // Temporary chats are never persisted
         } else if (storeHistory) {
           if (recoveryEligible) {
-            recoveryLocalSavePromise = chatStorage.saveChat(updatedChat, true)
+            if (requireExistingChat) {
+              const saved = await chatStorage.saveExistingChat(
+                updatedChat,
+                true,
+              )
+              if (!saved) {
+                abortPendingSend(false)
+                return
+              }
+              updatedChat = saved
+              recoveryLocalSavePromise = Promise.resolve(saved)
+            } else {
+              recoveryLocalSavePromise = chatStorage.saveChat(updatedChat, true)
+            }
             try {
               updatedChat = await recoveryLocalSavePromise
             } catch (error) {
@@ -937,7 +968,16 @@ export function useChatMessaging({
               )
             }
           } else {
-            updatedChat = await chatStorage.saveChatAndSync(updatedChat)
+            if (requireExistingChat) {
+              const saved = await chatStorage.saveExistingChat(updatedChat)
+              if (!saved) {
+                abortPendingSend(false)
+                return
+              }
+              updatedChat = saved
+            } else {
+              updatedChat = await chatStorage.saveChatAndSync(updatedChat)
+            }
           }
         } else {
           sessionChatStorage.saveChat(updatedChat)
@@ -1330,6 +1370,7 @@ export function useChatMessaging({
                   pendingSave: chatToSave.pendingSave,
                   ...generatedTitlePatch(),
                 },
+                requireExisting: requireExistingChat,
               },
             )
 

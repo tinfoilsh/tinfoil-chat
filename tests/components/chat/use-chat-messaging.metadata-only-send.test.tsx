@@ -5,13 +5,21 @@ import { act, renderHook } from '@testing-library/react'
 import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getChatMock, saveChatMock, saveChatAndSyncMock, sendChatStreamMock } =
-  vi.hoisted(() => ({
-    getChatMock: vi.fn(async (_id: unknown) => null as unknown),
-    saveChatMock: vi.fn(async (chat: unknown, _skip?: unknown) => chat),
-    saveChatAndSyncMock: vi.fn(async (chat: unknown) => chat),
-    sendChatStreamMock: vi.fn(),
-  }))
+const {
+  getChatMock,
+  saveChatMock,
+  saveExistingChatMock,
+  saveChatAndSyncMock,
+  sendChatStreamMock,
+  isDeletedMock,
+} = vi.hoisted(() => ({
+  getChatMock: vi.fn(async (_id: unknown) => null as unknown),
+  saveChatMock: vi.fn(async (chat: unknown, _skip?: unknown) => chat),
+  saveExistingChatMock: vi.fn(async (chat: unknown, _skip?: unknown) => chat),
+  saveChatAndSyncMock: vi.fn(async (chat: unknown) => chat),
+  sendChatStreamMock: vi.fn(),
+  isDeletedMock: vi.fn(() => false),
+}))
 
 vi.mock('@clerk/nextjs', () => ({
   useAuth: () => ({ isSignedIn: true, userId: 'user-1' }),
@@ -64,8 +72,14 @@ vi.mock('@/services/storage/chat-storage', () => ({
   chatStorage: {
     getChat: (id: unknown) => getChatMock(id),
     saveChat: (chat: unknown, skip?: unknown) => saveChatMock(chat, skip),
+    saveExistingChat: (chat: unknown, skip?: unknown) =>
+      saveExistingChatMock(chat, skip),
     saveChatAndSync: (chat: unknown) => saveChatAndSyncMock(chat),
   },
+}))
+
+vi.mock('@/services/storage/deleted-chats-tracker', () => ({
+  deletedChatsTracker: { isDeleted: () => isDeletedMock() },
 }))
 
 vi.mock('@/services/storage/session-storage', () => ({
@@ -147,7 +161,7 @@ function renderMessaging(initialChat: Chat) {
       setChats,
       setCurrentChat,
     })
-    return { currentChat, messaging }
+    return { chats, currentChat, setChats, setCurrentChat, messaging }
   })
 }
 
@@ -155,8 +169,10 @@ describe('useChatMessaging metadata-only sends', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     saveChatMock.mockImplementation(async (chat: unknown) => chat)
+    saveExistingChatMock.mockImplementation(async (chat: unknown) => chat)
     saveChatAndSyncMock.mockImplementation(async (chat: unknown) => chat)
     sendChatStreamMock.mockResolvedValue(completedStream())
+    isDeletedMock.mockReturnValue(false)
   })
 
   it('hydrates stored messages before persisting a send', async () => {
@@ -170,7 +186,7 @@ describe('useChatMessaging metadata-only sends', () => {
     expect(getChatMock).toHaveBeenCalledWith('chat-1')
     // The pre-stream save must contain the full stored history plus the
     // new user message — never just the placeholder empty array.
-    const firstSave = saveChatAndSyncMock.mock.calls[0][0] as Chat
+    const firstSave = saveExistingChatMock.mock.calls[0][0] as Chat
     expect(
       firstSave.messages.map((m: { content: string }) => m.content),
     ).toEqual(['Earlier question', 'Earlier answer', 'New prompt'])
@@ -192,6 +208,7 @@ describe('useChatMessaging metadata-only sends', () => {
     })
 
     expect(saveChatMock).not.toHaveBeenCalled()
+    expect(saveExistingChatMock).not.toHaveBeenCalled()
     expect(saveChatAndSyncMock).not.toHaveBeenCalled()
     expect(sendChatStreamMock).not.toHaveBeenCalled()
     // The typed text is restored so the user can retry.
@@ -211,6 +228,82 @@ describe('useChatMessaging metadata-only sends', () => {
     expect(
       firstSave.messages.map((m: { content: string }) => m.content),
     ).toEqual(['Earlier question', 'Earlier answer', 'New prompt'])
+  })
+
+  it('keeps B current while a hydrated send continues for A', async () => {
+    let resolveHydration!: (chat: Chat) => void
+    getChatMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveHydration = resolve
+      }),
+    )
+    const chatB: Chat = {
+      id: 'chat-2',
+      title: 'B',
+      messages: [],
+      createdAt: new Date(),
+      isBlankChat: false,
+      isLocalOnly: false,
+    }
+    const { result } = renderMessaging(metadataOnlyChat())
+    let send!: Promise<unknown>
+
+    act(() => {
+      send = result.current.messaging.handleQuery(
+        'New prompt',
+      ) as Promise<unknown>
+    })
+    act(() => {
+      result.current.setChats((previous) => [...previous, chatB])
+      result.current.setCurrentChat(chatB)
+    })
+    await act(async () => resolveHydration(hydratedChat()))
+    await act(async () => send)
+
+    expect(result.current.currentChat).toBe(chatB)
+    expect(
+      result.current.chats
+        .find(({ id }) => id === 'chat-1')
+        ?.messages.map(({ content }) => content),
+    ).toEqual(['Earlier question', 'Earlier answer', 'New prompt', 'Response'])
+  })
+
+  it('does not recreate or upload A when it is deleted during hydration', async () => {
+    let resolveHydration!: (chat: Chat) => void
+    getChatMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveHydration = resolve
+      }),
+    )
+    const chatB: Chat = {
+      id: 'chat-2',
+      title: 'B',
+      messages: [],
+      createdAt: new Date(),
+      isBlankChat: false,
+      isLocalOnly: false,
+    }
+    const { result } = renderMessaging(metadataOnlyChat())
+    let send!: Promise<unknown>
+
+    act(() => {
+      send = result.current.messaging.handleQuery(
+        'New prompt',
+      ) as Promise<unknown>
+    })
+    isDeletedMock.mockReturnValue(true)
+    act(() => {
+      result.current.setChats([chatB])
+      result.current.setCurrentChat(chatB)
+    })
+    await act(async () => resolveHydration(hydratedChat()))
+    await act(async () => send)
+
+    expect(result.current.currentChat).toBe(chatB)
+    expect(saveChatMock).not.toHaveBeenCalled()
+    expect(saveExistingChatMock).not.toHaveBeenCalled()
+    expect(saveChatAndSyncMock).not.toHaveBeenCalled()
+    expect(sendChatStreamMock).not.toHaveBeenCalled()
   })
 })
 
