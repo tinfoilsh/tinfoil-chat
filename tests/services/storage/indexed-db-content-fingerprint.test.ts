@@ -172,6 +172,65 @@ describe('chatContentFingerprint', () => {
     })
     expect(fp1).not.toBe(fp2)
   })
+
+  it('captures normalized attachment payload changes', () => {
+    const attachment = {
+      id: 'attachment',
+      type: 'image',
+      fileName: 'image.png',
+    }
+    const fp1 = chatContentFingerprint({
+      title: 'T',
+      messages: [
+        {
+          role: 'user',
+          content: 'x',
+          timestamp: '2024-01-01T00:00:00Z',
+          attachments: [{ ...attachment, base64: 'AAA' }],
+        },
+      ],
+    })
+    const fp2 = chatContentFingerprint({
+      title: 'T',
+      messages: [
+        {
+          role: 'user',
+          content: 'x',
+          timestamp: '2024-01-01T00:00:00Z',
+          attachments: [{ ...attachment, base64: 'BBB' }],
+        },
+      ],
+    })
+
+    expect(fp1).not.toBe(fp2)
+  })
+
+  it('uses collision-resistant SHA-256 attachment hashes', () => {
+    const attachment = {
+      id: 'attachment',
+      type: 'image',
+      fileName: 'image.png',
+    }
+    const fingerprint = (base64: string) =>
+      chatContentFingerprint({
+        title: 'T',
+        messages: [
+          {
+            role: 'user',
+            content: 'x',
+            timestamp: '2024-01-01T00:00:00Z',
+            attachments: [{ ...attachment, base64 }],
+          },
+        ],
+      })
+
+    const knownHash = JSON.parse(fingerprint('AAA')).messages[0].attachments[0]
+      .base64Hash
+    expect(knownHash).toBe(
+      'cb1ad2119d8fafb69566510ee712661f9f14b83385006ef92aec47f523a38358',
+    )
+    expect(fingerprint('up/Gwn25')).not.toBe(fingerprint('XND8FyWq'))
+  })
 })
 
 describe('chatNeedsSync', () => {
