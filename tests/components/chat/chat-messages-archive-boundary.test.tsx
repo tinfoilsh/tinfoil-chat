@@ -157,4 +157,47 @@ describe('ChatMessages archive boundary', () => {
     expect(screen.queryByTestId('message-hydrated-1')).not.toBeInTheDocument()
     expect(screen.getByTestId('message-hydrated-2')).toBeInTheDocument()
   })
+
+  it('reinitializes the collapsed prefix after the same chat temporarily empties', () => {
+    const longChat = [
+      message('user', 'rehydrated-1', 300, 1),
+      message('assistant', 'rehydrated-2', 300, 2),
+      message('user', 'rehydrated-3', 300, 3),
+      message('assistant', 'rehydrated-4', 300, 4),
+    ]
+    const { rerender } = render(
+      <ChatMessages {...props('same-chat', longChat)} />,
+    )
+
+    rerender(<ChatMessages {...props('same-chat', [])} />)
+    rerender(<ChatMessages {...props('same-chat', longChat)} />)
+
+    expect(screen.queryByTestId('message-rehydrated-1')).not.toBeInTheDocument()
+    expect(screen.getByTestId('message-rehydrated-2')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Show 1 earlier messages' }),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps a blank chat first turn live as the response grows', () => {
+    const firstUserMessage = message('user', 'blank-user', 100, 1)
+    const { rerender } = render(<ChatMessages {...props('blank-chat', [])} />)
+
+    rerender(<ChatMessages {...props('blank-chat', [firstUserMessage])} />)
+    rerender(
+      <ChatMessages
+        {...props('blank-chat', [
+          firstUserMessage,
+          message('assistant', 'blank-assistant', 1000, 2),
+        ])}
+        isStreamingResponse
+      />,
+    )
+
+    expect(screen.getByTestId('message-blank-user')).toBeInTheDocument()
+    expect(screen.getByTestId('message-blank-assistant')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /earlier messages/ }),
+    ).not.toBeInTheDocument()
+  })
 })

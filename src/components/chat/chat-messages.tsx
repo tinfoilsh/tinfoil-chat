@@ -440,6 +440,15 @@ export function ChatMessages({
       initialized: messages.length > 0,
       startIndex: archiveStartIndex,
     })
+  } else if (messages.length === 0) {
+    archiveStartIndex = 0
+    if (archiveBoundary.initialized || archiveBoundary.startIndex !== 0) {
+      setArchiveBoundary({
+        chatId,
+        initialized: false,
+        startIndex: 0,
+      })
+    }
   } else if (!archiveBoundary.initialized && messages.length > 0) {
     archiveStartIndex = computedArchiveStartIndex
     setArchiveBoundary({
