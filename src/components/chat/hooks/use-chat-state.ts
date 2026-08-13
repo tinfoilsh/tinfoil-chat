@@ -3,7 +3,7 @@ import { useExecSnapshot } from '@/services/exec-snapshot/use-exec-snapshot'
 import { logWarning } from '@/utils/error-handling'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { AIModel, Chat, LabelType, LoadingState, Message } from '../types'
-import { useChatMessaging } from './use-chat-messaging'
+import { useChatMessaging, type ChatDispatchResult } from './use-chat-messaging'
 import { useChatStorage } from './use-chat-storage'
 import type { StreamErrorInfo } from './use-chat-streams'
 import { resolveChatModel, useModelManagement } from './use-model-management'
@@ -24,6 +24,7 @@ interface UseChatStateReturn {
   isDarkMode: boolean
   themeMode: ThemeMode
   isInitialLoad: boolean
+  isChatHydrating: boolean
   isThinking: boolean
   isWaitingForResponse: boolean
   isStreaming: boolean
@@ -50,7 +51,7 @@ interface UseChatStateReturn {
     systemPromptOverride?: string,
     baseMessages?: Message[],
     quote?: string,
-  ) => void
+  ) => Promise<ChatDispatchResult>
   createNewChat: (isLocalOnly?: boolean, fromUserAction?: boolean) => void
   deleteChat: (chatId: string) => void
   handleChatSelect: (chatId: string) => void
@@ -150,6 +151,7 @@ export function useChatState({
     loadChatById,
     setIsInitialLoad,
     isInitialLoad,
+    isChatHydrating,
     reloadChats,
     initialChatDecryptionFailed,
     clearInitialChatDecryptionFailed,
@@ -332,6 +334,7 @@ export function useChatState({
     isDarkMode,
     themeMode,
     isInitialLoad,
+    isChatHydrating,
     isThinking,
     isWaitingForResponse,
     isStreaming,

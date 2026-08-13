@@ -132,7 +132,7 @@ describe('useChatStorage.reloadChats', () => {
     expect(getChat).toHaveBeenCalledWith(summary.id)
   })
 
-  it('keeps the prior chat visible and ignores late A hydration after selecting B', async () => {
+  it('owns selection immediately and ignores late A hydration after selecting B', async () => {
     const prior = {
       id: 'prior',
       title: 'Prior',
@@ -183,18 +183,21 @@ describe('useChatStorage.reloadChats', () => {
     act(() => result.current.setCurrentChat(prior))
 
     act(() => result.current.handleChatSelect('A'))
-    expect(result.current.currentChat.id).toBe('prior')
+    expect(result.current.currentChat.id).toBe('A')
+    expect(result.current.isChatHydrating).toBe(true)
     act(() => result.current.handleChatSelect('B'))
-    expect(result.current.currentChat.id).toBe('prior')
+    expect(result.current.currentChat.id).toBe('B')
+    expect(result.current.isChatHydrating).toBe(true)
 
     await act(async () => resolveB(hydratedB))
     expect(result.current.currentChat.id).toBe('B')
+    expect(result.current.isChatHydrating).toBe(false)
     await act(async () => resolveA(hydratedA))
     expect(result.current.currentChat.id).toBe('B')
     expect(result.current.chats.find(({ id }) => id === 'A')).toBe(summaryA)
   })
 
-  it('keeps the prior chat visible and shows an error when hydration fails', async () => {
+  it('reverts to the prior chat and shows an error when hydration fails', async () => {
     const prior = {
       id: 'prior',
       title: 'Prior',
@@ -223,9 +226,12 @@ describe('useChatStorage.reloadChats', () => {
     act(() => result.current.setCurrentChat(prior))
 
     act(() => result.current.handleChatSelect('A'))
+    expect(result.current.currentChat.id).toBe('A')
+    expect(result.current.isChatHydrating).toBe(true)
     await waitFor(() => expect(mockToast).toHaveBeenCalled())
 
     expect(result.current.currentChat).toMatchObject(prior)
+    expect(result.current.isChatHydrating).toBe(false)
     expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Failed to load chat' }),
     )
@@ -317,7 +323,7 @@ describe('useChatStorage.reloadChats', () => {
     await act(async () => {
       await result.current.reloadChats()
     })
-    expect(result.current.currentChat.isBlankChat).toBe(true)
+    expect(result.current.currentChat.id).toBe(summary.id)
 
     await act(async () => finishHydration(hydrated))
 

@@ -1,5 +1,7 @@
 import type { Chat } from '@/components/chat/types'
+import { SYNC_SESSION_CHATS } from '@/constants/storage-keys'
 import { chatStorage } from '@/services/storage/chat-storage'
+import { sessionChatStorage } from '@/services/storage/session-storage'
 import { setCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -14,6 +16,7 @@ const updateChatLocalOnlySpy = vi.fn(async () => {})
 const updateChatProjectSpy = vi.fn(async () => {})
 const backupChatSpy = vi.fn(async () => {})
 const deleteFromCloudSpy = vi.fn(async () => {})
+const isDeletedSpy = vi.fn((_id: unknown) => false)
 
 vi.mock('@/services/storage/indexed-db', () => ({
   indexedDBStorage: {
@@ -44,7 +47,7 @@ vi.mock('@/services/storage/chat-events', () => ({
 vi.mock('@/services/storage/deleted-chats-tracker', () => ({
   deletedChatsTracker: {
     markAsDeleted: vi.fn(),
-    isDeleted: vi.fn(() => false),
+    isDeleted: (...args: unknown[]) => isDeletedSpy(...args),
   },
 }))
 
@@ -64,6 +67,8 @@ function makeChat(overrides: Partial<Chat> = {}): Chat {
 describe('chatStorage pendingSave is not persisted', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    sessionStorage.clear()
+    isDeletedSpy.mockReturnValue(false)
   })
 
   it('strips pendingSave before writing a chat to storage', async () => {
@@ -74,6 +79,35 @@ describe('chatStorage pendingSave is not persisted', () => {
     expect('pendingSave' in persisted).toBe(false)
     expect(persisted.id).toBe('rev_123_abc')
     expect(getChatSpy).not.toHaveBeenCalled()
+  })
+
+  it('does not recreate a chat deleted before a final stream save', async () => {
+    const chat = makeChat()
+    await chatStorage.saveChat(chat, true)
+    saveChatSpy.mockClear()
+
+    isDeletedSpy.mockReturnValue(true)
+    await chatStorage.saveChatAndSync({
+      ...chat,
+      messages: [
+        {
+          role: 'assistant',
+          content: 'Late stream result',
+          timestamp: new Date(),
+        },
+      ],
+    })
+
+    expect(saveChatSpy).not.toHaveBeenCalled()
+    expect(backupChatSpy).not.toHaveBeenCalled()
+  })
+
+  it('does not recreate deleted guest chats in session storage', () => {
+    isDeletedSpy.mockReturnValue(true)
+
+    sessionChatStorage.saveChat(makeChat())
+
+    expect(sessionStorage.getItem(SYNC_SESSION_CHATS)).toBeNull()
   })
 
   it('drops a stale persisted pendingSave when listing chats', async () => {

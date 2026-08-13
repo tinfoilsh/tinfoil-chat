@@ -203,17 +203,38 @@ describe('useChatMessaging metadata-only sends', () => {
     getChatMock.mockResolvedValue(null)
     const { result } = renderMessaging(metadataOnlyChat())
 
+    let dispatchResult: unknown
     await act(async () => {
-      await result.current.messaging.handleQuery('New prompt')
+      dispatchResult = await result.current.messaging.handleQuery('New prompt')
     })
 
     expect(saveChatMock).not.toHaveBeenCalled()
     expect(saveExistingChatMock).not.toHaveBeenCalled()
     expect(saveChatAndSyncMock).not.toHaveBeenCalled()
     expect(sendChatStreamMock).not.toHaveBeenCalled()
-    // The typed text is restored so the user can retry.
-    expect(result.current.messaging.input).toBe('New prompt')
+    expect(dispatchResult).toEqual({
+      status: 'not-started',
+      reason: 'chat-unavailable',
+    })
     expect(result.current.currentChat.messages).toHaveLength(0)
+  })
+
+  it('rolls back the optimistic turn when the existing row disappears', async () => {
+    getChatMock.mockResolvedValue(hydratedChat())
+    saveExistingChatMock.mockResolvedValue(null)
+    const { result } = renderMessaging(metadataOnlyChat())
+
+    let dispatchResult: unknown
+    await act(async () => {
+      dispatchResult = await result.current.messaging.handleQuery('New prompt')
+    })
+
+    expect(dispatchResult).toEqual({
+      status: 'not-started',
+      reason: 'chat-unavailable',
+    })
+    expect(result.current.currentChat.messages).toEqual(storedMessages)
+    expect(sendChatStreamMock).not.toHaveBeenCalled()
   })
 
   it('sends normally on a hydrated chat without re-reading storage', async () => {

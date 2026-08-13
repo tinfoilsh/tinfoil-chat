@@ -4,6 +4,7 @@ import {
   SYNC_SESSION_CHATS,
 } from '@/constants/storage-keys'
 import { logError } from '@/utils/error-handling'
+import { deletedChatsTracker } from './deleted-chats-tracker'
 
 // Convert date strings back to Date objects
 function restoreChat(chat: Chat): Chat {
@@ -132,6 +133,10 @@ export const sessionChatStorage = {
           component: 'sessionChatStorage',
           action: 'saveChat',
         })
+        return
+      }
+
+      if (deletedChatsTracker.isDeleted(chat.id)) {
         return
       }
 

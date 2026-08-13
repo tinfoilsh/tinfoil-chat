@@ -883,6 +883,7 @@ export function ChatInterface({
     isDarkMode,
     themeMode,
     isInitialLoad,
+    isChatHydrating,
     isThinking,
     isWaitingForResponse,
     isStreaming,
@@ -1049,6 +1050,7 @@ export function ChatInterface({
       : currentChat?.isLocalOnly
         ? 'blank-local'
         : 'blank-cloud',
+    persistQueue: !isTemporaryMode,
     loadingState,
     handleQuery,
     isRateLimited,
@@ -1057,10 +1059,12 @@ export function ChatInterface({
     // instead of firing requests guaranteed to fail.
     isDispatchBlocked: () =>
       models.length === 0 ||
+      isChatHydrating ||
       hasPendingRecoveryRef.current ||
       (currentChatId ? isChatRecoveryActive(currentChatId) : false),
     dispatchBlocked:
       models.length === 0 ||
+      isChatHydrating ||
       hasPendingRecovery ||
       activeRecoveryTurnIds.length > 0,
     onRateLimited: handleQueueRateLimited,
@@ -2703,6 +2707,8 @@ export function ChatInterface({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (isChatHydrating) return
+
     if (rateLimit && rateLimit.remaining <= 0 && rateLimit.kind !== 'hourly') {
       setIsSubscribePromptOpen(true)
       return
@@ -3753,69 +3759,80 @@ export function ChatInterface({
                 }
               >
                 <div className="flex min-h-full min-w-0 flex-1 [container-type:inline-size]">
-                  <ChatMessages
-                    messages={currentChat?.messages || []}
-                    pendingRecoveries={currentChat?.pendingRecoveries}
-                    recoveryDrafts={recoveryDrafts}
-                    activeRecoveryTurnIds={activeRecoveryTurnIds}
-                    reasoningHistoryPolicy={reasoningHistoryPolicy}
-                    contextWindowTokens={contextWindowTokens}
-                    pendingContextTokens={pendingContextTokens}
-                    isDarkMode={isDarkMode}
-                    chatId={currentChat.id}
-                    isWaitingForResponse={isWaitingForResponse}
-                    isStreamingResponse={isStreaming}
-                    activeArtifactToolCallId={
-                      isArtifactSidebarOpen ? activeArtifactToolCallId : null
-                    }
-                    isPremium={isPremium}
-                    models={models}
-                    onSubmit={handleSubmit}
-                    input={input}
-                    setInput={setInput}
-                    loadingState={loadingState}
-                    retryInfo={retryInfo}
-                    cancelGeneration={cancelGenerationAndResumeQueue}
-                    inputRef={inputRef}
-                    handleInputFocus={handleInputFocusWithRateLimitCheck}
-                    handleDocumentUpload={handleFileUpload}
-                    processedDocuments={processedDocuments}
-                    removeDocument={removeDocument}
-                    selectedModel={selectedModel}
-                    handleModelSelect={handleModelSelect}
-                    expandedLabel={expandedLabel}
-                    handleLabelClick={handleLabelClick}
-                    onEditMessage={editMessage}
-                    onRegenerateMessage={regenerateMessage}
-                    onRetryToolCall={retryToolCall}
-                    showScrollButton={showScrollButton}
-                    webSearchEnabled={effectiveWebSearchEnabled}
-                    onWebSearchToggle={
-                      webSearchAvailable ? handleWebSearchToggle : undefined
-                    }
-                    reasoningEffort={reasoningEffort}
-                    setReasoningEffort={setReasoningEffort}
-                    thinkingEnabled={thinkingEnabled}
-                    setThinkingEnabled={setThinkingEnabled}
-                    codeExecutionEnabled={
-                      canEnableCodeExecution ? codeExecutionEnabled : false
-                    }
-                    onCodeExecutionToggle={
-                      canEnableCodeExecution
-                        ? handleCodeExecutionToggle
-                        : undefined
-                    }
-                    isTemporaryMode={isTemporaryMode}
-                    activePromptPreset={activePreset}
-                    onOpenPromptLibrary={handleOpenPromptLibrary}
-                    onSelectPromptPreset={handleSetActivePreset}
-                  />
+                  {isChatHydrating ? (
+                    <div
+                      className="flex min-h-full flex-1 items-center justify-center text-content-secondary"
+                      role="status"
+                      aria-label="Loading chat history"
+                    >
+                      <PiSpinner className="h-6 w-6 animate-spin" />
+                    </div>
+                  ) : (
+                    <ChatMessages
+                      messages={currentChat?.messages || []}
+                      pendingRecoveries={currentChat?.pendingRecoveries}
+                      recoveryDrafts={recoveryDrafts}
+                      activeRecoveryTurnIds={activeRecoveryTurnIds}
+                      reasoningHistoryPolicy={reasoningHistoryPolicy}
+                      contextWindowTokens={contextWindowTokens}
+                      pendingContextTokens={pendingContextTokens}
+                      isDarkMode={isDarkMode}
+                      chatId={currentChat.id}
+                      isWaitingForResponse={isWaitingForResponse}
+                      isStreamingResponse={isStreaming}
+                      activeArtifactToolCallId={
+                        isArtifactSidebarOpen ? activeArtifactToolCallId : null
+                      }
+                      isPremium={isPremium}
+                      models={models}
+                      onSubmit={handleSubmit}
+                      input={input}
+                      setInput={setInput}
+                      loadingState={loadingState}
+                      retryInfo={retryInfo}
+                      cancelGeneration={cancelGenerationAndResumeQueue}
+                      inputRef={inputRef}
+                      handleInputFocus={handleInputFocusWithRateLimitCheck}
+                      handleDocumentUpload={handleFileUpload}
+                      processedDocuments={processedDocuments}
+                      removeDocument={removeDocument}
+                      selectedModel={selectedModel}
+                      handleModelSelect={handleModelSelect}
+                      expandedLabel={expandedLabel}
+                      handleLabelClick={handleLabelClick}
+                      onEditMessage={editMessage}
+                      onRegenerateMessage={regenerateMessage}
+                      onRetryToolCall={retryToolCall}
+                      showScrollButton={showScrollButton}
+                      webSearchEnabled={effectiveWebSearchEnabled}
+                      onWebSearchToggle={
+                        webSearchAvailable ? handleWebSearchToggle : undefined
+                      }
+                      reasoningEffort={reasoningEffort}
+                      setReasoningEffort={setReasoningEffort}
+                      thinkingEnabled={thinkingEnabled}
+                      setThinkingEnabled={setThinkingEnabled}
+                      codeExecutionEnabled={
+                        canEnableCodeExecution ? codeExecutionEnabled : false
+                      }
+                      onCodeExecutionToggle={
+                        canEnableCodeExecution
+                          ? handleCodeExecutionToggle
+                          : undefined
+                      }
+                      isTemporaryMode={isTemporaryMode}
+                      activePromptPreset={activePreset}
+                      onOpenPromptLibrary={handleOpenPromptLibrary}
+                      onSelectPromptPreset={handleSetActivePreset}
+                    />
+                  )}
                 </div>
               </div>
             </div>
 
             {/* Input Form - Show on mobile always, on desktop only when there are messages */}
             {isClient &&
+              !isChatHydrating &&
               (windowWidth < CONSTANTS.MOBILE_BREAKPOINT ||
                 (currentChat?.messages && currentChat.messages.length > 0)) && (
                 <div

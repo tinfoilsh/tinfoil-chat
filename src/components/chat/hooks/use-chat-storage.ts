@@ -45,6 +45,7 @@ interface UseChatStorageReturn {
   loadChatById: (chatId: string, isLocalUrl: boolean) => Promise<void>
   setIsInitialLoad: (loading: boolean) => void
   isInitialLoad: boolean
+  isChatHydrating: boolean
   reloadChats: () => Promise<void>
   initialChatDecryptionFailed: boolean
   clearInitialChatDecryptionFailed: () => void
@@ -94,6 +95,7 @@ export function useChatStorage({
   const { isSignedIn } = useAuth()
   const { toast } = useToast()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [hydratingChatId, setHydratingChatId] = useState<string | null>(null)
   const initialChatLoadedRef = useRef(false)
   const reloadGenerationRef = useRef(0)
   const pendingRecoveryReloadIdsRef = useRef(new Set<string>())
@@ -117,6 +119,7 @@ export function useChatStorage({
   const currentChatRef = useRef(currentChat)
   currentChatRef.current = currentChat
   const selectionRequestRef = useRef(0)
+  const selectionFallbackRef = useRef<Chat | null>(null)
 
   // Create persistence manager
   const persistenceManager = useMemo(
@@ -566,9 +569,17 @@ export function useChatStorage({
     async (chat: Chat) => {
       const selectionRequest = ++selectionRequestRef.current
       if (!chat.isMetadataOnly) {
+        selectionFallbackRef.current = null
+        setHydratingChatId(null)
         switchChat(chat)
         return
       }
+
+      if (selectionFallbackRef.current === null) {
+        selectionFallbackRef.current = currentChatRef.current
+      }
+      setCurrentChat(chat)
+      setHydratingChatId(chat.id)
 
       try {
         const hydratedChat = await chatStorage.getChat(chat.id)
@@ -595,8 +606,18 @@ export function useChatStorage({
             currentChat: hydratedChat,
           }
         })
+        if (selectionRequest === selectionRequestRef.current) {
+          selectionFallbackRef.current = null
+          setHydratingChatId(null)
+        }
       } catch (error) {
         if (selectionRequest !== selectionRequestRef.current) return
+        const fallback = selectionFallbackRef.current
+        selectionFallbackRef.current = null
+        setHydratingChatId(null)
+        if (fallback) {
+          setCurrentChat(fallback)
+        }
         logError('Failed to load selected chat', error, {
           component: 'useChatStorage',
           metadata: { chatId: chat.id },
@@ -608,7 +629,7 @@ export function useChatStorage({
         })
       }
     },
-    [setChatCollection, switchChat, toast],
+    [setChatCollection, setCurrentChat, switchChat, toast],
   )
 
   // Handle chat selection
@@ -856,6 +877,8 @@ export function useChatStorage({
     loadChatById,
     setIsInitialLoad,
     isInitialLoad,
+    isChatHydrating:
+      hydratingChatId !== null && currentChat.id === hydratingChatId,
     reloadChats,
     initialChatDecryptionFailed,
     clearInitialChatDecryptionFailed,
