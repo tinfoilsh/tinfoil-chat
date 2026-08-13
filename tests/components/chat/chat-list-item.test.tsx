@@ -258,10 +258,17 @@ describe('ChatListItem streaming timestamp', () => {
       expect(screen.getByText('10s ago')).toBeInTheDocument()
       expect(screen.queryByText(/Updated/)).not.toBeInTheDocument()
 
-      rerenderChat(chat, false)
+      rerenderChat(
+        {
+          ...chat,
+          messageCount: 3,
+          updatedAt: '2026-08-07T00:00:10.000Z',
+        },
+        false,
+      )
 
       expect(screen.getByText('15s ago')).toBeInTheDocument()
-      expect(screen.getByText(/Updated 10s ago/)).toBeInTheDocument()
+      expect(screen.getByText(/Updated 5s ago/)).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }
