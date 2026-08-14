@@ -3,38 +3,9 @@ import { pathToFileURL } from 'node:url'
 export const CLERK_ENVIRONMENT_URL = 'https://clerk.tinfoil.sh/v1/environment'
 
 const REQUEST_TIMEOUT_MS = 10_000
-const MAX_REQUEST_ATTEMPTS = 3
-const INITIAL_RETRY_DELAY_MS = 500
-const MAX_RETRY_DELAY_MS = 2_000
-const RETRY_BACKOFF_FACTOR = 2
-const RATE_LIMIT_STATUS = 429
-const SERVER_ERROR_MIN_STATUS = 500
-const SERVER_ERROR_MAX_STATUS = 599
 
-function sleep(milliseconds) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds))
-}
-
-function isRetryableRequestError(error) {
-  return (
-    error instanceof TypeError ||
-    (error instanceof DOMException &&
-      (error.name === 'AbortError' || error.name === 'TimeoutError'))
-  )
-}
-
-function isRetryableStatus(status) {
-  return (
-    status === RATE_LIMIT_STATUS ||
-    (status >= SERVER_ERROR_MIN_STATUS && status <= SERVER_ERROR_MAX_STATUS)
-  )
-}
-
-function retryDelay(attempt) {
-  return Math.min(
-    INITIAL_RETRY_DELAY_MS * RETRY_BACKOFF_FACTOR ** (attempt - 1),
-    MAX_RETRY_DELAY_MS,
-  )
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error)
 }
 
 export function getClerkPrivacyDrift(environment) {
@@ -53,50 +24,46 @@ export function getClerkPrivacyDrift(environment) {
 
 export async function checkClerkEnvironment({
   fetchImplementation = fetch,
-  sleepImplementation = sleep,
   url = CLERK_ENVIRONMENT_URL,
 } = {}) {
-  for (let attempt = 1; attempt <= MAX_REQUEST_ATTEMPTS; attempt += 1) {
-    let response
+  let response
 
-    try {
-      response = await fetchImplementation(url, {
-        headers: { accept: 'application/json' },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      })
-    } catch (error) {
-      if (!isRetryableRequestError(error) || attempt === MAX_REQUEST_ATTEMPTS) {
-        throw error
-      }
+  try {
+    response = await fetchImplementation(url, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+  } catch (error) {
+    throw new Error(
+      `Clerk environment request failed: ${errorMessage(error)}`,
+      { cause: error },
+    )
+  }
 
-      await sleepImplementation(retryDelay(attempt))
-      continue
-    }
+  if (!response.ok) {
+    const statusText = response.statusText ? ` ${response.statusText}` : ''
+    throw new Error(
+      `Clerk environment request failed with status ${response.status}${statusText}`,
+    )
+  }
 
-    if (!response.ok) {
-      if (
-        isRetryableStatus(response.status) &&
-        attempt < MAX_REQUEST_ATTEMPTS
-      ) {
-        await sleepImplementation(retryDelay(attempt))
-        continue
-      }
+  let environment
 
-      throw new Error(
-        `Clerk environment request failed with status ${response.status}`,
-      )
-    }
+  try {
+    environment = await response.json()
+  } catch (error) {
+    throw new Error(
+      `Clerk environment response was not valid JSON: ${errorMessage(error)}`,
+      { cause: error },
+    )
+  }
 
-    const environment = await response.json()
-    const drift = getClerkPrivacyDrift(environment)
+  const drift = getClerkPrivacyDrift(environment)
 
-    if (drift.length > 0) {
-      throw new Error(
-        `Clerk privacy configuration drifted:\n- ${drift.join('\n- ')}`,
-      )
-    }
-
-    return
+  if (drift.length > 0) {
+    throw new Error(
+      `Clerk privacy configuration drifted:\n- ${drift.join('\n- ')}`,
+    )
   }
 }
 

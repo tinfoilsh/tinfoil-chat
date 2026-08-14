@@ -50,96 +50,58 @@ describe('Clerk environment privacy check', () => {
     )
   })
 
-  it('retries rate limits and server errors with bounded backoff', async () => {
-    const fetchImplementation = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: false, status: 429 })
-      .mockResolvedValueOnce({ ok: false, status: 503 })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockResolvedValue(environment()),
-      })
-    const sleepImplementation = vi.fn().mockResolvedValue(undefined)
+  it('reports HTTP status details', async () => {
+    const fetchImplementation = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+    })
 
     await expect(
-      checkClerkEnvironment({ fetchImplementation, sleepImplementation }),
-    ).resolves.toBeUndefined()
-    expect(fetchImplementation).toHaveBeenCalledTimes(3)
-    expect(sleepImplementation.mock.calls).toEqual([[500], [1_000]])
+      checkClerkEnvironment({ fetchImplementation }),
+    ).rejects.toThrow(
+      'Clerk environment request failed with status 503 Service Unavailable',
+    )
   })
 
   it.each([
     ['network failure', new TypeError('connection failed')],
     ['timeout', new DOMException('timed out', 'TimeoutError')],
-  ])('retries a structured %s and then succeeds', async (_, requestError) => {
-    const fetchImplementation = vi
-      .fn()
-      .mockRejectedValueOnce(requestError)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockResolvedValue(environment()),
-      })
-    const sleepImplementation = vi.fn().mockResolvedValue(undefined)
+  ])('reports a structured %s', async (_, requestError) => {
+    const fetchImplementation = vi.fn().mockRejectedValue(requestError)
 
     await expect(
-      checkClerkEnvironment({ fetchImplementation, sleepImplementation }),
-    ).resolves.toBeUndefined()
-    expect(fetchImplementation).toHaveBeenCalledTimes(2)
-    expect(sleepImplementation).toHaveBeenCalledWith(500)
-  })
-
-  it('does not retry an ordinary client error', async () => {
-    const fetchImplementation = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 400,
+      checkClerkEnvironment({ fetchImplementation }),
+    ).rejects.toMatchObject({
+      message: `Clerk environment request failed: ${requestError.message}`,
+      cause: requestError,
     })
-    const sleepImplementation = vi.fn()
-
-    await expect(
-      checkClerkEnvironment({ fetchImplementation, sleepImplementation }),
-    ).rejects.toThrow('Clerk environment request failed with status 400')
-    expect(fetchImplementation).toHaveBeenCalledTimes(1)
-    expect(sleepImplementation).not.toHaveBeenCalled()
   })
 
-  it('stops retrying after the bounded attempt count', async () => {
+  it('reports an invalid JSON response', async () => {
+    const parseError = new SyntaxError('Unexpected token')
     const fetchImplementation = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 503,
+      ok: true,
+      json: vi.fn().mockRejectedValue(parseError),
     })
-    const sleepImplementation = vi.fn().mockResolvedValue(undefined)
 
     await expect(
-      checkClerkEnvironment({ fetchImplementation, sleepImplementation }),
-    ).rejects.toThrow('Clerk environment request failed with status 503')
-    expect(fetchImplementation).toHaveBeenCalledTimes(3)
-    expect(sleepImplementation.mock.calls).toEqual([[500], [1_000]])
+      checkClerkEnvironment({ fetchImplementation }),
+    ).rejects.toMatchObject({
+      message:
+        'Clerk environment response was not valid JSON: Unexpected token',
+      cause: parseError,
+    })
   })
 
-  it('does not infer retryability from an error message', async () => {
-    const fetchImplementation = vi
-      .fn()
-      .mockRejectedValue(new Error('network timeout'))
-    const sleepImplementation = vi.fn()
-
-    await expect(
-      checkClerkEnvironment({ fetchImplementation, sleepImplementation }),
-    ).rejects.toThrow('network timeout')
-    expect(fetchImplementation).toHaveBeenCalledTimes(1)
-    expect(sleepImplementation).not.toHaveBeenCalled()
-  })
-
-  it('does not retry privacy configuration drift', async () => {
+  it('reports privacy configuration drift', async () => {
     const fetchImplementation = vi.fn().mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue(environment({ captchaEnabled: true })),
     })
-    const sleepImplementation = vi.fn()
 
     await expect(
-      checkClerkEnvironment({ fetchImplementation, sleepImplementation }),
+      checkClerkEnvironment({ fetchImplementation }),
     ).rejects.toThrow('Clerk privacy configuration drifted')
-    expect(fetchImplementation).toHaveBeenCalledTimes(1)
-    expect(sleepImplementation).not.toHaveBeenCalled()
   })
 })
