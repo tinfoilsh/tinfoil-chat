@@ -167,6 +167,26 @@ describe('sync-api (enclave JSON-RPC)', () => {
     })
   })
 
+  it('posts revision protocol requests with captured revision bounds', async () => {
+    const api = await import('@/services/sync-enclave/sync-api')
+    mockFetch.mockResolvedValueOnce(ok({ events: [], next_cursor: 'page-2' }))
+
+    await api.revisionEvents({
+      afterRevision: '10',
+      throughRevision: '20',
+      cursor: 'page-1',
+      limit: 250,
+    })
+
+    expect(lastRequest()[0]).toBe('/v1/sync/revision-events')
+    expect(lastBody()).toEqual({
+      after_revision: '10',
+      through_revision: '20',
+      cursor: 'page-1',
+      limit: 250,
+    })
+  })
+
   it('deleteRow posts /v1/sync/delete with key + idempotency', async () => {
     const api = await import('@/services/sync-enclave/sync-api')
     mockFetch.mockResolvedValueOnce(ok({ ok: true }))

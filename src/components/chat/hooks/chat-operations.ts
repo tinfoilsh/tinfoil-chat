@@ -130,7 +130,7 @@ export async function deleteChat(
     // appear in the UI on subsequent loads / sync passes within this
     // session. Without this, a transient failure would silently hide
     // the chat until reload.
-    deletedChatsTracker.removeFromDeleted(chatId)
+    deletedChatsTracker.removeLocalDeletion(chatId)
     throw error
   }
 }

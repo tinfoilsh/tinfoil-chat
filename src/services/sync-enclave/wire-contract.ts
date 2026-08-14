@@ -18,6 +18,7 @@
 
 /** Request headers the webapp sends to /api/sync/*. */
 export const SYNC_HEADERS = {
+  SyncProtocol: 'X-Sync-Protocol',
   Idempotency: 'X-Idempotency-Key',
   KeyID: 'X-Key-Id',
   IfMatch: 'If-Match',
@@ -28,6 +29,8 @@ export const SYNC_HEADERS = {
   ProjectIDSet: 'X-Project-Id-Set',
   ProfileSyncProtocol: 'X-Profile-Sync-Protocol',
 } as const
+
+export const SYNC_PROTOCOL_VERSION = '2'
 
 /** Opt-in headers that bypass the legacy tombstone guard on re-upload. */
 export const RESTORE_DELETED_HEADERS = {

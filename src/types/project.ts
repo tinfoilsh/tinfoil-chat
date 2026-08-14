@@ -49,11 +49,6 @@ export interface ProjectChatListResponse {
   nextContinuationToken?: string
 }
 
-export interface ProjectChatSyncStatus {
-  count: number
-  lastUpdated: string | null
-}
-
 export interface ProjectData {
   name: string
   description: string

@@ -1,8 +1,6 @@
 import type {
   CreateProjectData,
   Project,
-  ProjectChatListResponse,
-  ProjectChatSyncStatus,
   ProjectData,
   ProjectDocument,
   ProjectDocumentListResponse,
@@ -30,9 +28,7 @@ const API_BASE_URL =
 
 const PROJECT_SCOPE = 'project'
 const PROJECT_DOCUMENT_SCOPE = 'project_document'
-const CHAT_SCOPE = 'chat'
 const ENCLAVE_PROJECT_LIST_LIMIT = 100
-const ENCLAVE_PROJECT_CHAT_LIST_LIMIT = 100
 
 function projectDocumentId(projectId: string, documentId: string): string {
   return `${projectId}/${documentId}`
@@ -101,24 +97,6 @@ function projectDocumentListItemFromStatus(update: {
     sizeBytes: 0,
     syncVersion: etagToSyncVersion(update.etag),
     createdAt: createdAtFromReverseId(documentId),
-    updatedAt: update.updated_at,
-  }
-}
-
-function projectChatFromStatus(update: {
-  id: string
-  etag: string
-  updated_at: string
-  project_id?: string | null
-}): ProjectChatListResponse['chats'][number] {
-  return {
-    id: update.id,
-    projectId: update.project_id ?? '',
-    messageCount: 0,
-    syncVersion: etagToSyncVersion(update.etag),
-    size: 0,
-    formatVersion: 2,
-    createdAt: createdAtFromReverseId(update.id),
     updatedAt: update.updated_at,
   }
 }
@@ -827,102 +805,6 @@ export class ProjectStorageService {
       null,
     )
     return { count: documents.length, lastUpdated }
-  }
-
-  async listProjectChats(
-    projectId: string,
-    options?: { continuationToken?: string },
-  ): Promise<ProjectChatListResponse> {
-    const chats: ProjectChatListResponse['chats'] = []
-    let cursor = options?.continuationToken
-    let nextContinuationToken: string | undefined
-    do {
-      const status = await enclaveListStatus({
-        scope: CHAT_SCOPE,
-        projectId,
-        cursor,
-        limit: ENCLAVE_PROJECT_CHAT_LIST_LIMIT,
-      })
-      chats.push(
-        ...status.updates
-          .filter((update) => update.project_id === projectId)
-          .map(projectChatFromStatus),
-      )
-      cursor = status.next_cursor
-      nextContinuationToken = status.next_cursor
-    } while (
-      chats.length < ENCLAVE_PROJECT_CHAT_LIST_LIMIT &&
-      hasNextCursor(cursor)
-    )
-
-    return {
-      chats,
-      nextContinuationToken,
-      hasMore: hasNextCursor(nextContinuationToken),
-    }
-  }
-
-  async getProjectChatsSyncStatus(
-    projectId: string,
-  ): Promise<ProjectChatSyncStatus> {
-    let count = 0
-    let lastUpdated: string | null = null
-    let cursor: string | undefined
-    do {
-      const status = await enclaveListStatus({
-        scope: CHAT_SCOPE,
-        projectId,
-        cursor,
-        limit: 500,
-      })
-      for (const update of status.updates) {
-        if (update.project_id !== projectId) continue
-        count++
-        if (!lastUpdated || update.updated_at > lastUpdated) {
-          lastUpdated = update.updated_at
-        }
-      }
-      cursor = status.next_cursor
-    } while (cursor)
-
-    return { count, lastUpdated }
-  }
-
-  async getProjectChatsUpdatedSince(
-    projectId: string,
-    options: { since: string; cursorId?: string },
-  ): Promise<ProjectChatListResponse> {
-    const chats: ProjectChatListResponse['chats'] = []
-    let cursor: string | undefined = options.cursorId ?? options.since
-    let nextContinuationToken: string | undefined
-    do {
-      const status = await enclaveListStatus({
-        scope: CHAT_SCOPE,
-        projectId,
-        cursor,
-        limit: ENCLAVE_PROJECT_CHAT_LIST_LIMIT,
-      })
-      chats.push(
-        ...status.updates
-          .filter(
-            (update) =>
-              update.project_id === projectId &&
-              update.updated_at > options.since,
-          )
-          .map(projectChatFromStatus),
-      )
-      cursor = status.next_cursor
-      nextContinuationToken = status.next_cursor
-    } while (
-      chats.length < ENCLAVE_PROJECT_CHAT_LIST_LIMIT &&
-      hasNextCursor(cursor)
-    )
-
-    return {
-      chats,
-      nextContinuationToken,
-      hasMore: hasNextCursor(nextContinuationToken),
-    }
   }
 }
 

@@ -28,7 +28,7 @@ function renderChatListItem({
   enableTitleAnimation?: boolean
   isStreaming?: boolean
 } = {}) {
-  const renderItem = (item: ChatItemData) => (
+  const renderItem = (item: ChatItemData, streaming: boolean) => (
     <ChatListItem
       chat={item}
       href={href}
@@ -38,7 +38,7 @@ function renderChatListItem({
       isDarkMode={false}
       pixelateSidebarChatTitles={pixelateSidebarChatTitles}
       enableTitleAnimation={enableTitleAnimation}
-      isStreaming={isStreaming}
+      isStreaming={streaming}
       onSelect={onSelect}
       onStartEdit={vi.fn()}
       onTitleChange={vi.fn()}
@@ -47,11 +47,11 @@ function renderChatListItem({
       onRequestDelete={vi.fn()}
     />
   )
-  const view = render(renderItem(chat))
+  const view = render(renderItem(chat, isStreaming))
   return {
     onSelect,
-    rerenderChat: (updatedChat: ChatItemData) =>
-      view.rerender(renderItem(updatedChat)),
+    rerenderChat: (updatedChat: ChatItemData, streaming = isStreaming) =>
+      view.rerender(renderItem(updatedChat, streaming)),
   }
 }
 
@@ -230,5 +230,47 @@ describe('ChatListItem timestamps', () => {
     })
 
     expect(screen.getByTitle('New chat')).toBeInTheDocument()
+  })
+})
+
+describe('ChatListItem streaming timestamp', () => {
+  it('keeps relative time stable and hides updated time while streaming', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-07T00:00:10.000Z'))
+    const chat = {
+      ...savedChat,
+      createdAt: '2026-08-07T00:00:00.000Z',
+      updatedAt: '2026-08-07T00:00:05.000Z',
+    }
+
+    try {
+      const { rerenderChat } = renderChatListItem({ chat, isStreaming: true })
+      expect(screen.getByText('10s ago')).toBeInTheDocument()
+      expect(screen.queryByText(/Updated/)).not.toBeInTheDocument()
+
+      vi.advanceTimersByTime(5_000)
+      rerenderChat({
+        ...chat,
+        messageCount: 3,
+        updatedAt: '2026-08-07T00:00:10.000Z',
+      })
+
+      expect(screen.getByText('10s ago')).toBeInTheDocument()
+      expect(screen.queryByText(/Updated/)).not.toBeInTheDocument()
+
+      rerenderChat(
+        {
+          ...chat,
+          messageCount: 3,
+          updatedAt: '2026-08-07T00:00:10.000Z',
+        },
+        false,
+      )
+
+      expect(screen.getByText('15s ago')).toBeInTheDocument()
+      expect(screen.getByText(/Updated 5s ago/)).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

@@ -11,6 +11,8 @@ const mockGetAllKeys = vi.fn()
 const mockGetKeyBytesOrThrow = vi.fn()
 const mockGetAlternativeKeyBytes = vi.fn()
 const mockEnclavePush = vi.fn()
+const mockEnclavePull = vi.fn()
+const mockRevisionSnapshot = vi.fn()
 const mockListStatus = vi.fn()
 const mockAttachmentPut = vi.fn()
 const mockAttachmentGet = vi.fn()
@@ -39,6 +41,8 @@ vi.mock('@/services/sync-enclave/sync-api', async () => {
   return {
     ...actual,
     push: (...args: any[]) => mockEnclavePush(...args),
+    pull: (...args: any[]) => mockEnclavePull(...args),
+    revisionSnapshot: (...args: any[]) => mockRevisionSnapshot(...args),
     listStatus: (...args: any[]) => mockListStatus(...args),
     attachmentPut: (...args: any[]) => mockAttachmentPut(...args),
     attachmentGet: (...args: any[]) => mockAttachmentGet(...args),
@@ -67,6 +71,11 @@ describe('CloudStorageService auth readiness', () => {
     mockGetKeyBytesOrThrow.mockReturnValue(TEST_BYTES)
     mockGetAlternativeKeyBytes.mockReturnValue(TEST_BYTES)
     mockEnclavePush.mockResolvedValue({ ok: true, etag: '1', keyId: 'kid' })
+    mockEnclavePull.mockResolvedValue({ items: [] })
+    mockRevisionSnapshot.mockResolvedValue({
+      items: [],
+      snapshot_revision: '0',
+    })
     mockListStatus.mockResolvedValue({ updates: [], deletes: [] })
     mockAttachmentPut.mockResolvedValue({
       ok: true,
@@ -90,6 +99,71 @@ describe('CloudStorageService auth readiness', () => {
     vi.unstubAllGlobals()
   })
 
+  it('tolerates only structured not-found items in revision content batches', async () => {
+    mockEnclavePull.mockResolvedValue({
+      items: [
+        { id: 'gone', ok: false, code: 'NOT_FOUND' },
+        {
+          id: 'present',
+          ok: true,
+          etag: '2',
+          plaintext: btoa('{"title":"Present"}'),
+        },
+      ],
+    })
+
+    await expect(
+      new CloudStorageService().downloadChats(['gone', 'present'], {
+        tolerateNotFound: true,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: 'present', syncVersion: 2 }),
+    ])
+  })
+
+  it('rejects non-not-found and incomplete revision content batches', async () => {
+    const storage = new CloudStorageService()
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [{ id: 'chat-1', ok: false, code: 'NEEDS_REWRAP' }],
+    })
+    await expect(
+      storage.downloadChats(['chat-1'], { tolerateNotFound: true }),
+    ).rejects.toThrow('NEEDS_REWRAP')
+
+    mockEnclavePull.mockResolvedValueOnce({ items: [] })
+    await expect(
+      storage.downloadChats(['chat-1'], { tolerateNotFound: true }),
+    ).rejects.toThrow('incomplete chat batch')
+  })
+
+  it('preserves an explicit project delete on a single conflict pull', async () => {
+    mockEnclavePull.mockResolvedValue({
+      items: [
+        {
+          id: 'chat-1',
+          ok: true,
+          etag: '2',
+          project_id_set: true,
+          project_id: null,
+          plaintext: btoa(
+            JSON.stringify({
+              id: 'chat-1',
+              title: 'Remote',
+              messages: [],
+              projectId: 'stale-project',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-02T00:00:00.000Z',
+            }),
+          ),
+        },
+      ],
+    })
+
+    const chat = await new CloudStorageService().downloadChat('chat-1')
+
+    expect(chat?.projectId).toBeUndefined()
+  })
+
   it('waits for auth token manager initialization before listing chats', async () => {
     mockIsInitialized.mockReturnValue(false)
     localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
@@ -104,6 +178,53 @@ describe('CloudStorageService auth readiness', () => {
       limit: 100,
       direction: 'desc',
     })
+  })
+
+  it('enumerates every remote chat ID for a project', async () => {
+    mockListStatus
+      .mockResolvedValueOnce({
+        updates: [
+          { id: 'chat-1', project_id: 'project-1' },
+          { id: 'other-chat', project_id: 'project-2' },
+        ],
+        next_cursor: 'page-2',
+      })
+      .mockResolvedValueOnce({
+        updates: [{ id: 'chat-2', project_id: 'project-1' }],
+      })
+
+    await expect(
+      new CloudStorageService().listChatIdsByProject('project-1'),
+    ).resolves.toEqual(['chat-1', 'chat-2'])
+    expect(mockListStatus).toHaveBeenNthCalledWith(2, {
+      scope: 'chat',
+      projectId: 'project-1',
+      cursor: 'page-2',
+      limit: 500,
+    })
+  })
+
+  it('stops project pagination when its account operation expires', async () => {
+    let current = true
+    mockListStatus.mockImplementationOnce(async () => {
+      current = false
+      return {
+        updates: [{ id: 'chat-1', project_id: 'project-1' }],
+        next_cursor: 'page-2',
+      }
+    })
+    const guard = {
+      userId: 'user-1',
+      isCurrent: () => current,
+      assertCurrent: () => {
+        if (!current) throw new Error('Cloud account changed')
+      },
+    }
+
+    await expect(
+      new CloudStorageService().listChatIdsByProject('project-1', guard),
+    ).rejects.toThrow('Cloud account changed')
+    expect(mockListStatus).toHaveBeenCalledTimes(1)
   })
 
   it('waits for auth token manager initialization before checking auth state', async () => {
@@ -137,6 +258,46 @@ describe('CloudStorageService auth readiness', () => {
     expect(pushArg.scope).toBe('chat')
     expect(pushArg.id).toBe('chat-1')
     expect(pushArg.metadata).toMatchObject({ restoreDeleted: true })
+  })
+
+  it('omits stale project metadata from dirty content-only uploads', async () => {
+    const service = new CloudStorageService()
+    await service.uploadChat({
+      id: 'chat-1',
+      title: 'Dirty content',
+      messages: [{ role: 'user', content: 'edited' }],
+      projectId: 'stale-project',
+      projectLocallyModified: false,
+      syncVersion: 2,
+      locallyModified: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      lastAccessedAt: 0,
+    } as any)
+
+    expect(mockEnclavePush.mock.calls[0][0].metadata).not.toHaveProperty(
+      'projectId',
+    )
+  })
+
+  it('includes project metadata for an intentional local move', async () => {
+    const service = new CloudStorageService()
+    await service.uploadChat({
+      id: 'chat-1',
+      title: 'Moved chat',
+      messages: [{ role: 'user', content: 'edited' }],
+      projectId: 'local-project',
+      projectLocallyModified: true,
+      syncVersion: 2,
+      locallyModified: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      lastAccessedAt: 0,
+    } as any)
+
+    expect(mockEnclavePush.mock.calls[0][0].metadata).toMatchObject({
+      projectId: 'local-project',
+    })
   })
 
   it('never uploads device-local recovery tokens', async () => {
