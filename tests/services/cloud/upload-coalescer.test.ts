@@ -241,6 +241,10 @@ describe('UploadCoalescer', () => {
       const coalescer = new UploadCoalescer(prepareFn, {
         baseDelayMs: 10,
         maxRetries: 2,
+        scheduler: {
+          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+          random: () => 0.9999,
+        },
       })
 
       coalescer.enqueue('chat-1')
