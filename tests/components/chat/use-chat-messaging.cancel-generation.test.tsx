@@ -1,5 +1,6 @@
 import { useChatMessaging } from '@/components/chat/hooks/use-chat-messaging'
 import type { Chat } from '@/components/chat/types'
+import type { BaseModel } from '@/config/models'
 import {
   clearActiveChatRecoveries,
   setChatRecoveryActive,
@@ -16,6 +17,16 @@ const moveStatusMock = vi.fn()
 const registerControllerMock = vi.fn()
 const clearControllerMock = vi.fn()
 const streamStatuses: Record<string, object> = {}
+const testModels = [
+  {
+    modelName: 'test-model',
+    image: '',
+    name: 'Test Model',
+    nameShort: 'Test',
+    description: '',
+    type: 'chat',
+  },
+] satisfies BaseModel[]
 const {
   authState,
   cancelChatRecoveryMock,
@@ -321,7 +332,7 @@ describe('useChatMessaging cancelGeneration', () => {
         systemPrompt: '',
         rules: '',
         storeHistory: true,
-        models: [],
+        models: testModels,
         selectedModel: 'test-model',
         chats: [chat],
         currentChat: chat,
@@ -348,7 +359,7 @@ describe('useChatMessaging cancelGeneration', () => {
         systemPrompt: '',
         rules: '',
         storeHistory: true,
-        models: [],
+        models: testModels,
         selectedModel: 'test-model',
         chats: [chat],
         currentChat: chat,
@@ -377,7 +388,7 @@ describe('useChatMessaging cancelGeneration', () => {
         systemPrompt: '',
         rules: '',
         storeHistory: true,
-        models: [],
+        models: testModels,
         selectedModel: 'test-model',
         chats: [chat],
         currentChat: chat,
@@ -400,7 +411,7 @@ describe('useChatMessaging cancelGeneration', () => {
           systemPrompt: '',
           rules: '',
           storeHistory: true,
-          models: [],
+          models: testModels,
           selectedModel: 'test-model',
           chats: [currentChat],
           currentChat,
