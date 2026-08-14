@@ -6,6 +6,7 @@
     "dev:frontend": "next dev",
     "dev:backend": "node scripts/dev-simulator.mjs",
     "build": "next build",
+    "check:clerk-privacy": "node scripts/check-clerk-environment.mjs",
     "start": "npx serve out",
     "dev:serve": "node scripts/dev-serve.mjs",
     "lint": "eslint .",
