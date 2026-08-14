@@ -244,12 +244,12 @@ async function bootstrapFromSnapshot(
     snapshotRevision,
     userId,
   )
-  for (const id of deletedIds) deletedChatsTracker.markAsDeleted(id)
+  for (const id of deletedIds) deletedChatsTracker.markAsRemoteDeleted(id)
   const restoredIds: string[] = []
   for (const item of items) {
     if (
       !pendingDeleteIds.has(item.id) &&
-      deletedChatsTracker.removeFromDeleted(item.id)
+      deletedChatsTracker.removeRemoteDeletion(item.id)
     ) {
       restoredIds.push(item.id)
     }
@@ -319,7 +319,7 @@ async function applyEvents(
         userId,
         isCurrent,
       )
-      deletedChatsTracker.markAsDeleted(event.id)
+      deletedChatsTracker.markAsRemoteDeleted(event.id)
       clearTombstoneIds.delete(event.id)
       committedStates.push(toRemoteState(event, event.revision, 'delete'))
       if (deleted) chatEvents.emit({ reason: 'sync', ids: [event.id] })
@@ -338,7 +338,7 @@ async function applyEvents(
     if (
       state.kind === 'upsert' &&
       clearTombstoneIds.has(state.id) &&
-      deletedChatsTracker.removeFromDeleted(state.id)
+      deletedChatsTracker.removeRemoteDeletion(state.id)
     ) {
       restoredIds.push(state.id)
     }

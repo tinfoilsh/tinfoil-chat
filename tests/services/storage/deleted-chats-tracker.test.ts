@@ -1,0 +1,34 @@
+import { SYNC_DELETED_CHATS } from '@/constants/storage-keys'
+import { DeletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
+import { beforeEach, describe, expect, it } from 'vitest'
+
+describe('DeletedChatsTracker', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+  })
+
+  it('keeps a later local deletion when an upsert clears the remote deletion', () => {
+    const tracker = new DeletedChatsTracker()
+    tracker.markAsRemoteDeleted('chat-1')
+    tracker.markAsDeleted('chat-1')
+
+    expect(tracker.removeRemoteDeletion('chat-1')).toBe(false)
+    expect(tracker.isDeleted('chat-1')).toBe(true)
+  })
+
+  it('reports when removing a remote deletion lifts the tombstone', () => {
+    const tracker = new DeletedChatsTracker()
+    tracker.markAsRemoteDeleted('chat-1')
+
+    expect(tracker.removeRemoteDeletion('chat-1')).toBe(true)
+    expect(tracker.isDeleted('chat-1')).toBe(false)
+  })
+
+  it('treats legacy string tombstones as local deletions', () => {
+    sessionStorage.setItem(SYNC_DELETED_CHATS, JSON.stringify(['chat-1']))
+    const tracker = new DeletedChatsTracker()
+
+    expect(tracker.removeRemoteDeletion('chat-1')).toBe(false)
+    expect(tracker.isDeleted('chat-1')).toBe(true)
+  })
+})

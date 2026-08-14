@@ -243,5 +243,6 @@ export function hasPasskeyBackup(): boolean {
 
 export async function retryFailedStorageCleanup(): Promise<void> {
   await indexedDBStorage.resetForAccountChange(/* notifyOtherTabs */ false)
+  deletedChatsTracker.clear()
   sessionStorage.removeItem(AUTH_ACCOUNT_RESET_FAILED)
 }
