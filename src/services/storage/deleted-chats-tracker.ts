@@ -106,15 +106,13 @@ export class DeletedChatsTracker {
     )
   }
 
-  removeFromDeleted(chatId: string): boolean {
-    const removedLocal = this.localDeletedChats.delete(chatId)
-    const removedRemote = this.remoteDeletedChats.delete(chatId)
-    if (removedLocal || removedRemote) {
+  removeLocalDeletion(chatId: string): boolean {
+    if (this.localDeletedChats.delete(chatId)) {
       this.saveToStorage()
 
-      logInfo('Removed chat from deleted tracker', {
+      logInfo('Removed local chat deletion from tracker', {
         component: 'DeletedChatsTracker',
-        action: 'removeFromDeleted',
+        action: 'removeLocalDeletion',
         metadata: { chatId },
       })
       return true

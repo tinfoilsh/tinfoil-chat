@@ -1,14 +1,19 @@
 import { ingestRemoteChats } from '@/services/cloud/chat-ingestion'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getChat, applyRemoteChatIfFresh, processRemoteChat, emit } = vi.hoisted(
-  () => ({
-    getChat: vi.fn(),
-    applyRemoteChatIfFresh: vi.fn(),
-    processRemoteChat: vi.fn(),
-    emit: vi.fn(),
-  }),
-)
+const {
+  getChat,
+  applyRemoteChatIfFresh,
+  processRemoteChat,
+  emit,
+  fetchRawChatContent,
+} = vi.hoisted(() => ({
+  getChat: vi.fn(),
+  applyRemoteChatIfFresh: vi.fn(),
+  processRemoteChat: vi.fn(),
+  emit: vi.fn(),
+  fetchRawChatContent: vi.fn(),
+}))
 
 vi.mock('@/services/storage/indexed-db', () => ({
   indexedDBStorage: { getChat, applyRemoteChatIfFresh },
@@ -16,7 +21,7 @@ vi.mock('@/services/storage/indexed-db', () => ({
 vi.mock('@/services/cloud/chat-codec', () => ({ processRemoteChat }))
 vi.mock('@/services/storage/chat-events', () => ({ chatEvents: { emit } }))
 vi.mock('@/services/cloud/cloud-storage', () => ({
-  cloudStorage: { fetchRawChatContent: vi.fn() },
+  cloudStorage: { fetchRawChatContent },
 }))
 
 describe('ingestRemoteChats', () => {
@@ -46,5 +51,37 @@ describe('ingestRemoteChats', () => {
       }),
     )
     expect(emit).toHaveBeenCalledWith({ reason: 'sync', ids: ['chat-1'] })
+  })
+
+  it('falls back when an entry has undefined project metadata', async () => {
+    await ingestRemoteChats(
+      [{ id: 'chat-1', content: '{}', projectId: undefined }],
+      { projectId: 'fallback-project' },
+    )
+
+    expect(processRemoteChat).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ projectId: 'fallback-project' }),
+    )
+  })
+
+  it('uses authoritative project metadata from fetched content', async () => {
+    fetchRawChatContent.mockResolvedValue({
+      plaintext: '{}',
+      formatVersion: 2,
+      syncVersion: 2,
+      projectIdSet: true,
+      projectId: null,
+    })
+
+    await ingestRemoteChats([{ id: 'chat-1' }], {
+      fetchMissingContent: true,
+      projectId: 'stale-project',
+    })
+
+    expect(processRemoteChat).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ projectId: null }),
+    )
   })
 })

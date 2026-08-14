@@ -75,7 +75,7 @@ vi.mock('@/services/cloud/chat-codec', () => ({ processRemoteChat }))
 vi.mock('@/services/storage/deleted-chats-tracker', () => ({
   deletedChatsTracker: {
     isDeleted: vi.fn(() => false),
-    removeFromDeleted: vi.fn(),
+    removeLocalDeletion: vi.fn(),
   },
 }))
 vi.mock('@/services/cloud/streaming-tracker', () => ({

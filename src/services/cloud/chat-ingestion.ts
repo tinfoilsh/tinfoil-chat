@@ -76,6 +76,8 @@ export async function ingestRemoteChats(
     }
 
     try {
+      let fetchedProjectMetadata:
+        { projectIdSet: boolean; projectId?: string | null } | undefined
       const codecInput: RemoteChatData = {
         id: remoteChat.id,
         createdAt: remoteChat.createdAt,
@@ -90,13 +92,16 @@ export async function ingestRemoteChats(
         if (fetched) {
           codecInput.plaintext = fetched.plaintext
           codecInput.syncVersion = fetched.syncVersion
+          fetchedProjectMetadata = fetched
         }
       }
       if (!codecInput.plaintext) continue
 
       const codecOptions: ProcessRemoteChatOptions = { localChat }
-      if ('projectId' in remoteChat) {
+      if (remoteChat.projectId !== undefined) {
         codecOptions.projectId = remoteChat.projectId
+      } else if (fetchedProjectMetadata?.projectIdSet) {
+        codecOptions.projectId = fetchedProjectMetadata.projectId
       } else if (projectId) {
         codecOptions.projectId = projectId
       }

@@ -843,7 +843,7 @@ export class CloudSyncService {
       if (userId) {
         await indexedDBStorage.acknowledgePendingDelete(chatId, userId)
       }
-      deletedChatsTracker.removeFromDeleted(chatId)
+      deletedChatsTracker.removeLocalDeletion(chatId)
       reportChatSynced(chatId)
     } catch (error) {
       if (error instanceof AuthTokenUnavailableError) return

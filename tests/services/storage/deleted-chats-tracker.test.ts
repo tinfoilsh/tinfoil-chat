@@ -42,4 +42,15 @@ describe('DeletedChatsTracker', () => {
     expect(reader.removeRemoteDeletion('chat-1')).toBe(false)
     expect(reader.isDeleted('chat-1')).toBe(true)
   })
+
+  it('keeps a remote tombstone when a local deletion rolls back', () => {
+    const tracker = new DeletedChatsTracker()
+    tracker.markAsRemoteDeleted('chat-1')
+    tracker.markAsDeleted('chat-1')
+
+    expect(tracker.removeLocalDeletion('chat-1')).toBe(true)
+    expect(tracker.isDeleted('chat-1')).toBe(true)
+    expect(tracker.removeRemoteDeletion('chat-1')).toBe(true)
+    expect(tracker.isDeleted('chat-1')).toBe(false)
+  })
 })
