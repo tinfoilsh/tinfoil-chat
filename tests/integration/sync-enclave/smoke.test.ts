@@ -334,6 +334,7 @@ describe.skipIf(!enabled)('sync-enclave live smoke', () => {
       plaintext: restoredPayload,
       ifMatch: null,
       idempotencyKey: newIdempotencyKey(),
+      metadata: { ...createRequest.metadata, restoreDeleted: true },
     })
     chatEtag = restored.etag
     chatDeleted = false
@@ -368,6 +369,7 @@ describe.skipIf(!enabled)('sync-enclave live smoke', () => {
     const altered = await attachmentPut({
       ...putRequest,
       plaintext: alteredPlaintext,
+      idempotencyKey: newIdempotencyKey(),
     })
     attachmentIds.add(altered.id)
     expect(altered.id).not.toBe(stored.id)
