@@ -339,6 +339,7 @@ async function runBoundedOperation<T>(
   activeOperationControllers.add(controller)
   const timer = setTimeout(() => controller.abort(timeoutError()), timeoutMs)
   try {
+    if (controller.signal.aborted) throw controller.signal.reason
     return await settleWithSignal(
       operation(controller.signal),
       controller.signal,

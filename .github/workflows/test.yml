@@ -40,10 +40,14 @@ jobs:
     # Live smoke test against the sync enclave. Gated on the repo
     # variable `SYNC_ENCLAVE_URL` being set; when absent, the job
     # short-circuits so forks and PRs from contributors without
-    # staging access don't fail.
+    # staging access don't fail. SYNC_ENCLAVE_TEST_JWT must belong to
+    # a disposable CI-only identity because the suite rotates its key.
     runs-on: ubuntu-latest
     if: ${{ vars.SYNC_ENCLAVE_URL != '' }}
     timeout-minutes: 15
+    concurrency:
+      group: sync-enclave-integration
+      cancel-in-progress: false
 
     steps:
       - uses: actions/checkout@v4

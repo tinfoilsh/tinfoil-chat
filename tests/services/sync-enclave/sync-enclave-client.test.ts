@@ -130,6 +130,27 @@ describe('SyncEnclaveClient', () => {
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
+  it.each([
+    'https://example.com/v1/health',
+    'HTTPS://example.com/v1/health',
+    '//example.com/v1/health',
+    'javascript:alert(1)',
+    'data:application/json,{}',
+    'v1/health',
+    '',
+  ])('rejects enclave path escape attempt %j', async (path) => {
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    const client = await getSyncEnclaveClient()
+
+    await expect(client.get(path)).rejects.toMatchObject({
+      name: 'SyncEnclaveError',
+      code: 'INVALID_SYNC_ENCLAVE_PATH',
+    })
+    expect(mockGetValidToken).not.toHaveBeenCalled()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
   it('injects the Clerk JWT into outgoing requests', async () => {
     const { getSyncEnclaveClient } =
       await import('@/services/sync-enclave/sync-enclave-client')
@@ -139,6 +160,23 @@ describe('SyncEnclaveClient', () => {
     const headers = mockFetch.mock.calls[0][1]?.headers as Headers
     expect(headers.get('Authorization')).toBe('Bearer test-jwt')
     expect(headers.get('Accept')).toBe('application/json')
+  })
+
+  it('overwrites a caller-supplied authorization header with the current JWT', async () => {
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    mockFetch.mockResolvedValueOnce(jsonResponse({ ok: true }))
+    const client = await getSyncEnclaveClient()
+
+    await client.request('/v1/key/current', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer attacker-controlled-token' },
+      body: '{}',
+    })
+
+    const headers = mockFetch.mock.calls[0][1]?.headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer test-jwt')
+    expect(headers.get('Content-Type')).toBe('application/json')
   })
 
   it('can issue public enclave requests without a JWT', async () => {
@@ -166,6 +204,40 @@ describe('SyncEnclaveClient', () => {
     ).rejects.toMatchObject({ status: 401 })
     expect(mockRefreshToken).not.toHaveBeenCalled()
     expect(mockFetch).toHaveBeenCalledOnce()
+  })
+
+  it('honors a pre-aborted caller signal before token lookup or transport', async () => {
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    const client = await getSyncEnclaveClient()
+    const controller = new AbortController()
+    const reason = new Error('account changed')
+    controller.abort(reason)
+
+    await expect(
+      client.request('/v1/sync/pull', { signal: controller.signal }),
+    ).rejects.toBe(reason)
+    expect(mockGetValidToken).not.toHaveBeenCalled()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('cancels while authentication is pending without sending a request', async () => {
+    const { getSyncEnclaveClient, SyncRequestAbortedError } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    mockGetValidToken.mockReturnValueOnce(new Promise(() => {}))
+    const client = await getSyncEnclaveClient()
+    const controller = new AbortController()
+    const request = client.request('/v1/sync/pull', {
+      signal: controller.signal,
+    })
+    await vi.waitFor(() => expect(mockGetValidToken).toHaveBeenCalledOnce())
+
+    controller.abort(new SyncRequestAbortedError())
+
+    await expect(request).rejects.toMatchObject({
+      name: 'SyncRequestAbortedError',
+    })
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('force-refreshes after one 401 and replays the identical request once', async () => {
@@ -247,6 +319,79 @@ describe('SyncEnclaveClient', () => {
       status: 412,
       code: 'PRECONDITION_FAILED',
       details: { current_etag: '7' },
+    })
+  })
+
+  it('uses an opaque HTTP error when the enclave returns a malformed body', async () => {
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    mockFetch.mockResolvedValueOnce(
+      new Response('not-json', {
+        status: 502,
+        statusText: 'Bad Gateway',
+        headers: { 'Content-Type': 'text/plain' },
+      }),
+    )
+    const client = await getSyncEnclaveClient()
+
+    await expect(client.get('/v1/key/current')).rejects.toMatchObject({
+      name: 'SyncEnclaveError',
+      status: 502,
+      code: 'HTTP_502',
+      message: 'sync enclave request failed: 502 Bad Gateway',
+      details: {},
+    })
+  })
+
+  it('rejects malformed JSON on a successful JSON response', async () => {
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    mockFetch.mockResolvedValueOnce(
+      new Response('{"truncated":', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    const client = await getSyncEnclaveClient()
+
+    await expect(client.get('/v1/key/current')).rejects.toBeInstanceOf(
+      SyntaxError,
+    )
+  })
+
+  it('does not parse empty or non-JSON success responses', async () => {
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    mockFetch
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        new Response('{"ignored":true}', {
+          status: 200,
+          headers: { 'Content-Type': 'text/plain' },
+        }),
+      )
+    const client = await getSyncEnclaveClient()
+
+    await expect(client.get('/v1/empty')).resolves.toBeUndefined()
+    await expect(client.get('/v1/non-json')).resolves.toBeUndefined()
+  })
+
+  it('classifies transport TypeErrors without hiding non-network failures', async () => {
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    mockFetch
+      .mockRejectedValueOnce(new TypeError('connection reset'))
+      .mockRejectedValueOnce(new RangeError('sdk invariant failed'))
+    const client = await getSyncEnclaveClient()
+
+    await expect(client.get('/v1/health')).rejects.toMatchObject({
+      name: 'SyncNetworkError',
+      code: 'NETWORK',
+      cause: expect.any(TypeError),
+    })
+    await expect(client.get('/v1/health')).rejects.toMatchObject({
+      name: 'RangeError',
+      message: 'sdk invariant failed',
     })
   })
 
@@ -416,6 +561,32 @@ describe('SyncEnclaveClient', () => {
     expect(publicSignal?.aborted).toBe(false)
     resolvePublic(jsonResponse({ ok: true }))
     await expect(publicRequest).resolves.toEqual({ ok: true })
+  })
+
+  it('keeps an aborted request scope closed until it is explicitly reset', async () => {
+    const {
+      abortSyncEnclaveRequests,
+      getSyncEnclaveClient,
+      resetSyncEnclaveRequestScope,
+    } = await import('@/services/sync-enclave/sync-enclave-client')
+    const client = await getSyncEnclaveClient()
+    abortSyncEnclaveRequests('cloud-sync')
+
+    await expect(
+      client.post('/v1/sync/pull', {}, undefined, {
+        requestScope: 'cloud-sync',
+      }),
+    ).rejects.toMatchObject({ name: 'SyncRequestAbortedError' })
+    expect(mockFetch).not.toHaveBeenCalled()
+
+    resetSyncEnclaveRequestScope('cloud-sync')
+    mockFetch.mockResolvedValueOnce(jsonResponse({ items: [] }))
+    await expect(
+      client.post('/v1/sync/pull', {}, undefined, {
+        requestScope: 'cloud-sync',
+      }),
+    ).resolves.toEqual({ items: [] })
+    expect(mockFetch).toHaveBeenCalledOnce()
   })
 
   it('does not let canceled initialization evict a fresh client', async () => {
