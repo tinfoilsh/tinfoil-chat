@@ -24,11 +24,22 @@ describe('DeletedChatsTracker', () => {
     expect(tracker.isDeleted('chat-1')).toBe(false)
   })
 
-  it('treats legacy string tombstones as local deletions', () => {
+  it('keeps legacy string tombstones until an authoritative upsert', () => {
     sessionStorage.setItem(SYNC_DELETED_CHATS, JSON.stringify(['chat-1']))
     const tracker = new DeletedChatsTracker()
 
-    expect(tracker.removeRemoteDeletion('chat-1')).toBe(false)
     expect(tracker.isDeleted('chat-1')).toBe(true)
+    expect(tracker.removeRemoteDeletion('chat-1')).toBe(true)
+    expect(tracker.isDeleted('chat-1')).toBe(false)
+  })
+
+  it('does not lift persisted source-aware local tombstones', () => {
+    const writer = new DeletedChatsTracker()
+    writer.markAsDeleted('chat-1')
+    const reader = new DeletedChatsTracker()
+
+    expect(reader.isDeleted('chat-1')).toBe(true)
+    expect(reader.removeRemoteDeletion('chat-1')).toBe(false)
+    expect(reader.isDeleted('chat-1')).toBe(true)
   })
 })
