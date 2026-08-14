@@ -78,8 +78,6 @@ export default function Document() {
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <script dangerouslySetInnerHTML={{ __html: chatFontScript }} />
         <script dangerouslySetInnerHTML={{ __html: appHeightScript }} />
-        <link rel="preconnect" href="https://clerk.accounts.dev" />
-
         <link rel="manifest" href="/site.webmanifest" />
 
         <meta
