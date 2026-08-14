@@ -58,10 +58,18 @@ export function isUploadableChat(
         | 'isLocalOnly'
         | 'isBlankChat'
         | 'decryptionFailed'
+        | 'dataCorrupted'
+        | 'isMetadataOnly'
       >
     | Pick<
         StoredChat,
-        'id' | 'messages' | 'isLocalOnly' | 'isBlankChat' | 'decryptionFailed'
+        | 'id'
+        | 'messages'
+        | 'isLocalOnly'
+        | 'isBlankChat'
+        | 'decryptionFailed'
+        | 'dataCorrupted'
+        | 'isMetadataOnly'
       >,
   isStreaming?: (chatId: string) => boolean,
 ): boolean {
@@ -77,9 +85,13 @@ export function isUploadableChat(
     return false
   }
 
+  if (chat.isMetadataOnly === true) {
+    return false
+  }
+
   const messageCount =
     'messages' in chat ? chat.messages.length : chat.messageCount
-  if (messageCount === 0) {
+  if (chat.dataCorrupted === true || messageCount === 0) {
     return false
   }
 

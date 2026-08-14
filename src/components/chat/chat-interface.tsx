@@ -1828,12 +1828,9 @@ export function ChatInterface({
       window.removeEventListener(ENCRYPTION_KEY_CHANGED_EVENT, handler)
   }, [reloadChats])
 
-  // Manual full sync triggered from the sidebar "Sync" button. Pages
-  // through the entire remote history (deep) so older chats that aren't on
-  // the first page land locally, then refreshes the visible list.
   const handleManualSync = useCallback(async () => {
     try {
-      await syncChats({ deep: true })
+      await syncChats()
       await reloadChats()
     } catch (error) {
       logError('Manual chat sync failed', error, {

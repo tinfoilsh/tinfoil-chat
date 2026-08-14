@@ -1,9 +1,11 @@
 import type { Chat } from '@/components/chat/types'
+import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { cloudStorage } from '../cloud/cloud-storage'
 import { cloudSync } from '../cloud/cloud-sync'
 import { streamingTracker } from '../cloud/streaming-tracker'
+import { newIdempotencyKey } from '../sync-enclave/sync-api'
 import { chatEvents } from './chat-events'
 import { deletedChatsTracker } from './deleted-chats-tracker'
 import { indexedDBStorage, type Chat as StorageChat } from './indexed-db'
@@ -162,11 +164,33 @@ export class ChatStorageService {
     // Mark as deleted to prevent re-sync
     deletedChatsTracker.markAsDeleted(id)
 
-    await indexedDBStorage.deleteChat(id)
+    const existingChat = await indexedDBStorage.getChat(id)
+    const userId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
+    let idempotencyKey =
+      existingChat?.isLocalOnly || !userId ? null : newIdempotencyKey()
+    const queued =
+      idempotencyKey && userId
+        ? await indexedDBStorage.deleteChatWithPendingIntent(
+            id,
+            idempotencyKey,
+            userId,
+            // A never-synced chat with an in-flight create push still
+            // needs a durable delete intent: the push can commit after
+            // the local row is gone, and without the intent the chat
+            // would resurrect on the next event replay.
+            { forceQueue: cloudSync.hasPendingUpload(id) },
+          )
+        : false
+    if (!idempotencyKey) {
+      await indexedDBStorage.deleteChat(id)
+    } else if (!queued) {
+      idempotencyKey = null
+    }
     chatEvents.emit({ reason: 'delete', ids: [id] })
 
     // Also delete from cloud storage (non-blocking)
-    cloudSync.deleteFromCloud(id).catch((error: unknown) => {
+    if (!idempotencyKey) return
+    cloudSync.deleteFromCloud(id, idempotencyKey).catch((error: unknown) => {
       logError('Failed to delete chat from cloud', error, {
         component: 'ChatStorageService',
         action: 'deleteChat',
@@ -176,45 +200,64 @@ export class ChatStorageService {
   }
 
   async deleteChatsByProject(projectId: string): Promise<number> {
+    const guard = cloudSync.createAccountOperationGuard()
+    const userId = guard.userId
+    if (!userId) {
+      throw new Error('Authenticated user ID is unavailable')
+    }
     await this.initialize()
+    guard.assertCurrent()
 
-    // Delete locally and tombstone the ids before touching the cloud. An
-    // in-flight backup re-reads the chat from local storage right before
-    // uploading, so removing the local row first stops a concurrent upload
-    // from resurrecting a chat in the cloud after the bulk delete. This
-    // mirrors the ordering used by the single-chat deleteChat path.
-    const deletedIds = await indexedDBStorage.deleteChatsByProject(projectId)
+    return cloudSync.withProjectUploadBarrier(projectId, async () => {
+      guard.assertCurrent()
+      const remoteIds = await cloudStorage.listChatIdsByProject(
+        projectId,
+        guard,
+      )
+      guard.assertCurrent()
 
-    for (const id of deletedIds) {
-      deletedChatsTracker.markAsDeleted(id)
-    }
+      const deletedIds = await indexedDBStorage.deleteChatsByProject(
+        projectId,
+        remoteIds,
+        userId,
+        newIdempotencyKey,
+        guard.isCurrent,
+      )
+      guard.assertCurrent()
 
-    if (deletedIds.length > 0) {
-      chatEvents.emit({ reason: 'delete', ids: deletedIds })
-    }
+      for (const id of deletedIds) deletedChatsTracker.markAsDeleted(id)
 
-    // Bulk-delete from the cloud in a single request. Best-effort: a failure
-    // is logged but not fatal, matching deleteChat, and the ids stay
-    // tombstoned locally so they will not re-sync onto this device.
-    if (await cloudStorage.isAuthenticated()) {
+      if (deletedIds.length > 0) {
+        chatEvents.emit({ reason: 'delete', ids: deletedIds })
+      }
+
       try {
-        await cloudStorage.deleteChatsByProject(projectId)
+        guard.assertCurrent()
+        await cloudStorage.deleteChatsByProject(projectId, guard)
+        guard.assertCurrent()
+        await indexedDBStorage.acknowledgePendingDeletes(
+          deletedIds,
+          userId,
+          guard.isCurrent,
+        )
+        guard.assertCurrent()
       } catch (error) {
-        logError('Failed to bulk-delete project chats from cloud', error, {
+        logError('Failed to delete every remote project chat', error, {
           component: 'ChatStorageService',
-          action: 'deleteChatsByProject',
+          action: 'deleteChatsByProject.remoteDelete',
           metadata: { projectId },
         })
+        throw error
       }
-    }
 
-    logInfo(`Deleted ${deletedIds.length} chats for project`, {
-      component: 'ChatStorageService',
-      action: 'deleteChatsByProject',
-      metadata: { projectId, count: deletedIds.length },
+      logInfo(`Deleted ${deletedIds.length} chats for project`, {
+        component: 'ChatStorageService',
+        action: 'deleteChatsByProject',
+        metadata: { projectId, count: deletedIds.length },
+      })
+
+      return deletedIds.length
     })
-
-    return deletedIds.length
   }
 
   async deleteAllNonLocalChats(): Promise<number> {
@@ -238,7 +281,12 @@ export class ChatStorageService {
     cloudDeleted: number
     notificationSent: boolean
   }> {
+    // Capture the guard before any await so the whole operation —
+    // ID snapshot, cloud delete, and local wipe — is pinned to the
+    // account that initiated it.
+    const guard = cloudSync.createAccountOperationGuard()
     await this.initialize()
+    guard.assertCurrent()
 
     // Snapshot local IDs up front so we know what to mark as deleted in the
     // tracker after a successful wipe, but don't mark anything yet — if the
@@ -246,6 +294,7 @@ export class ChatStorageService {
     // tombstone chats that still exist on the server and lose them on the
     // next pull.
     const localIds = await indexedDBStorage.getAllChatIds()
+    guard.assertCurrent()
 
     // Attempt the cloud bulk-delete first. If it fails, surface the error
     // and skip both the tracker update and the local wipe so the user can
@@ -254,7 +303,8 @@ export class ChatStorageService {
     let notificationSent = false
     if (await cloudStorage.isAuthenticated()) {
       try {
-        const result = await cloudStorage.deleteAllChats()
+        guard.assertCurrent()
+        const result = await cloudStorage.deleteAllChats(guard)
         cloudDeleted = result.deleted
         notificationSent = result.notificationSent ?? false
       } catch (error) {
@@ -267,7 +317,10 @@ export class ChatStorageService {
     }
 
     // Cloud delete succeeded (or user is anonymous); now it's safe to
-    // tombstone the IDs locally and wipe IndexedDB.
+    // tombstone the IDs locally and wipe IndexedDB — but only for the
+    // same account: the local wipe clears the whole store without
+    // account scoping.
+    guard.assertCurrent()
     for (const id of localIds) {
       if (id) deletedChatsTracker.markAsDeleted(id)
     }
@@ -384,8 +437,17 @@ export class ChatStorageService {
     await indexedDBStorage.updateChatLocalOnly(chatId, true)
     await indexedDBStorage.updateChatProject(chatId, null)
 
+    const userId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
+    const idempotencyKey = newIdempotencyKey()
+    if (userId) {
+      await indexedDBStorage.enqueuePendingDelete(
+        chatId,
+        idempotencyKey,
+        userId,
+      )
+    }
     try {
-      await cloudSync.deleteFromCloud(chatId)
+      await cloudSync.deleteFromCloud(chatId, idempotencyKey)
     } catch (error) {
       // Plain saves treat local-only as sticky, so restore the original
       // classification explicitly before rewriting the pre-conversion row.

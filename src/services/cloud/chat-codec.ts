@@ -35,7 +35,7 @@ export interface ProcessedChatResult {
 
 export interface ProcessRemoteChatOptions {
   localChat?: Pick<ChatSyncMetadata, 'projectId'> | null
-  projectId?: string
+  projectId?: string | null
 }
 
 /**
@@ -50,7 +50,10 @@ export async function processRemoteChat(
   options: ProcessRemoteChatOptions = {},
 ): Promise<ProcessedChatResult> {
   const { localChat, projectId } = options
-  const effectiveProjectId = projectId ?? localChat?.projectId
+  const hasExplicitProjectId = 'projectId' in options
+  const effectiveProjectId = hasExplicitProjectId
+    ? (projectId ?? undefined)
+    : localChat?.projectId
 
   const safeCreatedAt = ensureValidISODate(remote.createdAt, remote.id)
   const safeUpdatedAt = ensureValidISODate(
@@ -122,7 +125,9 @@ export async function processRemoteChat(
     clockVersion:
       remote.syncVersion === undefined ? undefined : decrypted.clockVersion,
     formatVersion: 2,
-    projectId: projectId ?? decrypted.projectId ?? localChat?.projectId,
+    projectId: hasExplicitProjectId
+      ? (projectId ?? undefined)
+      : (decrypted.projectId ?? localChat?.projectId),
   }
 
   return { chat, status: 'decrypted' }

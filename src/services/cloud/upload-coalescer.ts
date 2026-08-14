@@ -71,7 +71,7 @@ interface ChatUploadState {
  * bytes pushed to the enclave are identical across attempts and the
  * enclave can de-duplicate them into a single committed effect.
  */
-export type UploadAttempt = () => Promise<void>
+export type UploadAttempt = (() => Promise<void>) & { dispose?: () => void }
 
 /**
  * Prepare function signature. The coalescer owns the idempotency key
@@ -321,53 +321,57 @@ export class UploadCoalescer {
     // next logical write under a fresh key.
     let preparedAttempt: UploadAttempt | null | undefined
 
-    for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
-      if (workerGeneration !== this.generation) return
-      try {
-        if (preparedAttempt === undefined) {
-          preparedAttempt = await this.prepareUpload(chatId, idempotencyKey)
+    try {
+      for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
+        if (workerGeneration !== this.generation) return
+        try {
+          if (preparedAttempt === undefined) {
+            preparedAttempt = await this.prepareUpload(chatId, idempotencyKey)
+            if (workerGeneration !== this.generation) return
+          }
+          if (preparedAttempt === null) return // Nothing to upload
+          await preparedAttempt()
+          return // Success
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error))
+          if (!shouldRetryUploadError(lastError)) {
+            throw lastError
+          }
+
+          // Don't retry on final attempt
+          if (attempt === this.config.maxRetries) {
+            break
+          }
+
+          const delay = computeBackoffDelay(
+            attempt,
+            this.config.baseDelayMs,
+            this.config.maxDelayMs,
+            this.scheduler.random(),
+          )
+
+          logInfo(`Upload failed, retrying in ${delay}ms`, {
+            component: 'UploadCoalescer',
+            action: 'retry',
+            metadata: {
+              chatId,
+              attempt: attempt + 1,
+              maxRetries: this.config.maxRetries,
+              delay,
+              error: lastError.message,
+            },
+          })
+
+          await this.scheduler.sleep(delay)
           if (workerGeneration !== this.generation) return
         }
-        if (preparedAttempt === null) return // Nothing to upload
-        await preparedAttempt()
-        return // Success
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error))
-        if (!shouldRetryUploadError(lastError)) {
-          throw lastError
-        }
-
-        // Don't retry on final attempt
-        if (attempt === this.config.maxRetries) {
-          break
-        }
-
-        const delay = computeBackoffDelay(
-          attempt,
-          this.config.baseDelayMs,
-          this.config.maxDelayMs,
-          this.scheduler.random(),
-        )
-
-        logInfo(`Upload failed, retrying in ${delay}ms`, {
-          component: 'UploadCoalescer',
-          action: 'retry',
-          metadata: {
-            chatId,
-            attempt: attempt + 1,
-            maxRetries: this.config.maxRetries,
-            delay,
-            error: lastError.message,
-          },
-        })
-
-        await this.scheduler.sleep(delay)
-        if (workerGeneration !== this.generation) return
       }
-    }
 
-    // All retries exhausted
-    throw lastError ?? new Error('Upload failed')
+      // All retries exhausted
+      throw lastError ?? new Error('Upload failed')
+    } finally {
+      preparedAttempt?.dispose?.()
+    }
   }
 
   /**

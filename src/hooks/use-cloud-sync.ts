@@ -56,8 +56,6 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
   })
   const syncingRef = useRef(false)
   const syncPromiseRef = useRef<Promise<SyncResult> | null>(null)
-  const syncModeRef = useRef<'shallow' | 'deep' | null>(null)
-  const pendingDeepSyncRef = useRef<Promise<SyncResult | false> | null>(null)
   const initializingRef = useRef(false)
   const isMountedRef = useRef(true)
   // Ref avoids putting `options` in useCallback dep arrays, which would
@@ -181,16 +179,15 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
     initializeSync()
   }, [isSignedIn, getToken])
 
-  const runChatSync = useCallback((options?: { deep?: boolean }) => {
+  const runChatSync = useCallback((projectId?: string) => {
     syncingRef.current = true
-    syncModeRef.current = options?.deep ? 'deep' : 'shallow'
     if (isMountedRef.current) {
       setState((prev) => ({ ...prev, syncing: true }))
     }
 
     const syncPromise = (async () => {
       try {
-        const result = await cloudSync.syncAllChats(options)
+        const result = await cloudSync.smartSync(projectId)
 
         if (isMountedRef.current) {
           setState((prev) => ({
@@ -205,10 +202,9 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
           {
             component: 'useCloudSync',
             action: 'syncChats',
-            metadata: { result },
+            metadata: { projectId, result },
           },
         )
-
         return result
       } catch (error) {
         if (isMountedRef.current) {
@@ -218,183 +214,67 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
       } finally {
         syncingRef.current = false
         syncPromiseRef.current = null
-        syncModeRef.current = null
       }
     })()
     syncPromiseRef.current = syncPromise
     return syncPromise
   }, [])
 
-  // Full sync chats. By default only the first page is fetched; pass
-  // `{ deep: true }` (manual "Sync" action) to page through the entire
-  // remote history so older chats land locally.
-  const syncChats = useCallback(
-    async (options?: { deep?: boolean }) => {
-      if (!isCloudSyncEnabled()) {
-        logInfo('Cloud sync is disabled, skipping sync', {
-          component: 'useCloudSync',
-          action: 'syncChats',
-        })
-        return false
-      }
+  const getOrRunChatSync = useCallback(
+    (projectId?: string) => syncPromiseRef.current ?? runChatSync(projectId),
+    [runChatSync],
+  )
 
-      const activeSync = syncPromiseRef.current
-      if (syncingRef.current && !activeSync) {
-        logInfo('Sync request blocked by another sync operation', {
-          component: 'useCloudSync',
-          action: 'syncChats',
-        })
-        return false
-      }
-      if (!activeSync) return runChatSync(options)
-
-      logInfo('Sync request coalesced with sync already in progress', {
+  const syncChats = useCallback(async () => {
+    if (!isCloudSyncEnabled()) {
+      logInfo('Cloud sync is disabled, skipping sync', {
         component: 'useCloudSync',
         action: 'syncChats',
       })
-
-      if (!options?.deep || syncModeRef.current === 'deep') return activeSync
-      if (pendingDeepSyncRef.current) return pendingDeepSyncRef.current
-
-      const pendingDeepSync = activeSync
-        .catch(() => undefined)
-        .then<SyncResult | false>(() => {
-          if (!isCloudSyncEnabled()) {
-            return false
-          }
-          return runChatSync({ deep: true })
-        })
-        .finally(() => {
-          if (pendingDeepSyncRef.current === pendingDeepSync) {
-            pendingDeepSyncRef.current = null
-          }
-        })
-      pendingDeepSyncRef.current = pendingDeepSync
-      return pendingDeepSync
-    },
-    [runChatSync],
-  )
+      return false
+    }
+    return getOrRunChatSync()
+  }, [getOrRunChatSync])
 
   /**
    * Smart sync: checks sync status first and only syncs if changes detected.
    * @param projectId - Optional project ID. If provided, syncs project chats.
    */
-  const smartSyncChats = useCallback(async (projectId?: string) => {
-    if (!isCloudSyncEnabled()) {
-      logInfo('Cloud sync is disabled, skipping smart sync', {
-        component: 'useCloudSync',
-        action: 'smartSyncChats',
-        metadata: { projectId },
-      })
-      return { uploaded: 0, downloaded: 0, errors: [] }
-    }
-
-    if (syncingRef.current) {
-      logInfo('Smart sync request blocked - sync already in progress', {
-        component: 'useCloudSync',
-        action: 'smartSyncChats',
-        metadata: { projectId },
-      })
-      return { uploaded: 0, downloaded: 0, errors: [] }
-    }
-
-    syncingRef.current = true
-    if (isMountedRef.current) {
-      setState((prev) => ({ ...prev, syncing: true }))
-    }
-
-    try {
-      const result = await cloudSync.smartSync(projectId)
-
-      if (isMountedRef.current) {
-        setState((prev) => ({
-          ...prev,
-          syncing: false,
-          lastSyncTime: Date.now(),
-        }))
+  const smartSyncChats = useCallback(
+    async (projectId?: string) => {
+      if (!isCloudSyncEnabled()) {
+        logInfo('Cloud sync is disabled, skipping smart sync', {
+          component: 'useCloudSync',
+          action: 'smartSyncChats',
+          metadata: { projectId },
+        })
+        return { uploaded: 0, downloaded: 0, errors: [] }
       }
 
-      if (result.uploaded > 0 || result.downloaded > 0) {
-        logInfo(
-          `Smart sync completed: uploaded=${result.uploaded}, downloaded=${result.downloaded}`,
-          {
-            component: 'useCloudSync',
-            action: 'smartSyncChats',
-            metadata: { projectId, result },
-          },
-        )
-      }
-
-      return result
-    } catch (error) {
-      if (isMountedRef.current) {
-        setState((prev) => ({ ...prev, syncing: false }))
-      }
-      throw error
-    } finally {
-      syncingRef.current = false
-    }
-  }, [])
+      return getOrRunChatSync(projectId)
+    },
+    [getOrRunChatSync],
+  )
 
   const backupChat = useCallback(async (chatId: string) => {
     await cloudSync.backupChat(chatId)
   }, [])
 
   // Sync chats for a specific project (full sync)
-  const syncProjectChats = useCallback(async (projectId: string) => {
-    if (!isCloudSyncEnabled()) {
-      logInfo('Cloud sync is disabled, skipping project chat sync', {
-        component: 'useCloudSync',
-        action: 'syncProjectChats',
-      })
-      return { uploaded: 0, downloaded: 0, errors: [] }
-    }
-
-    if (syncingRef.current) {
-      logInfo('Sync request blocked - sync already in progress', {
-        component: 'useCloudSync',
-        action: 'syncProjectChats',
-      })
-      return { uploaded: 0, downloaded: 0, errors: [] }
-    }
-
-    syncingRef.current = true
-    if (isMountedRef.current) {
-      setState((prev) => ({ ...prev, syncing: true }))
-    }
-
-    try {
-      const result = await cloudSync.syncProjectChats(projectId)
-
-      if (isMountedRef.current) {
-        setState((prev) => ({
-          ...prev,
-          syncing: false,
-          lastSyncTime: Date.now(),
-        }))
+  const syncProjectChats = useCallback(
+    async (projectId: string) => {
+      if (!isCloudSyncEnabled()) {
+        logInfo('Cloud sync is disabled, skipping project chat sync', {
+          component: 'useCloudSync',
+          action: 'syncProjectChats',
+        })
+        return { uploaded: 0, downloaded: 0, errors: [] }
       }
 
-      if (result.downloaded > 0) {
-        logInfo(
-          `Project chat sync completed: downloaded=${result.downloaded}`,
-          {
-            component: 'useCloudSync',
-            action: 'syncProjectChats',
-            metadata: { projectId, result },
-          },
-        )
-      }
-
-      return result
-    } catch (error) {
-      if (isMountedRef.current) {
-        setState((prev) => ({ ...prev, syncing: false }))
-      }
-      throw error
-    } finally {
-      syncingRef.current = false
-    }
-  }, [])
+      return getOrRunChatSync(projectId)
+    },
+    [getOrRunChatSync],
+  )
 
   const retryDecryptionWithNewKey = useCallback(
     (opts?: { runInBackground?: boolean }) => {
@@ -469,6 +349,11 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
       } | null = null
       let didSetKey = false
       let rolledBack = false
+      // Set when the new key must be kept despite a thrown error
+      // (start_fresh already wiped the cloud under the new key, so
+      // rolling back would strand the account on a key that matches
+      // nothing server-side).
+      let keepNewKeyOnError = false
       try {
         previousKeys = encryptionService.getAllKeys()
         // Check both encryptionService (source of truth for the crypto layer) and
@@ -519,6 +404,9 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
             rolledBack = true
             throw authorizationError
           }
+          // The cloud is wiped and the new key registered — from here
+          // on the old key is unusable, so no error may roll back.
+          keepNewKeyOnError = true
           // §H4 — `start_fresh` wipes the cloud, so any local
           // `syncVersion` numbers no longer match a row anywhere.
           // Reset them all so the next push goes up as a fresh
@@ -526,7 +414,7 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
           // 409 loop.
           try {
             await indexedDBStorage.resetSyncMetadataForAllChats()
-            cloudSync.clearSyncStatus()
+            await cloudSync.clearSyncStatusAfterServerWipe()
           } catch (resetError) {
             logError(
               'Failed to reset local sync metadata after start_fresh',
@@ -536,6 +424,7 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
                 action: 'setEncryptionKey.resetSyncMetadata',
               },
             )
+            throw resetError
           }
         }
 
@@ -597,7 +486,27 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
 
         return false // Key didn't change
       } catch (error) {
-        if (didSetKey && previousKeys && !rolledBack) {
+        if (keepNewKeyOnError) {
+          // Commit the accepted key and re-encrypt the passkey backup
+          // so a partial start_fresh failure (e.g. the local metadata
+          // reset) leaves the account on a fully usable new key. Any
+          // chats with stale syncVersions will surface CAS conflicts
+          // in the sync UI, where re-uploading resolves them — worse
+          // than a clean reset, but recoverable; a rolled-back key
+          // would not be.
+          encryptionService.persistCurrentKeyState()
+          // Keep the hook state in step with the persisted key so the
+          // settings UI and passkey hook don't keep serving the old one.
+          if (isMountedRef.current) {
+            setState((prev) => ({
+              ...prev,
+              encryptionKey: encryptionService.getKey(),
+            }))
+          }
+          if (hasPasskeyBackup()) {
+            onKeyChangedRef.current?.()
+          }
+        } else if (didSetKey && previousKeys && !rolledBack) {
           try {
             await rollbackToPreviousKeys(previousKeys)
           } catch (rollbackError) {

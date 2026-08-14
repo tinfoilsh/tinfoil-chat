@@ -201,6 +201,15 @@ describe('Chat Codec - processRemoteChat', () => {
 
       expect(result.chat.projectId).toBe('explicit-project')
     })
+
+    it('preserves an explicit project deletion', async () => {
+      const result = await processRemoteChat(baseRemoteChat, {
+        localChat: { projectId: 'local-project' },
+        projectId: null,
+      })
+
+      expect(result.chat.projectId).toBeUndefined()
+    })
   })
 
   describe('Timestamp handling', () => {

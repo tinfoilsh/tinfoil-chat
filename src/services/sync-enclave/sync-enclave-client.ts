@@ -7,6 +7,7 @@ import { authTokenManager } from '@/services/auth'
 import { reportSyncPaused } from '@/services/cloud/sync-health'
 import { logError, logInfo } from '@/utils/error-handling'
 import { SecureClient } from 'tinfoil'
+import { SYNC_HEADERS, SYNC_PROTOCOL_VERSION } from './wire-contract'
 
 /**
  * Singleton wrapper around the TinfoilAI SDK's SecureClient pointed at
@@ -155,6 +156,7 @@ export class SyncEnclaveClient {
     const requestUrl = new URL(path, SYNC_ENCLAVE_URL).toString()
     const baseHeaders = new Headers(init.headers)
     baseHeaders.set('Accept', 'application/json')
+    baseHeaders.set(SYNC_HEADERS.SyncProtocol, SYNC_PROTOCOL_VERSION)
     if (init.body && !baseHeaders.has('Content-Type')) {
       baseHeaders.set('Content-Type', 'application/json')
     }

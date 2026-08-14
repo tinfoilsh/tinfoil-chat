@@ -228,6 +228,30 @@ describe('UploadCoalescer', () => {
       expect(prepareFn).toHaveBeenCalledTimes(1)
     })
 
+    it('disposes a frozen upload only after all retries finish', async () => {
+      const dispose = vi.fn()
+      const run = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('flake'))
+        .mockResolvedValueOnce(undefined)
+      const prepareFn = vi.fn(async () => {
+        const attempt = Object.assign(async () => run(), { dispose })
+        return attempt
+      })
+      const coalescer = new UploadCoalescer(prepareFn, {
+        baseDelayMs: 10,
+        maxRetries: 2,
+      })
+
+      coalescer.enqueue('chat-1')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(dispose).not.toHaveBeenCalled()
+      await vi.runAllTimersAsync()
+
+      expect(run).toHaveBeenCalledTimes(2)
+      expect(dispose).toHaveBeenCalledOnce()
+    })
+
     it('replays the frozen snapshot even when the source changes between retries', async () => {
       let source = 'v1'
       const seenPayloads: string[] = []

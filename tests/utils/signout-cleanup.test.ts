@@ -178,6 +178,7 @@ describe('performSignoutCleanup', () => {
     await retryFailedStorageCleanup()
 
     expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalledWith(false)
+    expect(deletedChatsTracker.clear).toHaveBeenCalledTimes(1)
     expect(sessionStorage.getItem(AUTH_ACCOUNT_RESET_FAILED)).toBeNull()
   })
 })

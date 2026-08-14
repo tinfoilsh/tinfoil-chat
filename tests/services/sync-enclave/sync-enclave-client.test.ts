@@ -139,6 +139,7 @@ describe('SyncEnclaveClient', () => {
     const headers = mockFetch.mock.calls[0][1]?.headers as Headers
     expect(headers.get('Authorization')).toBe('Bearer test-jwt')
     expect(headers.get('Accept')).toBe('application/json')
+    expect(headers.get('X-Sync-Protocol')).toBe('2')
   })
 
   it('can issue public enclave requests without a JWT', async () => {
