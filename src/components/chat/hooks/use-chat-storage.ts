@@ -31,6 +31,9 @@ import {
 import { ChatPersistenceManager } from './chat-persistence-manager'
 import { useChatCollection } from './use-chat-collection'
 
+const useIsomorphicLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect
+
 interface UseChatStorageProps {
   storeHistory: boolean
   scrollToBottom?: () => void
@@ -146,7 +149,7 @@ export function useChatStorage({
   const previousAccountKeyRef = useRef(accountKey)
   const committedAccountKeyRef = useRef(accountKey)
   const accountGenerationRef = useRef(0)
-  useLayoutEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (previousAccountKeyRef.current !== accountKey) {
       previousAccountKeyRef.current = accountKey
       accountGenerationRef.current += 1
@@ -172,7 +175,7 @@ export function useChatStorage({
   }, [isSignedIn, persistenceManager])
 
   // Cleanup on unmount
-  useLayoutEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     persistenceManager.activate()
     return () => {
       persistenceManager.cleanup()
