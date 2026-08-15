@@ -168,6 +168,7 @@ export function useChatStorage({
           !current.isBlankChat &&
           !current.isMetadataOnly &&
           !current.pendingSave &&
+          !titleSaveGenerationRef.current.has(current.id) &&
           !streamingTracker.isStreamingOrPending(current.id) &&
           currentSummary !== undefined &&
           currentSummary.updatedAt !== undefined &&
@@ -221,15 +222,18 @@ export function useChatStorage({
                 if (
                   hydratedMatchesStorage ||
                   existing.pendingSave === true ||
+                  titleSaveGenerationRef.current.has(c.id) ||
                   streamingTracker.isStreamingOrPending(c.id)
                 ) {
-                  const pendingTitle = existing.pendingSave
-                    ? {
-                        title: existing.title,
-                        titleState: existing.titleState,
-                        updatedAt: existing.updatedAt,
-                      }
-                    : {}
+                  const pendingTitle =
+                    existing.pendingSave ||
+                    titleSaveGenerationRef.current.has(c.id)
+                      ? {
+                          title: existing.title,
+                          titleState: existing.titleState,
+                          updatedAt: existing.updatedAt,
+                        }
+                      : {}
                   chat = {
                     ...existing,
                     ...c,
@@ -275,7 +279,9 @@ export function useChatStorage({
               // stored copy over the messages the new stream is about to write.
               const isStreaming = streamingTracker.isStreamingOrPending(prev.id)
               const isRecoveryReload = pendingRecoveryIds.includes(prev.id)
-              const pendingCurrentTitle = prev.pendingSave
+              const hasPendingTitle =
+                prev.pendingSave || titleSaveGenerationRef.current.has(prev.id)
+              const pendingCurrentTitle = hasPendingTitle
                 ? {
                     title: prev.title,
                     titleState: prev.titleState,
@@ -360,7 +366,7 @@ export function useChatStorage({
                   nextCurrent = {
                     ...prev,
                     syncedAt: existingChat.syncedAt,
-                    title: prev.pendingSave ? prev.title : existingChat.title,
+                    title: hasPendingTitle ? prev.title : existingChat.title,
                     presetId: existingChat.presetId,
                     pendingRecoveries: storedRecoveries,
                   }
@@ -545,9 +551,14 @@ export function useChatStorage({
   const updateChatTitle = useCallback(
     (chatId: string, newTitle: string) => {
       const updatedAt = new Date().toISOString()
-      const saveGeneration = ++titleSaveSequenceRef.current
-      titleSaveGenerationRef.current.set(chatId, saveGeneration)
+      const saveGeneration = storeHistory
+        ? ++titleSaveSequenceRef.current
+        : null
+      if (saveGeneration !== null) {
+        titleSaveGenerationRef.current.set(chatId, saveGeneration)
+      }
       const finishSave = (savedUpdatedAt?: string) => {
+        if (saveGeneration === null) return
         if (titleSaveGenerationRef.current.get(chatId) !== saveGeneration)
           return
         titleSaveGenerationRef.current.delete(chatId)
@@ -591,6 +602,11 @@ export function useChatStorage({
                 metadata: { chatId },
               })
             })
+        } else if (
+          saveGeneration !== null &&
+          titleSaveGenerationRef.current.get(chatId) === saveGeneration
+        ) {
+          titleSaveGenerationRef.current.delete(chatId)
         }
 
         return updatedChats
