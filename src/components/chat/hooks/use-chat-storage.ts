@@ -121,6 +121,8 @@ export function useChatStorage({
   currentChatRef.current = currentChat
   const selectionRequestRef = useRef(0)
   const selectionFallbackRef = useRef<Chat | null>(null)
+  const titleSaveSequenceRef = useRef(0)
+  const titleSaveGenerationRef = useRef(new Map<string, number>())
 
   // Create persistence manager
   const persistenceManager = useMemo(
@@ -221,9 +223,17 @@ export function useChatStorage({
                   existing.pendingSave === true ||
                   streamingTracker.isStreamingOrPending(c.id)
                 ) {
+                  const pendingTitle = existing.pendingSave
+                    ? {
+                        title: existing.title,
+                        titleState: existing.titleState,
+                        updatedAt: existing.updatedAt,
+                      }
+                    : {}
                   chat = {
                     ...existing,
                     ...c,
+                    ...pendingTitle,
                     messages: existing.messages,
                     isMetadataOnly: false,
                   }
@@ -265,21 +275,25 @@ export function useChatStorage({
               // stored copy over the messages the new stream is about to write.
               const isStreaming = streamingTracker.isStreamingOrPending(prev.id)
               const isRecoveryReload = pendingRecoveryIds.includes(prev.id)
+              const pendingCurrentTitle = prev.pendingSave
+                ? {
+                    title: prev.title,
+                    titleState: prev.titleState,
+                    updatedAt: prev.updatedAt,
+                  }
+                : {}
               const existingMessageCount = existingChat.isMetadataOnly
                 ? (existingChat.messageCount ?? 0)
                 : existingChat.messages.length
               const canAdoptRefreshedCurrent =
                 refreshedCurrentChat !== null &&
                 prev === current &&
-                prev.id === current.id &&
-                prev.updatedAt === current.updatedAt &&
-                prev.messages.length === current.messages.length &&
-                !prev.pendingSave &&
                 !isStreaming &&
                 refreshedCurrentChat.updatedAt === existingChat.updatedAt &&
                 refreshedCurrentChat.messages.length === existingMessageCount
               if (canAdoptRefreshedCurrent) {
                 nextCurrent = {
+                  ...prev,
                   ...refreshedCurrentChat,
                   pendingRecoveries: storedRecoveries,
                   pendingSave: prev.pendingSave,
@@ -330,6 +344,7 @@ export function useChatStorage({
                 ) {
                   nextCurrent = {
                     ...existingChat,
+                    ...pendingCurrentTitle,
                     pendingRecoveries: storedRecoveries,
                     pendingSave: prev.pendingSave,
                   }
@@ -345,7 +360,7 @@ export function useChatStorage({
                   nextCurrent = {
                     ...prev,
                     syncedAt: existingChat.syncedAt,
-                    title: existingChat.title,
+                    title: prev.pendingSave ? prev.title : existingChat.title,
                     presetId: existingChat.presetId,
                     pendingRecoveries: storedRecoveries,
                   }
@@ -530,7 +545,12 @@ export function useChatStorage({
   const updateChatTitle = useCallback(
     (chatId: string, newTitle: string) => {
       const updatedAt = new Date().toISOString()
+      const saveGeneration = ++titleSaveSequenceRef.current
+      titleSaveGenerationRef.current.set(chatId, saveGeneration)
       const finishSave = (savedUpdatedAt?: string) => {
+        if (titleSaveGenerationRef.current.get(chatId) !== saveGeneration)
+          return
+        titleSaveGenerationRef.current.delete(chatId)
         setChatCollection((previous) => {
           const finish = (chat: Chat) =>
             chat.id === chatId && chat.updatedAt === updatedAt
