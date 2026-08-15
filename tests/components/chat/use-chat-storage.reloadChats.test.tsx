@@ -417,7 +417,7 @@ describe('useChatStorage.reloadChats', () => {
     )
   })
 
-  it('never blanks the displayed chat when a newer summary arrives', async () => {
+  it('refreshes the displayed chat when a newer summary arrives', async () => {
     const summary = {
       id: 'chat-1',
       title: 'Chat',
@@ -441,7 +441,8 @@ describe('useChatStorage.reloadChats', () => {
       isMetadataOnly: false,
     }
     mockLoadChats.mockResolvedValueOnce([summary])
-    vi.spyOn(chatStorage, 'getChat').mockResolvedValue(hydrated)
+    const getChat = vi.spyOn(chatStorage, 'getChat')
+    getChat.mockResolvedValueOnce(hydrated)
 
     const { result } = renderHook(() => useChatStorage({ storeHistory: true }))
     await waitFor(() => expect(result.current.isInitialLoad).toBe(false))
@@ -450,21 +451,36 @@ describe('useChatStorage.reloadChats', () => {
       expect(result.current.currentChat.messages).toHaveLength(1),
     )
 
-    // Storage reports newer content while this chat is on screen. The
-    // current chat only merges metadata (never adopts the summary's empty
-    // messages), so the visible conversation is preserved.
+    // Storage reports newer content while this chat is on screen.
     const newerSummary = {
       ...summary,
       title: 'Renamed elsewhere',
       messageCount: 2,
       updatedAt: '2026-08-12T01:00:00.000Z',
     }
+    const refreshed = {
+      ...hydrated,
+      title: newerSummary.title,
+      updatedAt: newerSummary.updatedAt,
+      messages: [
+        ...hydrated.messages,
+        {
+          role: 'assistant' as const,
+          content: 'Synced answer',
+          timestamp: new Date('2026-08-12T01:00:00.000Z'),
+        },
+      ],
+    }
+    getChat.mockResolvedValueOnce(refreshed)
     mockLoadChats.mockResolvedValue([newerSummary])
     await act(async () => {
       await result.current.reloadChats()
     })
 
-    expect(result.current.currentChat.messages).toHaveLength(1)
+    expect(result.current.currentChat.messages).toHaveLength(2)
+    expect(result.current.currentChat.messages[1]?.content).toBe(
+      'Synced answer',
+    )
     expect(result.current.currentChat.title).toBe('Renamed elsewhere')
     expect(result.current.currentChat.isMetadataOnly).toBeFalsy()
   })

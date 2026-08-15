@@ -159,6 +159,26 @@ export function useChatStorage({
         if (reloadGeneration !== reloadGenerationRef.current) {
           return
         }
+        const currentSummary = loadedChats.find(
+          (chat) => chat.id === current.id,
+        )
+        const currentContentChanged =
+          !current.isBlankChat &&
+          !current.isMetadataOnly &&
+          !current.pendingSave &&
+          !streamingTracker.isStreamingOrPending(current.id) &&
+          currentSummary !== undefined &&
+          currentSummary.updatedAt !== undefined &&
+          (current.updatedAt === undefined ||
+            currentSummary.updatedAt > current.updatedAt)
+        const refreshedCurrentChat = currentContentChanged
+          ? currentSummary.isMetadataOnly
+            ? await chatStorage.getChat(current.id)
+            : currentSummary
+          : null
+        if (reloadGeneration !== reloadGenerationRef.current) {
+          return
+        }
         const pendingRecoveryIds = [...pendingRecoveryReloadIdsRef.current]
         pendingRecoveryReloadIdsRef.current.clear()
 
@@ -245,7 +265,26 @@ export function useChatStorage({
               // stored copy over the messages the new stream is about to write.
               const isStreaming = streamingTracker.isStreamingOrPending(prev.id)
               const isRecoveryReload = pendingRecoveryIds.includes(prev.id)
-              if (isRecoveryReload && isStreaming) {
+              const existingMessageCount = existingChat.isMetadataOnly
+                ? (existingChat.messageCount ?? 0)
+                : existingChat.messages.length
+              const canAdoptRefreshedCurrent =
+                refreshedCurrentChat !== null &&
+                prev === current &&
+                prev.id === current.id &&
+                prev.updatedAt === current.updatedAt &&
+                prev.messages.length === current.messages.length &&
+                !prev.pendingSave &&
+                !isStreaming &&
+                refreshedCurrentChat.updatedAt === existingChat.updatedAt &&
+                refreshedCurrentChat.messages.length === existingMessageCount
+              if (canAdoptRefreshedCurrent) {
+                nextCurrent = {
+                  ...refreshedCurrentChat,
+                  pendingRecoveries: storedRecoveries,
+                  pendingSave: prev.pendingSave,
+                }
+              } else if (isRecoveryReload && isStreaming) {
                 nextCurrent = {
                   ...prev,
                   pendingRecoveries: storedRecoveries,
@@ -490,21 +529,48 @@ export function useChatStorage({
   // Update chat title
   const updateChatTitle = useCallback(
     (chatId: string, newTitle: string) => {
+      const updatedAt = new Date().toISOString()
+      const finishSave = (savedUpdatedAt?: string) => {
+        setChatCollection((previous) => {
+          const finish = (chat: Chat) =>
+            chat.id === chatId && chat.updatedAt === updatedAt
+              ? {
+                  ...chat,
+                  updatedAt: savedUpdatedAt ?? chat.updatedAt,
+                  pendingSave: false,
+                }
+              : chat
+          return {
+            chats: previous.chats.map(finish),
+            currentChat: finish(previous.currentChat),
+          }
+        })
+      }
       setChats((prevChats) => {
         const updatedChats = prevChats.map((chat) =>
           chat.id === chatId
-            ? { ...chat, title: newTitle, titleState: 'manual' as const }
+            ? {
+                ...chat,
+                title: newTitle,
+                titleState: 'manual' as const,
+                updatedAt,
+                pendingSave: storeHistory && !chat.isTemporary,
+              }
             : chat,
         )
 
         const chatToUpdate = updatedChats.find((c) => c.id === chatId)
         if (chatToUpdate && !chatToUpdate.isTemporary && storeHistory) {
-          persistenceManager.save(chatToUpdate).catch((error) => {
-            logError('Failed to save chat title update', error, {
-              component: 'useChatStorage',
-              metadata: { chatId },
+          persistenceManager
+            .save(chatToUpdate)
+            .then((saved) => finishSave(saved.updatedAt))
+            .catch((error) => {
+              finishSave()
+              logError('Failed to save chat title update', error, {
+                component: 'useChatStorage',
+                metadata: { chatId },
+              })
             })
-          })
         }
 
         return updatedChats
@@ -515,6 +581,8 @@ export function useChatStorage({
           ...prev,
           title: newTitle,
           titleState: 'manual' as const,
+          updatedAt,
+          pendingSave: storeHistory && !prev.isTemporary,
         }))
       }
     },
@@ -523,6 +591,7 @@ export function useChatStorage({
       currentChat?.id,
       persistenceManager,
       setChats,
+      setChatCollection,
       setCurrentChat,
     ],
   )
