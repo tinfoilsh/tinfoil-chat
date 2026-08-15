@@ -22,6 +22,7 @@ import {
 } from '@/constants/project-colors'
 import { UI_EXPAND_PROJECT_DOCUMENTS } from '@/constants/storage-keys'
 import { toast } from '@/hooks/use-toast'
+import { isResolvedFavoriteChat } from '@/services/storage/pinned-chats'
 import type { Fact } from '@/types/memory'
 import type { Project } from '@/types/project'
 import {
@@ -73,7 +74,7 @@ import {
   BsFiletypeXml,
 } from 'react-icons/bs'
 import { GoSidebarCollapse, GoSidebarExpand } from 'react-icons/go'
-import { PiNotePencilLight } from 'react-icons/pi'
+import { PiNotePencilLight, PiPushPin } from 'react-icons/pi'
 import { CONSTANTS } from '../chat/constants'
 import { useProject } from './project-context'
 
@@ -87,6 +88,10 @@ interface ProjectChat {
   updatedAt?: string
   projectId?: string
   isBlankChat?: boolean
+  decryptionFailed?: boolean
+  dataCorrupted?: boolean
+  isTemporary?: boolean
+  pendingSave?: boolean
 }
 
 interface ProjectOption {
@@ -119,6 +124,10 @@ interface ProjectSidebarProps {
   onMoveChatToProject?: (chatId: string, projectId: string) => Promise<void>
   projects?: ProjectOption[]
   onSettingsClick?: () => void
+  favoriteChats?: ChatItemData[]
+  pinnedChatIds?: readonly string[]
+  onToggleFavorite?: (chat: ChatItemData) => void | Promise<void>
+  onOpenFavorite?: (chat: ChatItemData) => void | Promise<void>
   windowWidth: number
 }
 
@@ -289,6 +298,10 @@ export function ProjectSidebar({
   onMoveChatToProject,
   projects = [],
   onSettingsClick,
+  favoriteChats = [],
+  pinnedChatIds = [],
+  onToggleFavorite,
+  onOpenFavorite,
   windowWidth,
 }: ProjectSidebarProps) {
   const { isSignedIn } = useAuth()
@@ -681,11 +694,18 @@ export function ProjectSidebar({
         (c.createdAt instanceof Date
           ? c.createdAt.toISOString()
           : new Date(c.createdAt).toISOString()),
+      projectId: c.projectId,
+      decryptionFailed: c.decryptionFailed,
+      dataCorrupted: c.dataCorrupted,
+      isTemporary: c.isTemporary,
+      pendingSave: c.pendingSave,
     }))
     .sort(
       (a, b) =>
         new Date(b.updatedAt!).getTime() - new Date(a.updatedAt!).getTime(),
     )
+
+  const resolvedFavoriteChats = favoriteChats.filter(isResolvedFavoriteChat)
 
   const isMobile = windowWidth < MOBILE_BREAKPOINT
 
@@ -995,6 +1015,38 @@ export function ProjectSidebar({
               </span>
             </Link>
           </div>
+
+          <section className="relative z-10 flex-none border-y border-border-subtle">
+            <div className="flex items-center gap-2 px-4 py-3 text-sm text-content-secondary">
+              <PiPushPin className="h-4 w-4" aria-hidden="true" />
+              <h2 className="font-aeonik font-medium">Favorites</h2>
+            </div>
+            {resolvedFavoriteChats.length > 0 ? (
+              <ChatList
+                chats={resolvedFavoriteChats}
+                currentChatId={currentChatId}
+                isDarkMode={isDarkMode}
+                pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+                getChatHref={(chat) =>
+                  getChatPath(chat.id, { projectId: chat.projectId })
+                }
+                onSelectChat={(chatId) => {
+                  const favorite = resolvedFavoriteChats.find(
+                    (chat) => chat.id === chatId,
+                  )
+                  if (favorite) void onOpenFavorite?.(favorite)
+                }}
+                onUpdateTitle={updateChatTitle}
+                onDeleteChat={handleDeleteChat}
+                pinnedChatIds={pinnedChatIds}
+                onTogglePin={onToggleFavorite}
+              />
+            ) : (
+              <p className="px-4 pb-3 font-aeonik-fono text-xs text-content-muted">
+                Pin chats for quick access.
+              </p>
+            )}
+          </section>
 
           {/* Project Settings Dropdown */}
           <div className="relative z-10 flex-none border-y border-border-subtle">
@@ -1464,6 +1516,8 @@ export function ProjectSidebar({
               onDragEnd={() => clearDragState()}
               onMoveToProject={onMoveChatToProject}
               onRemoveFromProject={onRemoveChatFromProject}
+              pinnedChatIds={pinnedChatIds}
+              onTogglePin={onToggleFavorite}
             />
           </div>
         </div>

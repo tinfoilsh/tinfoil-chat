@@ -1,5 +1,8 @@
 import { CLOUD_SYNC } from '@/config'
-import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
+import {
+  PINNED_CHAT_IDS_CHANGED_EVENT,
+  PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
+} from '@/constants/settings-events'
 import {
   SYNC_PROFILE_CHANGED_AT,
   SYNC_PROFILE_DIRTY,
@@ -181,7 +184,14 @@ export function useProfileSync() {
             saveLocalProfileMetadata(userId, remoteBaseline)
             saveProfileBaseline(userId, remoteBaseline)
             baseline = remoteBaseline
-            clearLocalProfileChanged()
+            if (
+              remoteBaseline.pinnedChatIds === undefined &&
+              loadLocalSettings().pinnedChatIds !== undefined
+            ) {
+              markLocalProfileChanged()
+            } else {
+              clearLocalProfileChanged()
+            }
           }
         } else {
           const remoteStatus = await profileSync.getSyncStatus()
@@ -346,6 +356,7 @@ export function useProfileSync() {
       'languageChanged',
       'customSystemPromptChanged',
       'promptLibraryChanged',
+      PINNED_CHAT_IDS_CHANGED_EVENT,
       'reasoningSettingsChanged',
       'webSearchEnabledChanged',
       'webSearchAvailableChanged',

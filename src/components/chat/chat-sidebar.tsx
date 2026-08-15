@@ -14,6 +14,7 @@ import { toast } from '@/hooks/use-toast'
 import { useUpgradeToPro } from '@/hooks/use-upgrade-to-pro'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
+import { isResolvedFavoriteChat } from '@/services/storage/pinned-chats'
 import {
   CLOUD_SYNC_SETTING_CHANGED_EVENT,
   hasUserSetLocalOnlyPreference,
@@ -45,6 +46,7 @@ import {
   PiFolder,
   PiMicrophone,
   PiNotePencilLight,
+  PiPushPin,
   PiSparkle,
   PiSpinner,
 } from 'react-icons/pi'
@@ -131,9 +133,12 @@ type ChatSidebarProps = {
   onCreateProject?: () => Promise<void>
   onMoveChatToProject?: (chatId: string, projectId: string) => Promise<void>
   onRemoveChatFromProject?: (chatId: string) => Promise<void>
-  onConvertChatToCloud?: (chatId: string) => Promise<void>
+  onConvertChatToCloud?: (chatId: string) => Promise<boolean>
   onConvertChatToLocal?: (chatId: string) => Promise<void>
   onSettingsClick?: () => void
+  pinnedChatIds?: readonly string[]
+  onToggleFavorite?: (chat: ChatItemData) => void | Promise<void>
+  onOpenFavorite?: (chat: ChatItemData) => void | Promise<void>
   windowWidth: number
   /**
    * Progress of the post-unlock background chat decryption. When
@@ -204,6 +209,9 @@ export function ChatSidebar({
   onConvertChatToCloud,
   onConvertChatToLocal,
   onSettingsClick,
+  pinnedChatIds = [],
+  onToggleFavorite,
+  onOpenFavorite,
   windowWidth,
   chatDecryptionProgress,
 }: ChatSidebarProps) {
@@ -604,6 +612,15 @@ export function ChatSidebar({
         (chat as any).isLocalOnly && !chat.projectId && !chat.isBlankChat,
     )
   }, [chats, activeTab, isSignedIn, cloudSyncEnabled, localOnlyModeEnabled])
+
+  const favoriteChats = useMemo(() => {
+    const chatsById = new Map(chats.map((chat) => [chat.id, chat]))
+    return pinnedChatIds
+      .map((chatId) => chatsById.get(chatId))
+      .filter((chat): chat is Chat =>
+        Boolean(chat && isResolvedFavoriteChat(chat)),
+      )
+  }, [chats, pinnedChatIds])
 
   const paginatesCloudChats =
     isSignedIn &&
@@ -1219,6 +1236,41 @@ export function ChatSidebar({
               list are direct children of the scroll container (no section
               wrapper) so the sticky header pins to the scroll area itself
               and stays visible for the rest of the scroll. */}
+          {isSignedIn && cloudSyncEnabled && (
+            <section className="relative z-10 flex-none border-t border-border-subtle">
+              <div className="flex items-center gap-2 px-4 py-3 text-sm text-content-secondary">
+                <PiPushPin className="h-4 w-4" aria-hidden="true" />
+                <h2 className="font-aeonik font-medium">Favorites</h2>
+              </div>
+              {favoriteChats.length > 0 ? (
+                <ChatList
+                  chats={favoriteChats}
+                  currentChatId={currentChat?.id}
+                  isDarkMode={isDarkMode}
+                  pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+                  showSyncStatus={true}
+                  getChatHref={(chat) =>
+                    getChatPath(chat.id, { projectId: chat.projectId })
+                  }
+                  onSelectChat={(chatId) => {
+                    const favorite = favoriteChats.find(
+                      (chat) => chat.id === chatId,
+                    )
+                    if (favorite) void onOpenFavorite?.(favorite)
+                  }}
+                  onUpdateTitle={updateChatTitle}
+                  onDeleteChat={deleteChat}
+                  pinnedChatIds={pinnedChatIds}
+                  onTogglePin={onToggleFavorite}
+                />
+              ) : (
+                <p className="px-4 pb-3 font-aeonik-fono text-xs text-content-muted">
+                  Pin chats for quick access.
+                </p>
+              )}
+            </section>
+          )}
+
           {hasPinnedProjectsHeader && (
             <>
               <button
@@ -2159,6 +2211,8 @@ export function ChatSidebar({
                         }
                         onConvertToCloud={onConvertChatToCloud}
                         onConvertToLocal={onConvertChatToLocal}
+                        pinnedChatIds={pinnedChatIds}
+                        onTogglePin={onToggleFavorite}
                         emptyState={
                           isSearchActive ? (
                             <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">

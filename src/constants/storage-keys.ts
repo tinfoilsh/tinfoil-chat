@@ -115,6 +115,7 @@ export const USER_PREFS_CUSTOM_PROMPT_PRESETS =
   'tinfoil-user-prefs-custom-prompt-presets'
 export const USER_PREFS_FAVORITE_PROMPT_PRESETS =
   'tinfoil-user-prefs-favorite-prompt-presets'
+export const USER_PREFS_PINNED_CHAT_IDS = 'tinfoil-user-prefs-pinned-chat-ids'
 export const USER_PREFS_NATIVE_APP_DISMISSED =
   'tinfoil-user-prefs-native-app-dismissed'
 

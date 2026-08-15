@@ -165,6 +165,7 @@ describe('isProfilePopulated', () => {
     expect(isProfilePopulated({ nickname: 'x' })).toBe(true)
     expect(isProfilePopulated({ traits: ['a'] })).toBe(true)
     expect(isProfilePopulated({ customSystemPrompt: 'hi' })).toBe(true)
+    expect(isProfilePopulated({ pinnedChatIds: ['chat-a'] })).toBe(true)
   })
 
   it('is false for empty or default-only profiles', () => {
@@ -213,6 +214,26 @@ describe('changedProfileFields', () => {
 })
 
 describe('mergeProfilesThreeWay', () => {
+  it('preserves local pins when an older remote omits the field', () => {
+    const result = mergeProfilesThreeWay({
+      baseline: { pinnedChatIds: ['chat-a'] },
+      local: { pinnedChatIds: ['chat-a'] },
+      remote: { nickname: 'Remote' },
+    })
+
+    expect(result.merged.pinnedChatIds).toEqual(['chat-a'])
+  })
+
+  it('adopts an explicit remote clear of pins', () => {
+    const result = mergeProfilesThreeWay({
+      baseline: { pinnedChatIds: ['chat-a'] },
+      local: { pinnedChatIds: ['chat-a'] },
+      remote: { pinnedChatIds: [] },
+    })
+
+    expect(result.merged.pinnedChatIds).toEqual([])
+  })
+
   it('adopts populated remote fields when local stayed empty', () => {
     const result = mergeProfilesThreeWay({
       baseline: { nickname: '', customSystemPrompt: '' },

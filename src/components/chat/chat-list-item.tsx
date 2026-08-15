@@ -1,6 +1,7 @@
 'use client'
 
 import { DEFAULT_CHAT_TITLE } from '@/constants/chat'
+import { canRequestChatPin } from '@/services/storage/pinned-chats'
 import { isPlainPrimaryClick } from '@/utils/navigation'
 import {
   CheckIcon,
@@ -17,6 +18,7 @@ import Link from 'next/link'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CiFloppyDisk } from 'react-icons/ci'
+import { PiPushPin, PiPushPinFill } from 'react-icons/pi'
 import { FaLock } from '../icons/lazy-icons'
 import { RedactedText } from '../ui/redacted-text'
 import { cn } from '../ui/utils'
@@ -38,7 +40,13 @@ export interface ChatItemData {
   decryptionFailed?: boolean
   dataCorrupted?: boolean
   isLocalOnly?: boolean
+  isTemporary?: boolean
   pendingSave?: boolean
+  projectId?: string
+}
+
+export function canPinChat(chat: ChatItemData): boolean {
+  return canRequestChatPin(chat)
 }
 
 /**
@@ -106,6 +114,8 @@ interface ChatListItemProps {
   onConvertToCloud?: () => void
   onConvertToLocal?: () => void
   onRemoveFromProject?: () => void
+  isPinned?: boolean
+  onTogglePin?: () => void | Promise<void>
 }
 
 function ChatSelectionControl({
@@ -182,6 +192,8 @@ export function ChatListItem({
   onConvertToCloud,
   onConvertToLocal,
   onRemoveFromProject,
+  isPinned = false,
+  onTogglePin,
 }: ChatListItemProps) {
   const [displayTitle, setDisplayTitle] = useState(chat.title)
   const [isAnimating, setIsAnimating] = useState(false)
@@ -464,6 +476,13 @@ export function ChatListItem({
                   />
                 )
               )}
+              {isPinned && !isStreaming && (
+                <PiPushPinFill
+                  className="h-3.5 w-3.5 flex-shrink-0 text-content-muted"
+                  title="Pinned to Favorites"
+                  aria-label="Pinned to Favorites"
+                />
+              )}
             </span>
             {(chat.decryptionFailed ||
               (messageCount > 0 && timestamp) ||
@@ -538,6 +557,34 @@ export function ChatListItem({
       {!isEditing && (
         <div className="flex flex-shrink-0 items-center gap-1.5">
           <div className="pointer-events-none hidden items-center opacity-0 transition-opacity md:flex md:group-focus-within:pointer-events-auto md:group-focus-within:opacity-100 md:group-hover:pointer-events-auto md:group-hover:opacity-100">
+            {canPinChat(chat) && onTogglePin && (
+              <button
+                type="button"
+                className={cn(
+                  'mr-1 rounded p-1 transition-colors',
+                  isPinned
+                    ? 'text-content-primary'
+                    : 'text-content-muted hover:text-content-secondary',
+                  isDarkMode
+                    ? 'hover:bg-surface-chat hover:text-white'
+                    : 'hover:bg-surface-sidebar',
+                )}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  void onTogglePin()
+                }}
+                aria-label={
+                  isPinned ? 'Remove from Favorites' : 'Pin to Favorites'
+                }
+                title={isPinned ? 'Remove from Favorites' : 'Pin to Favorites'}
+              >
+                {isPinned ? (
+                  <PiPushPinFill className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <PiPushPin className="h-4 w-4" aria-hidden="true" />
+                )}
+              </button>
+            )}
             {hasRealTitle && (
               <button
                 type="button"
@@ -651,6 +698,40 @@ export function ChatListItem({
                               aria-hidden="true"
                             />
                             Rename
+                          </button>
+                        )}
+
+                        {canPinChat(chat) && onTogglePin && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className={cn(
+                              'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
+                              isDarkMode
+                                ? 'text-content-secondary hover:bg-surface-sidebar'
+                                : 'text-content-secondary hover:bg-gray-100',
+                            )}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setIsMobileMenuOpen(false)
+                              setMobileMenuView('main')
+                              void onTogglePin()
+                            }}
+                          >
+                            {isPinned ? (
+                              <PiPushPinFill
+                                className="h-4 w-4"
+                                aria-hidden="true"
+                              />
+                            ) : (
+                              <PiPushPin
+                                className="h-4 w-4"
+                                aria-hidden="true"
+                              />
+                            )}
+                            {isPinned
+                              ? 'Remove from Favorites'
+                              : 'Pin to Favorites'}
                           </button>
                         )}
 

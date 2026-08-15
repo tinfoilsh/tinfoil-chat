@@ -19,6 +19,8 @@ function renderChatListItem({
   pixelateSidebarChatTitles = true,
   enableTitleAnimation = false,
   isStreaming = false,
+  isPinned = false,
+  onTogglePin,
 }: {
   href?: string
   onSelect?: () => void
@@ -27,6 +29,8 @@ function renderChatListItem({
   pixelateSidebarChatTitles?: boolean
   enableTitleAnimation?: boolean
   isStreaming?: boolean
+  isPinned?: boolean
+  onTogglePin?: () => void
 } = {}) {
   const renderItem = (item: ChatItemData, streaming: boolean) => (
     <ChatListItem
@@ -39,6 +43,8 @@ function renderChatListItem({
       pixelateSidebarChatTitles={pixelateSidebarChatTitles}
       enableTitleAnimation={enableTitleAnimation}
       isStreaming={streaming}
+      isPinned={isPinned}
+      onTogglePin={onTogglePin}
       onSelect={onSelect}
       onStartEdit={vi.fn()}
       onTitleChange={vi.fn()}
@@ -80,6 +86,49 @@ describe('ChatListItem navigation semantics', () => {
     fireEvent.click(screen.getByRole('button', { name: /Trip planning/ }))
     expect(onSelect).toHaveBeenCalledOnce()
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+})
+
+describe('ChatListItem favorites', () => {
+  it('shows pinned state and removes a favorite from the desktop action', () => {
+    const onTogglePin = vi.fn()
+    renderChatListItem({ isPinned: true, onTogglePin })
+
+    expect(screen.getByLabelText('Pinned to Favorites')).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Remove from Favorites' }),
+    )
+    expect(onTogglePin).toHaveBeenCalledOnce()
+  })
+
+  it('does not offer pinning for temporary or pending chats', () => {
+    renderChatListItem({
+      chat: { ...savedChat, isTemporary: true },
+      onTogglePin: vi.fn(),
+    })
+    expect(
+      screen.queryByRole('button', { name: 'Pin to Favorites' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('does not offer pinning for corrupted chats', () => {
+    renderChatListItem({
+      chat: { ...savedChat, dataCorrupted: true },
+      onTogglePin: vi.fn(),
+    })
+    expect(
+      screen.queryByRole('button', { name: 'Pin to Favorites' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('offers the favorite action in the mobile menu', () => {
+    const onTogglePin = vi.fn()
+    renderChatListItem({ onTogglePin })
+
+    fireEvent.click(screen.getByRole('button', { name: 'More chat options' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Pin to Favorites' }))
+
+    expect(onTogglePin).toHaveBeenCalledOnce()
   })
 })
 

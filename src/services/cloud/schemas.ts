@@ -143,6 +143,7 @@ export const ProfileDataSchema = z
       )
       .optional(),
     favoritePromptPresetIds: z.array(z.string()).optional(),
+    pinnedChatIds: z.array(z.string()).optional().catch(undefined),
     reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
     thinkingEnabled: z.boolean().optional(),
     webSearchEnabled: z.boolean().optional(),

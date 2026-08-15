@@ -3218,11 +3218,9 @@ export class IndexedDBStorage {
     userId: string,
     options: {
       /**
-       * Queue the delete intent even for a never-synced chat. Used
-       * when an upload for this chat is in flight: the create push
-       * may commit after the local row is gone, so the remote delete
-       * must still run (after the upload settles) or the chat would
-       * resurrect on the next event replay.
+       * Queue the delete intent even when the local row cannot prove
+       * remote durability. Used for in-flight uploads and memory-only
+       * remote chats so deletion still runs after any upload settles.
        */
       forceQueue?: boolean
     } = {},
@@ -3252,10 +3250,11 @@ export class IndexedDBStorage {
             id,
           )
           if (
-            chat &&
-            !chat.isLocalOnly &&
-            chat.syncUserId === userId &&
-            (options.forceQueue === true || chatKnownToServer(chat))
+            (chat === undefined && options.forceQueue === true) ||
+            (chat !== undefined &&
+              !chat.isLocalOnly &&
+              chat.syncUserId === userId &&
+              (options.forceQueue === true || chatKnownToServer(chat)))
           ) {
             outbox.put(syncDeleteOutboxEntry(id, userId, idempotencyKey))
             queued = true

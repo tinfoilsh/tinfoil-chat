@@ -20,6 +20,7 @@ export const PROFILE_MERGE_FIELDS = [
   'customSystemPrompt',
   'customPromptPresets',
   'favoritePromptPresetIds',
+  'pinnedChatIds',
   'reasoningEffort',
   'thinkingEnabled',
   'webSearchEnabled',
@@ -34,7 +35,7 @@ export const PROFILE_MERGE_FIELDS = [
 // Older clients omit this field, while the setting itself has no unset state.
 const PRESERVE_LOCAL_WHEN_REMOTE_OMITS = new Set<
   (typeof PROFILE_MERGE_FIELDS)[number]
->(['pixelateSidebarChatTitlesEnabled'])
+>(['pixelateSidebarChatTitlesEnabled', 'pinnedChatIds'])
 
 // A blob's field clocks are trustworthy only when they were maintained
 // at the row's current server version. If a clock-unaware client wrote
@@ -94,7 +95,8 @@ export function isProfilePopulated(p: ProfileData | null | undefined): boolean {
     nonEmptyString(p.customSystemPrompt) ||
     nonEmptyArray(p.traits) ||
     nonEmptyArray(p.customPromptPresets) ||
-    nonEmptyArray(p.favoritePromptPresetIds)
+    nonEmptyArray(p.favoritePromptPresetIds) ||
+    nonEmptyArray(p.pinnedChatIds)
   )
 }
 

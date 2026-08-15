@@ -21,6 +21,10 @@ export interface UploadingFile {
   size: number
 }
 
+export interface EnterProjectModeOptions {
+  isCurrent?: () => boolean
+}
+
 export interface ProjectContextValue {
   activeProject: Project | null
   isProjectMode: boolean
@@ -33,6 +37,7 @@ export interface ProjectContextValue {
   enterProjectMode: (
     projectId: string,
     projectName?: string,
+    options?: EnterProjectModeOptions,
   ) => Promise<boolean>
   exitProjectMode: () => void
   createProject: (data: CreateProjectData) => Promise<Project>

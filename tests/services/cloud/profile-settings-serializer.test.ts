@@ -14,6 +14,7 @@ import {
   USER_PREFS_FAVORITE_PROMPT_PRESETS,
   USER_PREFS_NICKNAME,
   USER_PREFS_PERSONALIZATION_ENABLED,
+  USER_PREFS_PINNED_CHAT_IDS,
   USER_PREFS_PROFESSION,
   USER_PREFS_TRAITS,
 } from '@/constants/storage-keys'
@@ -45,6 +46,32 @@ describe('profile-settings-serializer', () => {
       customSystemPrompt: '',
       isUsingPersonalization: false,
     })
+  })
+
+  it('round-trips pins while preserving absent and explicit-clear semantics', () => {
+    expect(loadLocalSettings().pinnedChatIds).toBeUndefined()
+    expect(hasProfileChanged({}, { pinnedChatIds: [] })).toBe(true)
+
+    applySettingsToLocal({ pinnedChatIds: ['chat-b', 'chat-a', 'chat-b'] })
+    expect(loadLocalSettings().pinnedChatIds).toEqual(['chat-b', 'chat-a'])
+
+    applySettingsToLocal({ nickname: 'Alice' })
+    expect(loadLocalSettings().pinnedChatIds).toEqual(['chat-b', 'chat-a'])
+
+    applySettingsToLocal({ pinnedChatIds: 'invalid' } as never)
+    expect(loadLocalSettings().pinnedChatIds).toEqual(['chat-b', 'chat-a'])
+
+    applySettingsToLocal({ pinnedChatIds: [] })
+    expect(localStorage.getItem(USER_PREFS_PINNED_CHAT_IDS)).toBe('[]')
+    expect(loadLocalSettings().pinnedChatIds).toEqual([])
+  })
+
+  it('does not serialize malformed local pin storage as an explicit clear', () => {
+    localStorage.setItem(USER_PREFS_PINNED_CHAT_IDS, '{broken')
+    expect(loadLocalSettings().pinnedChatIds).toBeUndefined()
+
+    localStorage.setItem(USER_PREFS_PINNED_CHAT_IDS, '[]')
+    expect(loadLocalSettings().pinnedChatIds).toEqual([])
   })
 
   it('keeps unspecified personalization fields intact on partial remote updates', () => {
