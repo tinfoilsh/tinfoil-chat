@@ -10,7 +10,14 @@ import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { samePendingRecoveryEnvelope } from '@/types/chat-recovery'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { BLANK_LOCAL_QUEUE_ID, isBlankQueueId } from '../message-queue-identity'
 import type { Chat, PendingRecoveryEnvelope } from '../types'
 import {
@@ -137,17 +144,26 @@ export function useChatStorage({
   const titleSaveGenerationRef = useRef(new Map<string, number>())
   const accountKey = `${!!isSignedIn}:${userId ?? ''}`
   const previousAccountKeyRef = useRef(accountKey)
+  const committedAccountKeyRef = useRef(accountKey)
   const accountGenerationRef = useRef(0)
-  if (previousAccountKeyRef.current !== accountKey) {
-    previousAccountKeyRef.current = accountKey
-    accountGenerationRef.current += 1
-  }
+  useLayoutEffect(() => {
+    if (previousAccountKeyRef.current !== accountKey) {
+      previousAccountKeyRef.current = accountKey
+      accountGenerationRef.current += 1
+    }
+    committedAccountKeyRef.current = accountKey
+  }, [accountKey])
   const initialLoadAccountKeyRef = useRef(accountKey)
 
   // Create persistence manager
   const persistenceManager = useMemo(
-    () => new ChatPersistenceManager(!!isSignedIn),
-    [isSignedIn],
+    () =>
+      new ChatPersistenceManager(
+        !!isSignedIn,
+        accountKey,
+        () => committedAccountKeyRef.current,
+      ),
+    [isSignedIn, accountKey],
   )
 
   // Update persistence manager when auth changes
@@ -156,7 +172,8 @@ export function useChatStorage({
   }, [isSignedIn, persistenceManager])
 
   // Cleanup on unmount
-  useEffect(() => {
+  useLayoutEffect(() => {
+    persistenceManager.activate()
     return () => {
       persistenceManager.cleanup()
     }

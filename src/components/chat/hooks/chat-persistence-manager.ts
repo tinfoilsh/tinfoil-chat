@@ -16,9 +16,18 @@ import { saveChat, updateChatMessages } from './chat-operations'
 export class ChatPersistenceManager {
   private saveQueues = new Map<string, Promise<Chat>>()
   private isSignedIn: boolean
+  private isDisposed = false
 
-  constructor(isSignedIn: boolean) {
+  constructor(
+    isSignedIn: boolean,
+    private readonly accountScope: string,
+    private readonly getAccountScope: () => string,
+  ) {
     this.isSignedIn = isSignedIn
+  }
+
+  activate() {
+    this.isDisposed = false
   }
 
   setSignedIn(isSignedIn: boolean) {
@@ -48,6 +57,9 @@ export class ChatPersistenceManager {
     const savePromise = existingQueue
       .catch(() => undefined)
       .then(async () => {
+        if (this.isDisposed || this.accountScope !== this.getAccountScope()) {
+          return chat
+        }
         try {
           const savedChat = await saveChat(chat, this.isSignedIn, skipCloudSync)
           return savedChat
@@ -77,6 +89,7 @@ export class ChatPersistenceManager {
    * Cleanup on unmount
    */
   cleanup() {
+    this.isDisposed = true
     this.saveQueues.clear()
   }
 }
