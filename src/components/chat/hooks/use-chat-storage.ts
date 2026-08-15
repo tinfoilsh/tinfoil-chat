@@ -129,13 +129,19 @@ export function useChatStorage({
     })
   const currentChatRef = useRef(currentChat)
   currentChatRef.current = currentChat
+  const chatsRef = useRef(chats)
+  chatsRef.current = chats
   const selectionRequestRef = useRef(0)
   const selectionFallbackRef = useRef<Chat | null>(null)
   const titleSaveSequenceRef = useRef(0)
   const titleSaveGenerationRef = useRef(new Map<string, number>())
   const accountKey = `${!!isSignedIn}:${userId ?? ''}`
-  const accountKeyRef = useRef(accountKey)
-  accountKeyRef.current = accountKey
+  const previousAccountKeyRef = useRef(accountKey)
+  const accountGenerationRef = useRef(0)
+  if (previousAccountKeyRef.current !== accountKey) {
+    previousAccountKeyRef.current = accountKey
+    accountGenerationRef.current += 1
+  }
   const initialLoadAccountKeyRef = useRef(accountKey)
 
   // Create persistence manager
@@ -163,7 +169,7 @@ export function useChatStorage({
 
       recoveryIds?.forEach((id) => pendingRecoveryReloadIdsRef.current.add(id))
       const reloadGeneration = ++reloadGenerationRef.current
-      const reloadAccountKey = accountKeyRef.current
+      const reloadAccountGeneration = accountGenerationRef.current
       try {
         const current = currentChatRef.current
         const needsFullReload =
@@ -175,7 +181,7 @@ export function useChatStorage({
         )
         if (
           reloadGeneration !== reloadGenerationRef.current ||
-          reloadAccountKey !== accountKeyRef.current
+          reloadAccountGeneration !== accountGenerationRef.current
         ) {
           return
         }
@@ -198,7 +204,7 @@ export function useChatStorage({
           : null
         if (
           reloadGeneration !== reloadGenerationRef.current ||
-          reloadAccountKey !== accountKeyRef.current
+          reloadAccountGeneration !== accountGenerationRef.current
         ) {
           return
         }
@@ -208,7 +214,7 @@ export function useChatStorage({
         setChatCollection((previous) => {
           if (
             reloadGeneration !== reloadGenerationRef.current ||
-            reloadAccountKey !== accountKeyRef.current
+            reloadAccountGeneration !== accountGenerationRef.current
           ) {
             return previous
           }
@@ -462,6 +468,7 @@ export function useChatStorage({
   useEffect(() => {
     let mounted = true
     const initialAccountKey = accountKey
+    const initialAccountGeneration = accountGenerationRef.current
     const accountChanged =
       initialLoadAccountKeyRef.current !== initialAccountKey
     initialLoadAccountKeyRef.current = initialAccountKey
@@ -475,7 +482,12 @@ export function useChatStorage({
           storeHistory && !!isSignedIn,
         )
 
-        if (!mounted || accountKeyRef.current !== initialAccountKey) return
+        if (
+          !mounted ||
+          accountGenerationRef.current !== initialAccountGeneration
+        ) {
+          return
+        }
 
         // Always have blank chats for both modes
         const cloudBlank = createBlankChat(false)
@@ -589,17 +601,18 @@ export function useChatStorage({
   const updateChatTitle = useCallback(
     (chatId: string, newTitle: string) => {
       const updatedAt = new Date().toISOString()
+      const current = currentChatRef.current
       const titleSnapshot =
-        currentChat?.id === chatId
-          ? currentChat
-          : chats.find((chat) => chat.id === chatId)
+        current.id === chatId
+          ? current
+          : chatsRef.current.find((chat) => chat.id === chatId)
       const saveGeneration = storeHistory
         ? ++titleSaveSequenceRef.current
         : null
       if (saveGeneration !== null) {
         titleSaveGenerationRef.current.set(chatId, saveGeneration)
       }
-      const titleAccountKey = accountKeyRef.current
+      const titleAccountGeneration = accountGenerationRef.current
       const clearTitleGenerationIfOwned = () => {
         if (
           saveGeneration === null ||
@@ -611,13 +624,15 @@ export function useChatStorage({
         return true
       }
       const finishSave = (savedUpdatedAt?: string) => {
-        if (accountKeyRef.current !== titleAccountKey) {
+        if (accountGenerationRef.current !== titleAccountGeneration) {
           clearTitleGenerationIfOwned()
           return
         }
         if (!clearTitleGenerationIfOwned()) return
         setChatCollection((previous) => {
-          if (accountKeyRef.current !== titleAccountKey) return previous
+          if (accountGenerationRef.current !== titleAccountGeneration) {
+            return previous
+          }
           const finish = (chat: Chat) =>
             chat.id === chatId && chat.updatedAt === updatedAt
               ? {
@@ -650,14 +665,18 @@ export function useChatStorage({
             .save(chatToUpdate)
             .then((saved) => finishSave(saved.updatedAt))
             .catch((error) => {
+              const clearedTitleGeneration = clearTitleGenerationIfOwned()
               if (
-                accountKeyRef.current === titleAccountKey &&
-                clearTitleGenerationIfOwned()
+                accountGenerationRef.current === titleAccountGeneration &&
+                clearedTitleGeneration
               ) {
                 if (titleSnapshot) {
                   setChatCollection((previous) => {
-                    if (accountKeyRef.current !== titleAccountKey)
+                    if (
+                      accountGenerationRef.current !== titleAccountGeneration
+                    ) {
                       return previous
+                    }
                     const rollback = (chat: Chat) =>
                       chat.id === chatId && chat.updatedAt === updatedAt
                         ? {
@@ -674,8 +693,6 @@ export function useChatStorage({
                   })
                 }
                 void reloadChats()
-              } else {
-                clearTitleGenerationIfOwned()
               }
               logError('Failed to save chat title update', error, {
                 component: 'useChatStorage',
@@ -689,7 +706,7 @@ export function useChatStorage({
         return updatedChats
       })
 
-      if (currentChat?.id === chatId) {
+      if (current.id === chatId) {
         setCurrentChat((prev) => ({
           ...prev,
           title: newTitle,
@@ -700,8 +717,6 @@ export function useChatStorage({
     },
     [
       storeHistory,
-      chats,
-      currentChat,
       persistenceManager,
       reloadChats,
       setChats,
