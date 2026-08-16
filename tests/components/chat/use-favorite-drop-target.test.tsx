@@ -34,7 +34,6 @@ describe('useFavoriteDropTarget', () => {
     const event = dragEvent('chat-a')
 
     act(() => result.current.favoriteDropTargetProps.onDragOver(event as never))
-    act(() => result.current.favoriteDropTargetProps.onDragOver(event as never))
     expect(event.dataTransfer.dropEffect).toBe('copy')
     expect(result.current.isFavoriteDropTarget).toBe(true)
     expect(onActivate).toHaveBeenCalledOnce()
@@ -73,6 +72,28 @@ describe('useFavoriteDropTarget', () => {
 
     expect(onToggleFavorite).not.toHaveBeenCalled()
     expect(clearDragState).toHaveBeenCalledOnce()
+  })
+
+  it('activates once while a drag remains over the target', () => {
+    const onActivate = vi.fn()
+    const { result } = renderHook(() =>
+      useFavoriteDropTarget({
+        chats: [{ id: 'chat-a', title: 'Chat A', createdAt: new Date() }],
+        pinnedChatIds: [],
+        draggingChatId: 'chat-a',
+        onToggleFavorite: vi.fn(),
+        onActivate,
+        clearDragState: vi.fn(),
+      }),
+    )
+    const event = dragEvent('chat-a')
+
+    act(() =>
+      result.current.favoriteDropTargetProps.onDragEnter(event as never),
+    )
+    act(() => result.current.favoriteDropTargetProps.onDragOver(event as never))
+
+    expect(onActivate).toHaveBeenCalledOnce()
   })
 
   it('clears its highlight when dragging ends elsewhere', () => {
