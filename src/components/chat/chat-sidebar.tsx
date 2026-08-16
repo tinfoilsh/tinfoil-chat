@@ -54,6 +54,7 @@ import { ChatList, type ChatItemData } from './chat-list'
 import { formatRelativeTime } from './chat-list-utils'
 import { CONSTANTS } from './constants'
 import { useDrag } from './drag-context'
+import { useFavoriteDropTarget } from './use-favorite-drop-target'
 
 import { useProject } from '@/components/project/project-context'
 import {
@@ -623,6 +624,15 @@ export function ChatSidebar({
       )
   }, [chats, pinnedChatIds])
 
+  const { isFavoriteDropTarget, favoriteDropTargetProps } =
+    useFavoriteDropTarget({
+      chats,
+      pinnedChatIds,
+      draggingChatId,
+      onToggleFavorite,
+      clearDragState,
+    })
+
   const paginatesCloudChats =
     isSignedIn &&
     cloudSyncEnabled &&
@@ -891,7 +901,7 @@ export function ChatSidebar({
               </div>
 
               {isSignedIn && cloudSyncEnabled && (
-                <div className="group relative">
+                <div className="group relative" {...favoriteDropTargetProps}>
                   <button
                     onClick={() => {
                       setIsOpen(true)
@@ -904,6 +914,10 @@ export function ChatSidebar({
                     className={cn(
                       'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
                       'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                      isFavoriteDropTarget &&
+                        (isDarkMode
+                          ? 'border border-white/30 bg-white/10'
+                          : 'border border-gray-400 bg-gray-200/30'),
                     )}
                     aria-label="Favorites"
                   >
@@ -1265,7 +1279,12 @@ export function ChatSidebar({
           {isSignedIn && cloudSyncEnabled && (
             <section
               ref={favoritesSectionRef}
-              className="relative z-10 flex-none border-t border-border-subtle"
+              {...favoriteDropTargetProps}
+              className={cn(
+                'relative z-10 flex-none border-t border-border-subtle transition-colors',
+                isFavoriteDropTarget &&
+                  (isDarkMode ? 'bg-white/10' : 'bg-gray-200/50'),
+              )}
             >
               <div className="flex items-center gap-2 px-4 py-3 text-sm text-content-secondary">
                 <PiPushPin className="h-4 w-4" aria-hidden="true" />

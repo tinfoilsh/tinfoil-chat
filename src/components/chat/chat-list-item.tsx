@@ -324,7 +324,7 @@ export function ChatListItem({
       document.activeElement.blur()
     }
     setIsDragging(true)
-    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.effectAllowed = 'copyMove'
     e.dataTransfer.setData('text/plain', chat.id)
     e.dataTransfer.setData('application/x-chat-id', chat.id)
     onDragStart?.(chat.id)

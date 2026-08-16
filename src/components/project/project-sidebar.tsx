@@ -6,6 +6,7 @@ import { getDocumentTextContent } from '@/components/chat/document-content'
 import { useDocumentUploader } from '@/components/chat/document-uploader'
 import { useDrag } from '@/components/chat/drag-context'
 import { TypingAnimation } from '@/components/chat/typing-animation'
+import { useFavoriteDropTarget } from '@/components/chat/use-favorite-drop-target'
 import { PiSpinnerThin } from '@/components/icons/lazy-icons'
 import { Link } from '@/components/link'
 import { Logo } from '@/components/logo'
@@ -307,7 +308,7 @@ export function ProjectSidebar({
   windowWidth,
 }: ProjectSidebarProps) {
   const { isSignedIn } = useAuth()
-  const { setDraggingChat, clearDragState } = useDrag()
+  const { draggingChatId, setDraggingChat, clearDragState } = useDrag()
   const {
     projectDocuments,
     uploadDocument,
@@ -710,6 +711,16 @@ export function ProjectSidebar({
 
   const resolvedFavoriteChats = favoriteChats.filter(isResolvedFavoriteChat)
 
+  const favoriteDropChats = [...projectChats, ...resolvedFavoriteChats]
+  const { isFavoriteDropTarget, favoriteDropTargetProps } =
+    useFavoriteDropTarget({
+      chats: favoriteDropChats,
+      pinnedChatIds,
+      draggingChatId,
+      onToggleFavorite,
+      clearDragState,
+    })
+
   const isMobile = windowWidth < MOBILE_BREAKPOINT
 
   const sidebarTintColor = getProjectColor(project?.color)
@@ -793,7 +804,7 @@ export function ProjectSidebar({
               </div>
 
               {isSignedIn && cloudSyncEnabled && (
-                <div className="group relative">
+                <div className="group relative" {...favoriteDropTargetProps}>
                   <button
                     onClick={() => {
                       setIsOpen(true)
@@ -806,6 +817,10 @@ export function ProjectSidebar({
                     className={cn(
                       'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
                       'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                      isFavoriteDropTarget &&
+                        (isDarkMode
+                          ? 'border border-white/30 bg-white/10'
+                          : 'border border-gray-400 bg-gray-200/30'),
                     )}
                     aria-label="Favorites"
                   >
@@ -1047,7 +1062,12 @@ export function ProjectSidebar({
           {isSignedIn && cloudSyncEnabled && (
             <section
               ref={favoritesSectionRef}
-              className="relative z-10 flex-none border-y border-border-subtle"
+              {...favoriteDropTargetProps}
+              className={cn(
+                'relative z-10 flex-none border-y border-border-subtle transition-colors',
+                isFavoriteDropTarget &&
+                  (isDarkMode ? 'bg-white/10' : 'bg-gray-200/50'),
+              )}
             >
               <div className="flex items-center gap-2 px-4 py-3 text-sm text-content-secondary">
                 <PiPushPin className="h-4 w-4" aria-hidden="true" />
