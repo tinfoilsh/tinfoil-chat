@@ -39,7 +39,7 @@ import {
 import { AnimatePresence, motion } from 'framer-motion'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { FaLock } from 'react-icons/fa6'
-import { GoSidebarCollapse, GoSidebarExpand, GoSync } from 'react-icons/go'
+import { GoSidebarCollapse, GoSidebarExpand } from 'react-icons/go'
 import { IoChatbubblesOutline } from 'react-icons/io5'
 import {
   PiFolder,
@@ -52,6 +52,7 @@ import { ChatList, type ChatItemData } from './chat-list'
 import { formatRelativeTime } from './chat-list-utils'
 import { CONSTANTS } from './constants'
 import { useDrag } from './drag-context'
+import { SidebarSyncButton } from './sidebar-sync-button'
 
 import { useProject } from '@/components/project/project-context'
 import {
@@ -122,7 +123,7 @@ type ChatSidebarProps = {
   initialChatPageToken?: string
   isInitialChatPageReady?: boolean
   /** Triggers a deep (all-pages) cloud sync from the sidebar "Sync" button. */
-  onManualSync?: () => Promise<void>
+  onManualSync?: () => Promise<boolean>
   /** True while a cloud sync is in progress; drives the Sync button spinner. */
   isSyncing?: boolean
   /** Whether the most recent cloud sync attempt failed. */
@@ -325,11 +326,6 @@ export function ChatSidebar({
     syncHealth.gate.kind !== 'ok' ||
     Object.keys(syncHealth.failedChats).length > 0
   const syncFailed = lastSyncFailed || syncHealthFailed
-  const syncStatusLabel = isSyncing
-    ? 'Syncing'
-    : syncFailed
-      ? 'Sync failed'
-      : 'Sync healthy'
 
   const {
     projects,
@@ -1198,40 +1194,12 @@ export function ChatSidebar({
           )}
 
           {isSignedIn && cloudSyncEnabled && onManualSync && (
-            <div className="relative z-10 flex-none px-2 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  if (isSyncing) return
-                  void onManualSync()
-                }}
-                disabled={isSyncing}
-                aria-label={`Sync chats. ${syncStatusLabel}`}
-                className={cn(
-                  'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors disabled:cursor-default disabled:opacity-60',
-                  isDarkMode
-                    ? 'border-border-strong bg-surface-chat text-content-primary hover:bg-surface-chat/80'
-                    : 'border-border-subtle bg-white text-content-primary hover:bg-gray-50',
-                )}
-              >
-                <span className="flex items-center gap-2">
-                  {isSyncing ? (
-                    <PiSpinner className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <GoSync className="h-4 w-4" />
-                  )}
-                  <span className="font-aeonik font-medium">Sync</span>
-                </span>
-                <span
-                  className={cn(
-                    'h-2 w-2 rounded-full',
-                    syncFailed ? 'bg-orange-500' : 'bg-green-500',
-                  )}
-                  title={syncStatusLabel}
-                  aria-hidden="true"
-                />
-              </button>
-            </div>
+            <SidebarSyncButton
+              isDarkMode={isDarkMode}
+              isSyncing={isSyncing}
+              syncFailed={syncFailed}
+              onSync={onManualSync}
+            />
           )}
 
           {/* New Chat button */}
