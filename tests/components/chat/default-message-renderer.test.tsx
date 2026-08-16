@@ -51,6 +51,9 @@ describe('DefaultMessageRenderer metadata', () => {
     expect(screen.queryByText('Current Model')).not.toBeInTheDocument()
     expect(
       screen.getByText('Retired Model').parentElement?.parentElement,
+    ).toHaveClass('flex-col', 'md:flex-row-reverse')
+    expect(
+      screen.getByText('Retired Model').parentElement?.parentElement,
     ).toContainElement(screen.getByRole('button', { name: 'Copy message' }))
   })
 
