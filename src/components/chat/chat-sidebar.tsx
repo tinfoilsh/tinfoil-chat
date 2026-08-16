@@ -9,7 +9,7 @@ import {
   USER_PREFS_NATIVE_APP_DISMISSED,
 } from '@/constants/storage-keys'
 import { useProjects } from '@/hooks/use-projects'
-import { useSyncHealthAttention } from '@/hooks/use-sync-health'
+import { useSyncHealth, useSyncHealthAttention } from '@/hooks/use-sync-health'
 import { toast } from '@/hooks/use-toast'
 import { useUpgradeToPro } from '@/hooks/use-upgrade-to-pro'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -125,8 +125,10 @@ type ChatSidebarProps = {
   onManualSync?: () => Promise<void>
   /** True while a cloud sync is in progress; drives the Sync button spinner. */
   isSyncing?: boolean
-  /** Time of the most recent successful cloud sync. */
+  /** Time the most recent cloud sync attempt completed. */
   lastSyncTime?: number | null
+  /** Whether the most recent cloud sync attempt failed. */
+  lastSyncFailed?: boolean
   isProjectMode?: boolean
   activeProjectName?: string
   onEnterProject?: (projectId: string, projectName?: string) => Promise<void>
@@ -198,6 +200,7 @@ export function ChatSidebar({
   onManualSync,
   isSyncing = false,
   lastSyncTime = null,
+  lastSyncFailed = false,
   isProjectMode,
   activeProjectName,
   onEnterProject,
@@ -211,6 +214,7 @@ export function ChatSidebar({
   chatDecryptionProgress,
 }: ChatSidebarProps) {
   const syncNeedsAttention = useSyncHealthAttention()
+  const syncHealth = useSyncHealth()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [isProjectsExpanded, setIsProjectsExpanded] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -320,11 +324,17 @@ export function ChatSidebar({
     currentChat?.isBlankChat &&
     !currentChat.isTemporary &&
     Boolean(currentChat.isLocalOnly) === (activeTab === 'local')
+  const syncHealthFailed =
+    syncHealth.gate.kind !== 'ok' ||
+    Object.keys(syncHealth.failedChats).length > 0
+  const syncFailed = lastSyncFailed || syncHealthFailed
   const syncStatusLabel = isSyncing
     ? 'Syncing...'
     : lastSyncTime
-      ? `Last synced ${formatRelativeTime(new Date(lastSyncTime))}`
-      : 'Not synced yet'
+      ? `${syncFailed ? 'Failed' : 'Synced'} ${formatRelativeTime(new Date(lastSyncTime))}`
+      : syncFailed
+        ? 'Sync failed'
+        : 'Not synced yet'
 
   const {
     projects,
@@ -1217,7 +1227,27 @@ export function ChatSidebar({
                   )}
                   <span className="font-aeonik font-medium">Sync</span>
                 </span>
-                <span className="text-xs text-content-muted">
+                <span
+                  className={cn(
+                    'flex items-center gap-1.5 text-xs',
+                    isSyncing
+                      ? 'text-content-muted'
+                      : syncFailed
+                        ? 'text-orange-500'
+                        : lastSyncTime
+                          ? 'text-green-600 dark:text-green-400'
+                          : 'text-content-muted',
+                  )}
+                >
+                  {!isSyncing && (lastSyncTime || syncFailed) && (
+                    <span
+                      className={cn(
+                        'h-1.5 w-1.5 rounded-full',
+                        syncFailed ? 'bg-orange-500' : 'bg-green-500',
+                      )}
+                      aria-hidden="true"
+                    />
+                  )}
                   {syncStatusLabel}
                 </span>
               </button>
