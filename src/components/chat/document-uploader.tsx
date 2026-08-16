@@ -206,8 +206,8 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
       if (isImageFile(file)) {
         try {
           const scaled = await scaleAndEncodeImage(file, {
-            maxWidth: 768,
-            maxHeight: 768,
+            maxWidth: CONSTANTS.MAX_IMAGE_DIMENSION_PX,
+            maxHeight: CONSTANTS.MAX_IMAGE_DIMENSION_PX,
             quality: 0.85,
           })
 
