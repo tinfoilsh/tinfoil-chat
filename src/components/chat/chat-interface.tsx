@@ -405,6 +405,7 @@ export function ChatInterface({
 
   const {
     syncing,
+    lastSyncTime,
     syncChats,
     smartSyncChats,
     encryptionKey,
@@ -3508,6 +3509,7 @@ export function ChatInterface({
                 }
                 onManualSync={handleManualSync}
                 isSyncing={syncing}
+                lastSyncTime={lastSyncTime}
                 isProjectMode={isProjectMode}
                 activeProjectName={activeProject?.name}
                 onEnterProject={async (projectId, projectName) => {

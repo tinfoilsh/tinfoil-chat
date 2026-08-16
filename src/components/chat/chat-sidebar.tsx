@@ -125,6 +125,8 @@ type ChatSidebarProps = {
   onManualSync?: () => Promise<void>
   /** True while a cloud sync is in progress; drives the Sync button spinner. */
   isSyncing?: boolean
+  /** Time of the most recent successful cloud sync. */
+  lastSyncTime?: number | null
   isProjectMode?: boolean
   activeProjectName?: string
   onEnterProject?: (projectId: string, projectName?: string) => Promise<void>
@@ -195,6 +197,7 @@ export function ChatSidebar({
   isInitialChatPageReady = false,
   onManualSync,
   isSyncing = false,
+  lastSyncTime = null,
   isProjectMode,
   activeProjectName,
   onEnterProject,
@@ -317,6 +320,11 @@ export function ChatSidebar({
     currentChat?.isBlankChat &&
     !currentChat.isTemporary &&
     Boolean(currentChat.isLocalOnly) === (activeTab === 'local')
+  const syncStatusLabel = isSyncing
+    ? 'Syncing...'
+    : lastSyncTime
+      ? `Last synced ${formatRelativeTime(new Date(lastSyncTime))}`
+      : 'Not synced yet'
 
   const {
     projects,
@@ -846,6 +854,36 @@ export function ChatSidebar({
 
             {/* Action buttons */}
             <div className="flex flex-col items-center gap-1 px-2">
+              {isSignedIn && cloudSyncEnabled && onManualSync && (
+                <div className="group relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isSyncing) return
+                      void onManualSync()
+                    }}
+                    disabled={isSyncing}
+                    className={cn(
+                      'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                      'text-content-secondary hover:bg-surface-chat hover:text-content-primary disabled:cursor-default disabled:opacity-60',
+                    )}
+                    aria-label={`Sync chats. ${syncStatusLabel}`}
+                  >
+                    {isSyncing ? (
+                      <PiSpinner className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <GoSync className="h-5 w-5" />
+                    )}
+                  </button>
+                  <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                    Sync chats{' '}
+                    <span className="text-content-muted">
+                      {syncStatusLabel}
+                    </span>
+                  </span>
+                </div>
+              )}
+
               {/* New chat button */}
               <div className="group relative">
                 <Link
@@ -1181,6 +1219,38 @@ export function ChatSidebar({
                   </button>
                 )}
               </div>
+            </div>
+          )}
+
+          {isSignedIn && cloudSyncEnabled && onManualSync && (
+            <div className="relative z-10 flex-none px-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isSyncing) return
+                  void onManualSync()
+                }}
+                disabled={isSyncing}
+                aria-label={`Sync chats. ${syncStatusLabel}`}
+                className={cn(
+                  'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors disabled:cursor-default disabled:opacity-60',
+                  isDarkMode
+                    ? 'border-border-strong bg-surface-chat text-content-primary hover:bg-surface-chat/80'
+                    : 'border-border-subtle bg-white text-content-primary hover:bg-gray-50',
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  {isSyncing ? (
+                    <PiSpinner className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <GoSync className="h-4 w-4" />
+                  )}
+                  <span className="font-aeonik font-medium">Sync</span>
+                </span>
+                <span className="text-xs text-content-muted">
+                  {syncStatusLabel}
+                </span>
+              </button>
             </div>
           )}
 
@@ -1721,25 +1791,6 @@ export function ChatSidebar({
                   <ChevronRightIcon className="h-4 w-4" />
                 )}
               </button>
-              {isSignedIn && cloudSyncEnabled && onManualSync && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isSyncing) return
-                    void onManualSync()
-                  }}
-                  disabled={isSyncing}
-                  aria-label="Sync chats"
-                  title="Sync chats"
-                  className="absolute right-9 rounded p-1 text-content-muted transition-colors hover:text-content-secondary disabled:cursor-default disabled:opacity-60"
-                >
-                  {isSyncing ? (
-                    <PiSpinner className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <GoSync className="h-4 w-4" />
-                  )}
-                </button>
-              )}
             </div>
 
             {/* Expanded Chats content */}
