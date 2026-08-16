@@ -329,10 +329,8 @@ export function ProjectSidebar({
   const { handleDocumentUpload: processDocument, isDocumentUploading } =
     useDocumentUploader()
   const [settingsExpanded, setSettingsExpanded] = useState(false)
-  const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(() => {
-    if (typeof window === 'undefined') return true
-    return sessionStorage.getItem(UI_SIDEBAR_FAVORITES_EXPANDED) !== 'false'
-  })
+  const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(true)
+  const hasLoadedFavoritesExpandedRef = useRef(false)
   const [documentsExpanded, setDocumentsExpanded] = useState(false)
   const [memoryExpanded, setMemoryExpanded] = useState(false)
   const [memoryText, setMemoryText] = useState('')
@@ -411,6 +409,12 @@ export function ProjectSidebar({
 
   // Expand documents section when signal is set (from file upload to project context)
   useEffect(() => {
+    if (!hasLoadedFavoritesExpandedRef.current) {
+      hasLoadedFavoritesExpandedRef.current = true
+      const stored = sessionStorage.getItem(UI_SIDEBAR_FAVORITES_EXPANDED)
+      if (stored !== null) setIsFavoritesExpanded(stored === 'true')
+      return
+    }
     sessionStorage.setItem(
       UI_SIDEBAR_FAVORITES_EXPANDED,
       isFavoritesExpanded ? 'true' : 'false',

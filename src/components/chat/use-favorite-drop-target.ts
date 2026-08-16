@@ -52,10 +52,10 @@ export function useFavoriteDropTarget({
       }
       event.preventDefault()
       event.dataTransfer.dropEffect = 'copy'
+      if (!isFavoriteDropTarget) onActivate?.()
       setIsFavoriteDropTarget(true)
-      onActivate?.()
     },
-    [canAcceptDraggedChat, onActivate],
+    [canAcceptDraggedChat, isFavoriteDropTarget, onActivate],
   )
 
   const onDragLeave = useCallback<DragEventHandler<HTMLElement>>((event) => {

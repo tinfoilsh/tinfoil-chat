@@ -34,6 +34,7 @@ describe('useFavoriteDropTarget', () => {
     const event = dragEvent('chat-a')
 
     act(() => result.current.favoriteDropTargetProps.onDragOver(event as never))
+    act(() => result.current.favoriteDropTargetProps.onDragOver(event as never))
     expect(event.dataTransfer.dropEffect).toBe('copy')
     expect(result.current.isFavoriteDropTarget).toBe(true)
     expect(onActivate).toHaveBeenCalledOnce()

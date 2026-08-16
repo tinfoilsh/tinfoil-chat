@@ -239,10 +239,8 @@ export function ChatSidebar({
     return false
   })
   const [isCreatingProject, setIsCreatingProject] = useState(false)
-  const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(() => {
-    if (typeof window === 'undefined') return true
-    return sessionStorage.getItem(UI_SIDEBAR_FAVORITES_EXPANDED) !== 'false'
-  })
+  const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(true)
+  const hasLoadedFavoritesExpandedRef = useRef(false)
   const [isChatHistoryExpanded, setIsChatHistoryExpanded] = useState(() => {
     if (typeof window !== 'undefined') {
       const shouldExpandProjects = sessionStorage.getItem(
@@ -406,11 +404,26 @@ export function ChatSidebar({
   }, [isChatHistoryExpanded])
 
   useEffect(() => {
+    if (!hasLoadedFavoritesExpandedRef.current) {
+      hasLoadedFavoritesExpandedRef.current = true
+      const stored = sessionStorage.getItem(UI_SIDEBAR_FAVORITES_EXPANDED)
+      const requestedSection = sessionStorage.getItem(UI_SIDEBAR_EXPAND_SECTION)
+      const shouldExpand =
+        stored !== 'false' &&
+        !isProjectsExpanded &&
+        requestedSection !== 'chats'
+      setIsFavoritesExpanded(shouldExpand)
+      if (shouldExpand) {
+        setIsProjectsExpanded(false)
+        setIsChatHistoryExpanded(false)
+      }
+      return
+    }
     sessionStorage.setItem(
       UI_SIDEBAR_FAVORITES_EXPANDED,
       isFavoritesExpanded ? 'true' : 'false',
     )
-  }, [isFavoritesExpanded])
+  }, [isFavoritesExpanded, isProjectsExpanded])
 
   // Listen for cloud sync setting changes
   useEffect(() => {
@@ -527,10 +540,12 @@ export function ChatSidebar({
       if (expandSection === 'projects') {
         setIsProjectsExpanded(true)
         setIsChatHistoryExpanded(false)
+        setIsFavoritesExpanded(false)
         refreshProjects()
       } else if (expandSection === 'chats') {
         setIsProjectsExpanded(false)
         setIsChatHistoryExpanded(true)
+        setIsFavoritesExpanded(false)
       }
       sessionStorage.removeItem(UI_SIDEBAR_EXPAND_SECTION)
     }
@@ -561,9 +576,9 @@ export function ChatSidebar({
   useEffect(() => {
     if (!hasPinnedProjectsHeader && isProjectsExpanded) {
       setIsProjectsExpanded(false)
-      setIsChatHistoryExpanded(true)
+      if (!isFavoritesExpanded) setIsChatHistoryExpanded(true)
     }
-  }, [hasPinnedProjectsHeader, isProjectsExpanded])
+  }, [hasPinnedProjectsHeader, isFavoritesExpanded, isProjectsExpanded])
 
   const hideScrollbarWhileSectionsAnimate = useCallback(() => {
     setHideScrollbarDuringAnimation(true)
@@ -585,16 +600,17 @@ export function ChatSidebar({
     [],
   )
 
-  // Projects and Chats behave as an accordion: expanding one collapses the
-  // other. This keeps the newly opened section at the top of the scroll
-  // area (expanding a section while scrolled deep into the other would
-  // otherwise appear to do nothing, since the new content renders at its
+  // Favorites, Projects, and Chats behave as an accordion: expanding one
+  // collapses the others. This keeps the newly opened section at the top
+  // of the scroll area. Expanding while scrolled deep into another section
+  // would otherwise appear to do nothing, since the new content renders at its
   // flow position far above the viewport) and resets the scroll so the
   // opened section's content is immediately visible.
   const expandProjectsSection = useCallback(() => {
     hideScrollbarWhileSectionsAnimate()
     setIsProjectsExpanded(true)
     setIsChatHistoryExpanded(false)
+    setIsFavoritesExpanded(false)
     sidebarScrollRef.current?.scrollTo({ top: 0 })
     if (projects.length === 0) {
       refreshProjects()
@@ -605,7 +621,15 @@ export function ChatSidebar({
     hideScrollbarWhileSectionsAnimate()
     setIsChatHistoryExpanded(true)
     setIsProjectsExpanded(false)
+    setIsFavoritesExpanded(false)
     sidebarScrollRef.current?.scrollTo({ top: 0 })
+  }, [hideScrollbarWhileSectionsAnimate])
+
+  const expandFavoritesSection = useCallback(() => {
+    hideScrollbarWhileSectionsAnimate()
+    setIsFavoritesExpanded(true)
+    setIsProjectsExpanded(false)
+    setIsChatHistoryExpanded(false)
   }, [hideScrollbarWhileSectionsAnimate])
 
   const filteredChats = useMemo(() => {
@@ -644,10 +668,7 @@ export function ChatSidebar({
       pinnedChatIds,
       draggingChatId,
       onToggleFavorite,
-      onActivate: () => {
-        if (!isFavoritesExpanded) hideScrollbarWhileSectionsAnimate()
-        setIsFavoritesExpanded(true)
-      },
+      onActivate: expandFavoritesSection,
       clearDragState,
     })
 
@@ -922,7 +943,7 @@ export function ChatSidebar({
                 <div className="group relative" {...favoriteDropTargetProps}>
                   <button
                     onClick={() => {
-                      setIsFavoritesExpanded(true)
+                      expandFavoritesSection()
                       setIsOpen(true)
                       requestAnimationFrame(() =>
                         favoritesSectionRef.current?.scrollIntoView({
@@ -957,8 +978,7 @@ export function ChatSidebar({
                         UI_SIDEBAR_EXPAND_SECTION,
                         'projects',
                       )
-                      setIsProjectsExpanded(true)
-                      setIsChatHistoryExpanded(false)
+                      expandProjectsSection()
                       setIsOpen(true)
                     }}
                     className={cn(
@@ -980,8 +1000,7 @@ export function ChatSidebar({
                 <button
                   onClick={() => {
                     sessionStorage.setItem(UI_SIDEBAR_EXPAND_SECTION, 'chats')
-                    setIsChatHistoryExpanded(true)
-                    setIsProjectsExpanded(false)
+                    expandChatsSection()
                     setIsOpen(true)
                   }}
                   className={cn(
@@ -1306,8 +1325,12 @@ export function ChatSidebar({
                 aria-expanded={isFavoritesExpanded}
                 aria-controls={FAVORITES_PANEL_ID}
                 onClick={() => {
-                  hideScrollbarWhileSectionsAnimate()
-                  setIsFavoritesExpanded((expanded) => !expanded)
+                  if (isFavoritesExpanded) {
+                    hideScrollbarWhileSectionsAnimate()
+                    setIsFavoritesExpanded(false)
+                  } else {
+                    expandFavoritesSection()
+                  }
                 }}
                 className="flex w-full items-center justify-between px-4 py-3 text-sm text-content-secondary transition-colors hover:text-content-primary"
               >
