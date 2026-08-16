@@ -360,6 +360,7 @@ export function ProjectSidebar({
   const skipNextAnimationRef = useRef(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const favoritesSectionRef = useRef<HTMLElement>(null)
   const exitHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isExitButtonDragHover, setIsExitButtonDragHover] = useState(false)
   const [isDropTargetChatList, setIsDropTargetChatList] = useState(false)
@@ -790,6 +791,31 @@ export function ProjectSidebar({
                   </span>
                 </span>
               </div>
+
+              {isSignedIn && cloudSyncEnabled && (
+                <div className="group relative">
+                  <button
+                    onClick={() => {
+                      setIsOpen(true)
+                      requestAnimationFrame(() =>
+                        favoritesSectionRef.current?.scrollIntoView({
+                          block: 'start',
+                        }),
+                      )
+                    }}
+                    className={cn(
+                      'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                      'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                    )}
+                    aria-label="Favorites"
+                  >
+                    <PiPushPin className="h-5 w-5" />
+                  </button>
+                  <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                    Favorites
+                  </span>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -1019,7 +1045,10 @@ export function ProjectSidebar({
           </div>
 
           {isSignedIn && cloudSyncEnabled && (
-            <section className="relative z-10 flex-none border-y border-border-subtle">
+            <section
+              ref={favoritesSectionRef}
+              className="relative z-10 flex-none border-y border-border-subtle"
+            >
               <div className="flex items-center gap-2 px-4 py-3 text-sm text-content-secondary">
                 <PiPushPin className="h-4 w-4" aria-hidden="true" />
                 <h2 className="font-aeonik font-medium">Favorites</h2>

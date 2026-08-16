@@ -262,6 +262,7 @@ export function ChatSidebar({
     return true
   })
   const sidebarScrollRef = useRef<HTMLDivElement>(null)
+  const favoritesSectionRef = useRef<HTMLElement>(null)
   // Hides the sidebar scrollbar while a section expand/collapse animates;
   // the scroll height changes every frame and the scrollbar would flicker.
   const [hideScrollbarDuringAnimation, setHideScrollbarDuringAnimation] =
@@ -889,6 +890,31 @@ export function ChatSidebar({
                 </span>
               </div>
 
+              {isSignedIn && cloudSyncEnabled && (
+                <div className="group relative">
+                  <button
+                    onClick={() => {
+                      setIsOpen(true)
+                      requestAnimationFrame(() =>
+                        favoritesSectionRef.current?.scrollIntoView({
+                          block: 'start',
+                        }),
+                      )
+                    }}
+                    className={cn(
+                      'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                      'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                    )}
+                    aria-label="Favorites"
+                  >
+                    <PiPushPin className="h-5 w-5" />
+                  </button>
+                  <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                    Favorites
+                  </span>
+                </div>
+              )}
+
               {/* Projects button - only for premium users */}
               {isSignedIn && isPremium && (
                 <div className="group relative">
@@ -1237,7 +1263,10 @@ export function ChatSidebar({
               wrapper) so the sticky header pins to the scroll area itself
               and stays visible for the rest of the scroll. */}
           {isSignedIn && cloudSyncEnabled && (
-            <section className="relative z-10 flex-none border-t border-border-subtle">
+            <section
+              ref={favoritesSectionRef}
+              className="relative z-10 flex-none border-t border-border-subtle"
+            >
               <div className="flex items-center gap-2 px-4 py-3 text-sm text-content-secondary">
                 <PiPushPin className="h-4 w-4" aria-hidden="true" />
                 <h2 className="font-aeonik font-medium">Favorites</h2>
