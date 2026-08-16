@@ -21,7 +21,10 @@ import {
   PROJECT_COLORS,
   projectColorTintLayer,
 } from '@/constants/project-colors'
-import { UI_EXPAND_PROJECT_DOCUMENTS } from '@/constants/storage-keys'
+import {
+  UI_EXPAND_PROJECT_DOCUMENTS,
+  UI_SIDEBAR_FAVORITES_EXPANDED,
+} from '@/constants/storage-keys'
 import { toast } from '@/hooks/use-toast'
 import { isResolvedFavoriteChat } from '@/services/storage/pinned-chats'
 import type { Fact } from '@/types/memory'
@@ -80,6 +83,7 @@ import { CONSTANTS } from '../chat/constants'
 import { useProject } from './project-context'
 
 const MOBILE_BREAKPOINT = 1024
+const FAVORITES_PANEL_ID = 'project-sidebar-favorites-panel'
 
 interface ProjectChat {
   id: string
@@ -325,6 +329,10 @@ export function ProjectSidebar({
   const { handleDocumentUpload: processDocument, isDocumentUploading } =
     useDocumentUploader()
   const [settingsExpanded, setSettingsExpanded] = useState(false)
+  const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return sessionStorage.getItem(UI_SIDEBAR_FAVORITES_EXPANDED) !== 'false'
+  })
   const [documentsExpanded, setDocumentsExpanded] = useState(false)
   const [memoryExpanded, setMemoryExpanded] = useState(false)
   const [memoryText, setMemoryText] = useState('')
@@ -402,6 +410,13 @@ export function ProjectSidebar({
   }, [refreshDocuments])
 
   // Expand documents section when signal is set (from file upload to project context)
+  useEffect(() => {
+    sessionStorage.setItem(
+      UI_SIDEBAR_FAVORITES_EXPANDED,
+      isFavoritesExpanded ? 'true' : 'false',
+    )
+  }, [isFavoritesExpanded])
+
   useEffect(() => {
     if (isOpen) {
       const shouldExpandDocs = sessionStorage.getItem(
@@ -718,6 +733,7 @@ export function ProjectSidebar({
       pinnedChatIds,
       draggingChatId,
       onToggleFavorite,
+      onActivate: () => setIsFavoritesExpanded(true),
       clearDragState,
     })
 
@@ -807,6 +823,7 @@ export function ProjectSidebar({
                 <div className="group relative" {...favoriteDropTargetProps}>
                   <button
                     onClick={() => {
+                      setIsFavoritesExpanded(true)
                       setIsOpen(true)
                       requestAnimationFrame(() =>
                         favoritesSectionRef.current?.scrollIntoView({
@@ -1069,39 +1086,71 @@ export function ProjectSidebar({
                   (isDarkMode ? 'bg-white/10' : 'bg-gray-200/50'),
               )}
             >
-              <div className="flex items-center gap-2 px-4 py-3 text-sm text-content-secondary">
-                <PiPushPin className="h-4 w-4" aria-hidden="true" />
-                <h2 className="font-aeonik font-medium">Favorites</h2>
-              </div>
-              {resolvedFavoriteChats.length > 0 ? (
-                <ChatList
-                  chats={resolvedFavoriteChats}
-                  currentChatId={currentChatId}
-                  isDarkMode={isDarkMode}
-                  pixelateSidebarChatTitles={pixelateSidebarChatTitles}
-                  getChatHref={(chat) =>
-                    getChatPath(chat.id, { projectId: chat.projectId })
-                  }
-                  onSelectChat={(chatId) => {
-                    const favorite = resolvedFavoriteChats.find(
-                      (chat) => chat.id === chatId,
-                    )
-                    if (favorite) {
-                      void onOpenFavorite?.(favorite)
-                      if (isMobile) setIsOpen(false)
-                    }
-                  }}
-                  onUpdateTitle={updateChatTitle}
-                  onDeleteChat={handleDeleteChat}
-                  pinnedChatIds={pinnedChatIds}
-                  showPinnedIndicators={false}
-                  onTogglePin={onToggleFavorite}
-                />
-              ) : (
-                <p className="px-4 pb-3 font-aeonik-fono text-xs text-content-muted">
-                  Pin chats for quick access.
-                </p>
-              )}
+              <button
+                type="button"
+                aria-expanded={isFavoritesExpanded}
+                aria-controls={FAVORITES_PANEL_ID}
+                onClick={() => setIsFavoritesExpanded((expanded) => !expanded)}
+                className="flex w-full items-center justify-between px-4 py-3 text-sm text-content-secondary transition-colors hover:text-content-primary"
+              >
+                <span className="flex items-center gap-2">
+                  <PiPushPin className="h-4 w-4" aria-hidden="true" />
+                  <span
+                    role="heading"
+                    aria-level={2}
+                    className="font-aeonik font-medium"
+                  >
+                    Favorites
+                  </span>
+                </span>
+                {isFavoritesExpanded ? (
+                  <ChevronUpIcon className="h-4 w-4" />
+                ) : (
+                  <ChevronDownIcon className="h-4 w-4" />
+                )}
+              </button>
+              <AnimatePresence initial={false}>
+                {isFavoritesExpanded && (
+                  <motion.div
+                    id={FAVORITES_PANEL_ID}
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2, ease: 'easeInOut' }}
+                    className="overflow-hidden"
+                  >
+                    {resolvedFavoriteChats.length > 0 ? (
+                      <ChatList
+                        chats={resolvedFavoriteChats}
+                        currentChatId={currentChatId}
+                        isDarkMode={isDarkMode}
+                        pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+                        getChatHref={(chat) =>
+                          getChatPath(chat.id, { projectId: chat.projectId })
+                        }
+                        onSelectChat={(chatId) => {
+                          const favorite = resolvedFavoriteChats.find(
+                            (chat) => chat.id === chatId,
+                          )
+                          if (favorite) {
+                            void onOpenFavorite?.(favorite)
+                            if (isMobile) setIsOpen(false)
+                          }
+                        }}
+                        onUpdateTitle={updateChatTitle}
+                        onDeleteChat={handleDeleteChat}
+                        pinnedChatIds={pinnedChatIds}
+                        showPinnedIndicators={false}
+                        onTogglePin={onToggleFavorite}
+                      />
+                    ) : (
+                      <p className="px-4 pb-3 font-aeonik-fono text-xs text-content-muted">
+                        Pin chats for quick access.
+                      </p>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </section>
           )}
 

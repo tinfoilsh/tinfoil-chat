@@ -19,6 +19,7 @@ function dragEvent(chatId: string) {
 describe('useFavoriteDropTarget', () => {
   it('pins a dropped chat and clears drag state', async () => {
     const onToggleFavorite = vi.fn()
+    const onActivate = vi.fn()
     const clearDragState = vi.fn()
     const { result } = renderHook(() =>
       useFavoriteDropTarget({
@@ -26,6 +27,7 @@ describe('useFavoriteDropTarget', () => {
         pinnedChatIds: [],
         draggingChatId: 'chat-a',
         onToggleFavorite,
+        onActivate,
         clearDragState,
       }),
     )
@@ -34,6 +36,7 @@ describe('useFavoriteDropTarget', () => {
     act(() => result.current.favoriteDropTargetProps.onDragOver(event as never))
     expect(event.dataTransfer.dropEffect).toBe('copy')
     expect(result.current.isFavoriteDropTarget).toBe(true)
+    expect(onActivate).toHaveBeenCalledOnce()
 
     await act(async () => {
       result.current.favoriteDropTargetProps.onDrop(event as never)

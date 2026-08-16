@@ -14,6 +14,7 @@ interface FavoriteDropTargetOptions {
   pinnedChatIds: readonly string[]
   draggingChatId: string | null
   onToggleFavorite?: (chat: ChatItemData) => void | Promise<void>
+  onActivate?: () => void
   clearDragState: () => void
 }
 
@@ -22,6 +23,7 @@ export function useFavoriteDropTarget({
   pinnedChatIds,
   draggingChatId,
   onToggleFavorite,
+  onActivate,
   clearDragState,
 }: FavoriteDropTargetOptions) {
   const [isFavoriteDropTarget, setIsFavoriteDropTarget] = useState(false)
@@ -51,8 +53,9 @@ export function useFavoriteDropTarget({
       event.preventDefault()
       event.dataTransfer.dropEffect = 'copy'
       setIsFavoriteDropTarget(true)
+      onActivate?.()
     },
-    [canAcceptDraggedChat],
+    [canAcceptDraggedChat, onActivate],
   )
 
   const onDragLeave = useCallback<DragEventHandler<HTMLElement>>((event) => {
