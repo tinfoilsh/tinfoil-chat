@@ -125,8 +125,6 @@ type ChatSidebarProps = {
   onManualSync?: () => Promise<void>
   /** True while a cloud sync is in progress; drives the Sync button spinner. */
   isSyncing?: boolean
-  /** Time the most recent cloud sync attempt completed. */
-  lastSyncTime?: number | null
   /** Whether the most recent cloud sync attempt failed. */
   lastSyncFailed?: boolean
   isProjectMode?: boolean
@@ -199,7 +197,6 @@ export function ChatSidebar({
   isInitialChatPageReady = false,
   onManualSync,
   isSyncing = false,
-  lastSyncTime = null,
   lastSyncFailed = false,
   isProjectMode,
   activeProjectName,
@@ -329,12 +326,10 @@ export function ChatSidebar({
     Object.keys(syncHealth.failedChats).length > 0
   const syncFailed = lastSyncFailed || syncHealthFailed
   const syncStatusLabel = isSyncing
-    ? 'Syncing...'
-    : lastSyncTime
-      ? `${syncFailed ? 'Failed' : 'Synced'} ${formatRelativeTime(new Date(lastSyncTime))}`
-      : syncFailed
-        ? 'Sync failed'
-        : 'Not synced yet'
+    ? 'Syncing'
+    : syncFailed
+      ? 'Sync failed'
+      : 'Sync healthy'
 
   const {
     projects,
@@ -1229,27 +1224,12 @@ export function ChatSidebar({
                 </span>
                 <span
                   className={cn(
-                    'flex items-center gap-1.5 text-xs',
-                    isSyncing
-                      ? 'text-content-muted'
-                      : syncFailed
-                        ? 'text-orange-500'
-                        : lastSyncTime
-                          ? 'text-green-600 dark:text-green-400'
-                          : 'text-content-muted',
+                    'h-2 w-2 rounded-full',
+                    syncFailed ? 'bg-orange-500' : 'bg-green-500',
                   )}
-                >
-                  {!isSyncing && (lastSyncTime || syncFailed) && (
-                    <span
-                      className={cn(
-                        'h-1.5 w-1.5 rounded-full',
-                        syncFailed ? 'bg-orange-500' : 'bg-green-500',
-                      )}
-                      aria-hidden="true"
-                    />
-                  )}
-                  {syncStatusLabel}
-                </span>
+                  title={syncStatusLabel}
+                  aria-hidden="true"
+                />
               </button>
             </div>
           )}

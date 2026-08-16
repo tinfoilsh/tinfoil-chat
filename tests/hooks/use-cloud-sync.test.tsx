@@ -68,7 +68,6 @@ describe('useCloudSync status', () => {
       await result.current.syncChats()
     })
 
-    expect(result.current.lastSyncTime).not.toBeNull()
     expect(result.current.lastSyncFailed).toBe(true)
     expect(reportSyncSuccessMock).not.toHaveBeenCalled()
   })
@@ -88,7 +87,7 @@ describe('useCloudSync status', () => {
     })
 
     expect(thrownError).toBe(syncError)
-    expect(result.current.lastSyncTime).not.toBeNull()
+    expect(result.current.lastSyncTime).toBeNull()
     expect(result.current.lastSyncFailed).toBe(true)
     expect(reportSyncSuccessMock).not.toHaveBeenCalled()
   })

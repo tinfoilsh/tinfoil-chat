@@ -220,7 +220,6 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
           setState((prev) => ({
             ...prev,
             syncing: false,
-            lastSyncTime: Date.now(),
             lastSyncFailed: true,
           }))
         }
