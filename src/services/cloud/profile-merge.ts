@@ -182,8 +182,6 @@ export function mergeProfilesThreeWay(args: {
         ;(merged as Record<string, unknown>)[field] = remoteValue
         if (rc) mergedClocks[field] = rc
         adoptedRemote ||= !valuesEqual(localValue, remoteValue)
-      } else if (PRESERVE_LOCAL_WHEN_REMOTE_OMITS.has(field)) {
-        if (lc) mergedClocks[field] = lc
       } else {
         delete (merged as Record<string, unknown>)[field]
       }

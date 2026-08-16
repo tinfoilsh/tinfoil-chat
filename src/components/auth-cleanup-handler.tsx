@@ -1,5 +1,8 @@
 import { SignoutConfirmationModal } from '@/components/modals/signout-confirmation-modal'
-import { ACCOUNT_RESET_FAILED_EVENT } from '@/constants/auth-events'
+import {
+  ACCOUNT_RESET_FAILED_EVENT,
+  AUTH_ACTIVE_USER_CHANGED_EVENT,
+} from '@/constants/auth-events'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
@@ -174,6 +177,7 @@ export function AuthCleanupHandler() {
 
       // Same user or fresh sign-in — persist the active user ID
       localStorage.setItem(AUTH_ACTIVE_USER_ID, user.id)
+      window.dispatchEvent(new Event(AUTH_ACTIVE_USER_CHANGED_EVENT))
     }
 
     // Check if user just signed out (stored user ID exists but no longer signed in)

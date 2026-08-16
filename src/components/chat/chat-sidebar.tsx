@@ -1272,10 +1272,6 @@ export function ChatSidebar({
             </Link>
           </div>
 
-          {/* Projects dropdown - show for premium users. The header and
-              list are direct children of the scroll container (no section
-              wrapper) so the sticky header pins to the scroll area itself
-              and stays visible for the rest of the scroll. */}
           {isSignedIn && cloudSyncEnabled && (
             <section
               ref={favoritesSectionRef}
@@ -1309,6 +1305,7 @@ export function ChatSidebar({
                   onUpdateTitle={updateChatTitle}
                   onDeleteChat={deleteChat}
                   pinnedChatIds={pinnedChatIds}
+                  showPinnedIndicators={false}
                   onTogglePin={onToggleFavorite}
                 />
               ) : (
@@ -1319,6 +1316,10 @@ export function ChatSidebar({
             </section>
           )}
 
+          {/* Projects dropdown - show for premium users. The header and
+              list are direct children of the scroll container (no section
+              wrapper) so the sticky header pins to the scroll area itself
+              and stays visible for the rest of the scroll. */}
           {hasPinnedProjectsHeader && (
             <>
               <button

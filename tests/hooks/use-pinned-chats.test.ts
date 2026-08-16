@@ -1,3 +1,4 @@
+import { AUTH_ACTIVE_USER_CHANGED_EVENT } from '@/constants/auth-events'
 import { PINNED_CHAT_IDS_CHANGED_EVENT } from '@/constants/settings-events'
 import {
   AUTH_ACTIVE_USER_ID,
@@ -56,6 +57,21 @@ describe('usePinnedChats', () => {
     act(() => result.current.pinChat('chat-b'))
     expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user-a')
     expect(localStorage.getItem(USER_PREFS_PINNED_CHAT_IDS)).toBe('["chat-a"]')
+  })
+
+  it('exposes pins once the active account is established', () => {
+    savePinnedChatIds(['chat-a'])
+
+    const { result } = renderHook(() => usePinnedChats('user-a'))
+
+    expect(result.current.pinnedChatIds).toEqual([])
+
+    act(() => {
+      localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-a')
+      window.dispatchEvent(new Event(AUTH_ACTIVE_USER_CHANGED_EVENT))
+    })
+
+    expect(result.current.pinnedChatIds).toEqual(['chat-a'])
   })
 
   it('does not dispatch changes for no-op removals', () => {

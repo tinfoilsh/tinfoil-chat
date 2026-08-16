@@ -1,4 +1,5 @@
 import { CLOUD_SYNC } from '@/config'
+import { AUTH_ACTIVE_USER_CHANGED_EVENT } from '@/constants/auth-events'
 import {
   PINNED_CHAT_IDS_CHANGED_EVENT,
   PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
@@ -413,6 +414,22 @@ export function useProfileSync() {
       }
     }
   }, [isSignedIn, markLocalProfileChanged, syncToCloud])
+
+  useEffect(() => {
+    const handleActiveUserChange = () => {
+      void runFullSync()
+    }
+    window.addEventListener(
+      AUTH_ACTIVE_USER_CHANGED_EVENT,
+      handleActiveUserChange,
+    )
+    return () => {
+      window.removeEventListener(
+        AUTH_ACTIVE_USER_CHANGED_EVENT,
+        handleActiveUserChange,
+      )
+    }
+  }, [runFullSync])
 
   return {
     syncFromCloud: runFullSync,

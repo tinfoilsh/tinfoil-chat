@@ -1088,12 +1088,13 @@ export function ProjectSidebar({
                     )
                     if (favorite) {
                       void onOpenFavorite?.(favorite)
-                      if (windowWidth < MOBILE_BREAKPOINT) setIsOpen(false)
+                      if (isMobile) setIsOpen(false)
                     }
                   }}
                   onUpdateTitle={updateChatTitle}
                   onDeleteChat={handleDeleteChat}
                   pinnedChatIds={pinnedChatIds}
+                  showPinnedIndicators={false}
                   onTogglePin={onToggleFavorite}
                 />
               ) : (

@@ -115,6 +115,7 @@ interface ChatListItemProps {
   onConvertToLocal?: () => void
   onRemoveFromProject?: () => void
   isPinned?: boolean
+  showPinnedIndicator?: boolean
   onTogglePin?: () => void | Promise<void>
 }
 
@@ -193,6 +194,7 @@ export function ChatListItem({
   onConvertToLocal,
   onRemoveFromProject,
   isPinned = false,
+  showPinnedIndicator = true,
   onTogglePin,
 }: ChatListItemProps) {
   const [displayTitle, setDisplayTitle] = useState(chat.title)
@@ -476,7 +478,7 @@ export function ChatListItem({
                   />
                 )
               )}
-              {isPinned && !isStreaming && (
+              {isPinned && showPinnedIndicator && !isStreaming && (
                 <PiPushPinFill
                   className="h-3.5 w-3.5 flex-shrink-0 text-content-muted"
                   title="Pinned to Favorites"

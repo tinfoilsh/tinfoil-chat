@@ -1,3 +1,4 @@
+import { AUTH_ACTIVE_USER_CHANGED_EVENT } from '@/constants/auth-events'
 import { PINNED_CHAT_IDS_CHANGED_EVENT } from '@/constants/settings-events'
 import {
   AUTH_ACTIVE_USER_ID,
@@ -21,7 +22,7 @@ export function usePinnedChats(accountId?: string | null) {
     if (!accountId) return true
     if (typeof window === 'undefined') return false
     const activeAccountId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
-    return activeAccountId === null || activeAccountId === accountId
+    return activeAccountId === accountId
   }, [accountId])
 
   useEffect(() => {
@@ -33,8 +34,8 @@ export function usePinnedChats(accountId?: string | null) {
     const unsubscribeChats = chatEvents.on((event) => {
       if (!isCurrentAccount()) return
       if (event.reason === 'delete-all') {
-        const current = loadPinnedChatIds()
-        if (current?.length === 0) return
+        const current = loadPinnedChatIds() ?? []
+        if (current.length === 0) return
         savePinnedChatIds([])
         return
       }
@@ -45,11 +46,13 @@ export function usePinnedChats(accountId?: string | null) {
     })
 
     window.addEventListener(PINNED_CHAT_IDS_CHANGED_EVENT, refresh)
+    window.addEventListener(AUTH_ACTIVE_USER_CHANGED_EVENT, refresh)
     window.addEventListener('storage', handleStorage)
     refresh()
     return () => {
       unsubscribeChats()
       window.removeEventListener(PINNED_CHAT_IDS_CHANGED_EVENT, refresh)
+      window.removeEventListener(AUTH_ACTIVE_USER_CHANGED_EVENT, refresh)
       window.removeEventListener('storage', handleStorage)
     }
   }, [isCurrentAccount])

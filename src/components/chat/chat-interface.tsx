@@ -1006,9 +1006,11 @@ export function ChatInterface({
   const favoriteHydrationMountedRef = useRef(false)
   const attemptedFavoriteHydrationsRef = useRef(new Set<string>())
   const unavailableFavoriteHydrationsRef = useRef(new Set<string>())
+  const favoriteHydrationRetrySignalRef = useRef(0)
   const [favoriteHydrationRetryVersion, setFavoriteHydrationRetryVersion] =
     useState(0)
   const retryUnavailableFavoriteHydrations = useCallback(() => {
+    favoriteHydrationRetrySignalRef.current += 1
     if (unavailableFavoriteHydrationsRef.current.size === 0) return
     for (const chatId of unavailableFavoriteHydrationsRef.current) {
       attemptedFavoriteHydrationsRef.current.delete(chatId)
@@ -1098,6 +1100,7 @@ export function ChatInterface({
       attemptedFavoriteHydrationsRef.current.add(chatId),
     )
     const generation = favoriteHydrationGenerationRef.current
+    const retrySignal = favoriteHydrationRetrySignalRef.current
     const accountId = authUserId
 
     const hydrateFavorites = async () => {
@@ -1127,10 +1130,19 @@ export function ChatInterface({
         .filter(({ result }) => result.status === 'invalid')
         .map(({ chatId }) => chatId)
       if (idsToPrune.length > 0) unpinChats(idsToPrune)
+      let shouldRetry = false
       for (const { chatId, result } of results) {
         if (result.status === 'unavailable') {
-          unavailableFavoriteHydrationsRef.current.add(chatId)
+          if (favoriteHydrationRetrySignalRef.current !== retrySignal) {
+            attemptedFavoriteHydrationsRef.current.delete(chatId)
+            shouldRetry = true
+          } else {
+            unavailableFavoriteHydrationsRef.current.add(chatId)
+          }
         }
+      }
+      if (shouldRetry) {
+        setFavoriteHydrationRetryVersion((version) => version + 1)
       }
 
       const hydratedChats = results.flatMap(({ result }) =>
