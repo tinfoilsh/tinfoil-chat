@@ -14,6 +14,7 @@ import {
   validateCurrentPrimaryKey,
 } from '@/services/cloud/cloud-key-preflight'
 import { cloudSync, type SyncResult } from '@/services/cloud/cloud-sync'
+import { reportSyncSuccess } from '@/services/cloud/sync-health'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import {
@@ -28,6 +29,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 export interface CloudSyncState {
   syncing: boolean
   lastSyncTime: number | null
+  lastSyncFailed: boolean
   encryptionKey: string | null
   /** True once the init effect has finished (encryption key resolved) */
   initialized: boolean
@@ -50,6 +52,7 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
   const [state, setState] = useState<CloudSyncState>({
     syncing: false,
     lastSyncTime: null,
+    lastSyncFailed: false,
     encryptionKey: null,
     initialized: false,
     decryptionProgress: null,
@@ -188,12 +191,18 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
     const syncPromise = (async () => {
       try {
         const result = await cloudSync.smartSync(projectId)
+        const syncFailed = result.errors.length > 0
+
+        if (!syncFailed) {
+          reportSyncSuccess()
+        }
 
         if (isMountedRef.current) {
           setState((prev) => ({
             ...prev,
             syncing: false,
             lastSyncTime: Date.now(),
+            lastSyncFailed: syncFailed,
           }))
         }
 
@@ -208,7 +217,11 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
         return result
       } catch (error) {
         if (isMountedRef.current) {
-          setState((prev) => ({ ...prev, syncing: false }))
+          setState((prev) => ({
+            ...prev,
+            syncing: false,
+            lastSyncFailed: true,
+          }))
         }
         throw error
       } finally {

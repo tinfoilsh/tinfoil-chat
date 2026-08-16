@@ -9,7 +9,7 @@ import {
   USER_PREFS_NATIVE_APP_DISMISSED,
 } from '@/constants/storage-keys'
 import { useProjects } from '@/hooks/use-projects'
-import { useSyncHealthAttention } from '@/hooks/use-sync-health'
+import { useSyncHealth, useSyncHealthAttention } from '@/hooks/use-sync-health'
 import { toast } from '@/hooks/use-toast'
 import { useUpgradeToPro } from '@/hooks/use-upgrade-to-pro'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -39,7 +39,7 @@ import {
 import { AnimatePresence, motion } from 'framer-motion'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { FaLock } from 'react-icons/fa6'
-import { GoSidebarCollapse, GoSidebarExpand, GoSync } from 'react-icons/go'
+import { GoSidebarCollapse, GoSidebarExpand } from 'react-icons/go'
 import { IoChatbubblesOutline } from 'react-icons/io5'
 import {
   PiFolder,
@@ -52,6 +52,7 @@ import { ChatList, type ChatItemData } from './chat-list'
 import { formatRelativeTime } from './chat-list-utils'
 import { CONSTANTS } from './constants'
 import { useDrag } from './drag-context'
+import { SidebarSyncButton } from './sidebar-sync-button'
 
 import { useProject } from '@/components/project/project-context'
 import {
@@ -122,9 +123,11 @@ type ChatSidebarProps = {
   initialChatPageToken?: string
   isInitialChatPageReady?: boolean
   /** Triggers a deep (all-pages) cloud sync from the sidebar "Sync" button. */
-  onManualSync?: () => Promise<void>
+  onManualSync?: () => Promise<boolean>
   /** True while a cloud sync is in progress; drives the Sync button spinner. */
   isSyncing?: boolean
+  /** Whether the most recent cloud sync attempt failed. */
+  lastSyncFailed?: boolean
   isProjectMode?: boolean
   activeProjectName?: string
   onEnterProject?: (projectId: string, projectName?: string) => Promise<void>
@@ -195,6 +198,7 @@ export function ChatSidebar({
   isInitialChatPageReady = false,
   onManualSync,
   isSyncing = false,
+  lastSyncFailed = false,
   isProjectMode,
   activeProjectName,
   onEnterProject,
@@ -208,6 +212,7 @@ export function ChatSidebar({
   chatDecryptionProgress,
 }: ChatSidebarProps) {
   const syncNeedsAttention = useSyncHealthAttention()
+  const syncHealth = useSyncHealth()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [isProjectsExpanded, setIsProjectsExpanded] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -317,6 +322,10 @@ export function ChatSidebar({
     currentChat?.isBlankChat &&
     !currentChat.isTemporary &&
     Boolean(currentChat.isLocalOnly) === (activeTab === 'local')
+  const syncHealthFailed =
+    syncHealth.gate.kind !== 'ok' ||
+    Object.keys(syncHealth.failedChats).length > 0
+  const syncFailed = lastSyncFailed || syncHealthFailed
 
   const {
     projects,
@@ -1184,6 +1193,15 @@ export function ChatSidebar({
             </div>
           )}
 
+          {isSignedIn && cloudSyncEnabled && onManualSync && (
+            <SidebarSyncButton
+              isDarkMode={isDarkMode}
+              isSyncing={isSyncing}
+              syncFailed={syncFailed}
+              onSync={onManualSync}
+            />
+          )}
+
           {/* New Chat button */}
           <div className="relative z-10 flex-none px-2 py-2">
             <Link
@@ -1721,25 +1739,6 @@ export function ChatSidebar({
                   <ChevronRightIcon className="h-4 w-4" />
                 )}
               </button>
-              {isSignedIn && cloudSyncEnabled && onManualSync && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isSyncing) return
-                    void onManualSync()
-                  }}
-                  disabled={isSyncing}
-                  aria-label="Sync chats"
-                  title="Sync chats"
-                  className="absolute right-9 rounded p-1 text-content-muted transition-colors hover:text-content-secondary disabled:cursor-default disabled:opacity-60"
-                >
-                  {isSyncing ? (
-                    <PiSpinner className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <GoSync className="h-4 w-4" />
-                  )}
-                </button>
-              )}
             </div>
 
             {/* Expanded Chats content */}

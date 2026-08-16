@@ -405,6 +405,7 @@ export function ChatInterface({
 
   const {
     syncing,
+    lastSyncFailed,
     syncChats,
     smartSyncChats,
     encryptionKey,
@@ -1830,13 +1831,15 @@ export function ChatInterface({
 
   const handleManualSync = useCallback(async () => {
     try {
-      await syncChats()
+      const result = await syncChats()
       await reloadChats()
+      return result !== false && result.errors.length === 0
     } catch (error) {
       logError('Manual chat sync failed', error, {
         component: 'ChatInterface',
         action: 'handleManualSync',
       })
+      return false
     }
   }, [syncChats, reloadChats])
 
@@ -3508,6 +3511,7 @@ export function ChatInterface({
                 }
                 onManualSync={handleManualSync}
                 isSyncing={syncing}
+                lastSyncFailed={lastSyncFailed}
                 isProjectMode={isProjectMode}
                 activeProjectName={activeProject?.name}
                 onEnterProject={async (projectId, projectName) => {
