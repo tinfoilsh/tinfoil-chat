@@ -854,36 +854,6 @@ export function ChatSidebar({
 
             {/* Action buttons */}
             <div className="flex flex-col items-center gap-1 px-2">
-              {isSignedIn && cloudSyncEnabled && onManualSync && (
-                <div className="group relative">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isSyncing) return
-                      void onManualSync()
-                    }}
-                    disabled={isSyncing}
-                    className={cn(
-                      'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
-                      'text-content-secondary hover:bg-surface-chat hover:text-content-primary disabled:cursor-default disabled:opacity-60',
-                    )}
-                    aria-label={`Sync chats. ${syncStatusLabel}`}
-                  >
-                    {isSyncing ? (
-                      <PiSpinner className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <GoSync className="h-5 w-5" />
-                    )}
-                  </button>
-                  <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                    Sync chats{' '}
-                    <span className="text-content-muted">
-                      {syncStatusLabel}
-                    </span>
-                  </span>
-                </div>
-              )}
-
               {/* New chat button */}
               <div className="group relative">
                 <Link
