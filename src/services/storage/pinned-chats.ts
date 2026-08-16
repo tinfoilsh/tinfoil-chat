@@ -41,15 +41,13 @@ export function normalizePinnedChatIds(value: unknown): string[] {
   const seen = new Set<string>()
   const ids: string[] = []
   for (const valueId of value) {
-    if (
-      typeof valueId !== 'string' ||
-      valueId.trim().length === 0 ||
-      seen.has(valueId)
-    ) {
+    if (typeof valueId !== 'string') {
       continue
     }
-    seen.add(valueId)
-    ids.push(valueId)
+    const id = valueId.trim()
+    if (id.length === 0 || seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
     if (ids.length === MAX_PINNED_CHATS) break
   }
   return ids

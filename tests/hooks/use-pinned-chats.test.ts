@@ -1,8 +1,13 @@
+import { PINNED_CHAT_IDS_CHANGED_EVENT } from '@/constants/settings-events'
+import {
+  AUTH_ACTIVE_USER_ID,
+  USER_PREFS_PINNED_CHAT_IDS,
+} from '@/constants/storage-keys'
 import { usePinnedChats } from '@/hooks/use-pinned-chats'
 import { chatEvents } from '@/services/storage/chat-events'
 import { savePinnedChatIds } from '@/services/storage/pinned-chats'
 import { act, renderHook } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('usePinnedChats', () => {
   beforeEach(() => {
@@ -39,5 +44,31 @@ describe('usePinnedChats', () => {
 
     act(() => chatEvents.emit({ reason: 'delete-all' }))
     expect(result.current.pinnedChatIds).toEqual([])
+  })
+
+  it('does not expose or mutate pins from another active account', () => {
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-a')
+    savePinnedChatIds(['chat-a'])
+
+    const { result } = renderHook(() => usePinnedChats('user-b'))
+    expect(result.current.pinnedChatIds).toEqual([])
+
+    act(() => result.current.pinChat('chat-b'))
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user-a')
+    expect(localStorage.getItem(USER_PREFS_PINNED_CHAT_IDS)).toBe('["chat-a"]')
+  })
+
+  it('does not dispatch changes for no-op removals', () => {
+    savePinnedChatIds([])
+    const listener = vi.fn()
+    window.addEventListener(PINNED_CHAT_IDS_CHANGED_EVENT, listener)
+    const { result } = renderHook(() => usePinnedChats())
+    listener.mockClear()
+
+    act(() => result.current.unpinChat('chat-b'))
+    act(() => chatEvents.emit({ reason: 'delete-all' }))
+
+    expect(listener).not.toHaveBeenCalled()
+    window.removeEventListener(PINNED_CHAT_IDS_CHANGED_EVENT, listener)
   })
 })

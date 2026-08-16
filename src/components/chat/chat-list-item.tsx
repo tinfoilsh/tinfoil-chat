@@ -557,7 +557,7 @@ export function ChatListItem({
       {!isEditing && (
         <div className="flex flex-shrink-0 items-center gap-1.5">
           <div className="pointer-events-none hidden items-center opacity-0 transition-opacity md:flex md:group-focus-within:pointer-events-auto md:group-focus-within:opacity-100 md:group-hover:pointer-events-auto md:group-hover:opacity-100">
-            {canPinChat(chat) && onTogglePin && (
+            {(isPinned || canPinChat(chat)) && onTogglePin && (
               <button
                 type="button"
                 className={cn(
@@ -701,7 +701,7 @@ export function ChatListItem({
                           </button>
                         )}
 
-                        {canPinChat(chat) && onTogglePin && (
+                        {(isPinned || canPinChat(chat)) && onTogglePin && (
                           <button
                             type="button"
                             role="menuitem"

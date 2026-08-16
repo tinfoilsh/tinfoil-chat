@@ -237,6 +237,9 @@ export function ProjectProvider({
             options?.isCurrent,
           )
         ) {
+          if (projectLoadGenerationRef.current === generation) {
+            pendingProjectIdRef.current = committedProjectIdRef.current
+          }
           return false
         }
 
@@ -253,6 +256,7 @@ export function ProjectProvider({
       } catch (err) {
         if (projectLoadGenerationRef.current !== generation) return false
         pendingProjectIdRef.current = committedProjectIdRef.current
+        if (options?.isCurrent && !options.isCurrent()) return false
         const message =
           err instanceof Error ? err.message : 'Failed to load project'
         setError(message)

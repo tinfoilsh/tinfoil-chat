@@ -73,6 +73,25 @@ export function changedProfileFields(
   return changed
 }
 
+export function overlayProfileChanges(
+  remote: ProfileData,
+  before: ProfileData,
+  after: ProfileData,
+): { profile: ProfileData; changedFields: string[] } {
+  const profile = { ...remote }
+  const changedFields = changedProfileFields(after, before)
+  for (const field of changedFields) {
+    if (Object.prototype.hasOwnProperty.call(after, field)) {
+      ;(profile as Record<string, unknown>)[field] = (
+        after as Record<string, unknown>
+      )[field]
+    } else {
+      delete (profile as Record<string, unknown>)[field]
+    }
+  }
+  return { profile, changedFields }
+}
+
 function nonEmptyString(value: unknown): boolean {
   return typeof value === 'string' && value.trim().length > 0
 }
@@ -149,6 +168,14 @@ export function mergeProfilesThreeWay(args: {
     const remoteValue = (remote as Record<string, unknown>)[field]
     const lc = fieldClock(local, field, localTrusted)
     const rc = fieldClock(remote, field, remoteTrusted)
+
+    if (
+      !Object.prototype.hasOwnProperty.call(remote, field) &&
+      PRESERVE_LOCAL_WHEN_REMOTE_OMITS.has(field)
+    ) {
+      if (lc) mergedClocks[field] = lc
+      continue
+    }
 
     if (valuesEqual(localValue, baselineValue)) {
       if (Object.prototype.hasOwnProperty.call(remote, field)) {

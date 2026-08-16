@@ -38,8 +38,16 @@ describe('pinned chats storage', () => {
 
   it('sanitizes malformed ids and removes confirmed deletions', () => {
     expect(
-      normalizePinnedChatIds(['chat-a', '', '   ', 3, 'chat-a', ' chat-b ']),
-    ).toEqual(['chat-a', ' chat-b '])
+      normalizePinnedChatIds([
+        'chat-a',
+        '',
+        '   ',
+        3,
+        'chat-a',
+        ' chat-b ',
+        'chat-b',
+      ]),
+    ).toEqual(['chat-a', 'chat-b'])
     expect(removePinnedChatIds(['chat-a', 'chat-b'], ['chat-a'])).toEqual([
       'chat-b',
     ])

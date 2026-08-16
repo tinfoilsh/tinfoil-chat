@@ -101,9 +101,30 @@ describe('ChatListItem favorites', () => {
     expect(onTogglePin).toHaveBeenCalledOnce()
   })
 
-  it('does not offer pinning for temporary or pending chats', () => {
+  it('does not offer pinning for temporary chats', () => {
     renderChatListItem({
       chat: { ...savedChat, isTemporary: true },
+      onTogglePin: vi.fn(),
+    })
+    expect(
+      screen.queryByRole('button', { name: 'Pin to Favorites' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('only offers unpinning while a chat save is pending', () => {
+    renderChatListItem({
+      chat: { ...savedChat, pendingSave: true },
+      isPinned: true,
+      onTogglePin: vi.fn(),
+    })
+    expect(
+      screen.getByRole('button', { name: 'Remove from Favorites' }),
+    ).toBeInTheDocument()
+  })
+
+  it('does not offer pinning while a chat save is pending', () => {
+    renderChatListItem({
+      chat: { ...savedChat, pendingSave: true },
       onTogglePin: vi.fn(),
     })
     expect(

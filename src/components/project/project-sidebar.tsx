@@ -128,6 +128,7 @@ interface ProjectSidebarProps {
   pinnedChatIds?: readonly string[]
   onToggleFavorite?: (chat: ChatItemData) => void | Promise<void>
   onOpenFavorite?: (chat: ChatItemData) => void | Promise<void>
+  cloudSyncEnabled: boolean
   windowWidth: number
 }
 
@@ -302,6 +303,7 @@ export function ProjectSidebar({
   pinnedChatIds = [],
   onToggleFavorite,
   onOpenFavorite,
+  cloudSyncEnabled,
   windowWidth,
 }: ProjectSidebarProps) {
   const { isSignedIn } = useAuth()
@@ -1016,37 +1018,42 @@ export function ProjectSidebar({
             </Link>
           </div>
 
-          <section className="relative z-10 flex-none border-y border-border-subtle">
-            <div className="flex items-center gap-2 px-4 py-3 text-sm text-content-secondary">
-              <PiPushPin className="h-4 w-4" aria-hidden="true" />
-              <h2 className="font-aeonik font-medium">Favorites</h2>
-            </div>
-            {resolvedFavoriteChats.length > 0 ? (
-              <ChatList
-                chats={resolvedFavoriteChats}
-                currentChatId={currentChatId}
-                isDarkMode={isDarkMode}
-                pixelateSidebarChatTitles={pixelateSidebarChatTitles}
-                getChatHref={(chat) =>
-                  getChatPath(chat.id, { projectId: chat.projectId })
-                }
-                onSelectChat={(chatId) => {
-                  const favorite = resolvedFavoriteChats.find(
-                    (chat) => chat.id === chatId,
-                  )
-                  if (favorite) void onOpenFavorite?.(favorite)
-                }}
-                onUpdateTitle={updateChatTitle}
-                onDeleteChat={handleDeleteChat}
-                pinnedChatIds={pinnedChatIds}
-                onTogglePin={onToggleFavorite}
-              />
-            ) : (
-              <p className="px-4 pb-3 font-aeonik-fono text-xs text-content-muted">
-                Pin chats for quick access.
-              </p>
-            )}
-          </section>
+          {isSignedIn && cloudSyncEnabled && (
+            <section className="relative z-10 flex-none border-y border-border-subtle">
+              <div className="flex items-center gap-2 px-4 py-3 text-sm text-content-secondary">
+                <PiPushPin className="h-4 w-4" aria-hidden="true" />
+                <h2 className="font-aeonik font-medium">Favorites</h2>
+              </div>
+              {resolvedFavoriteChats.length > 0 ? (
+                <ChatList
+                  chats={resolvedFavoriteChats}
+                  currentChatId={currentChatId}
+                  isDarkMode={isDarkMode}
+                  pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+                  getChatHref={(chat) =>
+                    getChatPath(chat.id, { projectId: chat.projectId })
+                  }
+                  onSelectChat={(chatId) => {
+                    const favorite = resolvedFavoriteChats.find(
+                      (chat) => chat.id === chatId,
+                    )
+                    if (favorite) {
+                      void onOpenFavorite?.(favorite)
+                      if (windowWidth < MOBILE_BREAKPOINT) setIsOpen(false)
+                    }
+                  }}
+                  onUpdateTitle={updateChatTitle}
+                  onDeleteChat={handleDeleteChat}
+                  pinnedChatIds={pinnedChatIds}
+                  onTogglePin={onToggleFavorite}
+                />
+              ) : (
+                <p className="px-4 pb-3 font-aeonik-fono text-xs text-content-muted">
+                  Pin chats for quick access.
+                </p>
+              )}
+            </section>
+          )}
 
           {/* Project Settings Dropdown */}
           <div className="relative z-10 flex-none border-y border-border-subtle">

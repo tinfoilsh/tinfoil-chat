@@ -82,6 +82,7 @@ import { cloudSync, SyncInProgressError } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { generateCodeExecutionAccessToken } from '@/services/exec-snapshot/access-token'
 import { isPrfSupported, PrfNotSupportedError } from '@/services/passkey'
+import { chatEvents } from '@/services/storage/chat-events'
 import { chatStorage } from '@/services/storage/chat-storage'
 import {
   INDEXED_DB_UPGRADE_BLOCKED_EVENT,
@@ -995,7 +996,8 @@ export function ChatInterface({
     [invalidateFavoriteNavigation, loadChatByIdWithoutNavigationInvalidation],
   )
 
-  const { pinnedChatIds, pinChat, unpinChat, unpinChats } = usePinnedChats()
+  const { pinnedChatIds, pinChat, unpinChat, unpinChats } =
+    usePinnedChats(authUserId)
   const favoriteHydrationGenerationRef = useRef(0)
   const favoriteHydrationAccountRef = useRef(authUserId)
   const currentFavoriteAccountRef = useRef(authUserId)
@@ -1003,6 +1005,17 @@ export function ChatInterface({
   const favoriteHydrationCloudSyncRef = useRef(cloudSyncSettingEnabled)
   const favoriteHydrationMountedRef = useRef(false)
   const attemptedFavoriteHydrationsRef = useRef(new Set<string>())
+  const unavailableFavoriteHydrationsRef = useRef(new Set<string>())
+  const [favoriteHydrationRetryVersion, setFavoriteHydrationRetryVersion] =
+    useState(0)
+  const retryUnavailableFavoriteHydrations = useCallback(() => {
+    if (unavailableFavoriteHydrationsRef.current.size === 0) return
+    for (const chatId of unavailableFavoriteHydrationsRef.current) {
+      attemptedFavoriteHydrationsRef.current.delete(chatId)
+    }
+    unavailableFavoriteHydrationsRef.current.clear()
+    setFavoriteHydrationRetryVersion((version) => version + 1)
+  }, [])
   const missingPinnedChatIds = useMemo(() => {
     const loadedIds = new Set(chats.map((chat) => chat.id))
     return pinnedChatIds.filter((chatId) => !loadedIds.has(chatId))
@@ -1027,7 +1040,33 @@ export function ChatInterface({
     favoriteHydrationCloudSyncRef.current = cloudSyncSettingEnabled
     favoriteHydrationGenerationRef.current += 1
     attemptedFavoriteHydrationsRef.current.clear()
+    unavailableFavoriteHydrationsRef.current.clear()
   }, [authUserId, cloudSyncSettingEnabled])
+
+  useEffect(() => {
+    const unsubscribeChats = chatEvents.on((event) => {
+      if (
+        event.reason === 'sync' ||
+        event.reason === 'pagination' ||
+        event.reason === 'recovery'
+      ) {
+        retryUnavailableFavoriteHydrations()
+      }
+    })
+    window.addEventListener('online', retryUnavailableFavoriteHydrations)
+    window.addEventListener(
+      ENCRYPTION_KEY_CHANGED_EVENT,
+      retryUnavailableFavoriteHydrations,
+    )
+    return () => {
+      unsubscribeChats()
+      window.removeEventListener('online', retryUnavailableFavoriteHydrations)
+      window.removeEventListener(
+        ENCRYPTION_KEY_CHANGED_EVENT,
+        retryUnavailableFavoriteHydrations,
+      )
+    }
+  }, [retryUnavailableFavoriteHydrations])
 
   useEffect(() => {
     const pinnedIds = new Set(pinnedChatIds)
@@ -1035,6 +1074,7 @@ export function ChatInterface({
     for (const attemptedId of attemptedFavoriteHydrationsRef.current) {
       if (!pinnedIds.has(attemptedId) || loadedIds.has(attemptedId)) {
         attemptedFavoriteHydrationsRef.current.delete(attemptedId)
+        unavailableFavoriteHydrationsRef.current.delete(attemptedId)
       }
     }
     const invalidLoadedFavoriteIds = chats
@@ -1087,6 +1127,11 @@ export function ChatInterface({
         .filter(({ result }) => result.status === 'invalid')
         .map(({ chatId }) => chatId)
       if (idsToPrune.length > 0) unpinChats(idsToPrune)
+      for (const { chatId, result } of results) {
+        if (result.status === 'unavailable') {
+          unavailableFavoriteHydrationsRef.current.add(chatId)
+        }
+      }
 
       const hydratedChats = results.flatMap(({ result }) =>
         result.status === 'ready' ? [result.chat] : [],
@@ -1107,6 +1152,7 @@ export function ChatInterface({
     authUserId,
     chats,
     cloudSyncSettingEnabled,
+    favoriteHydrationRetryVersion,
     isSignedIn,
     missingPinnedChatIds,
     missingPinnedChatIdsKey,
@@ -3703,6 +3749,7 @@ export function ChatInterface({
                   pinnedChatIds={pinnedChatIds}
                   onToggleFavorite={handleToggleFavorite}
                   onOpenFavorite={handleOpenFavorite}
+                  cloudSyncEnabled={cloudSyncSettingEnabled}
                   windowWidth={windowWidth}
                 />
               ) : (
@@ -3745,6 +3792,7 @@ export function ChatInterface({
                   pinnedChatIds={pinnedChatIds}
                   onToggleFavorite={handleToggleFavorite}
                   onOpenFavorite={handleOpenFavorite}
+                  cloudSyncEnabled={cloudSyncSettingEnabled}
                   windowWidth={windowWidth}
                 />
               )}
