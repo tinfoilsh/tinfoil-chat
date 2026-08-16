@@ -22,6 +22,7 @@ export const CONSTANTS = {
   // model's context window by token estimate rather than by byte size
   MAX_TEXT_DOCUMENT_SIZE_MB: 50,
   MAX_TEXT_DOCUMENT_SIZE_BYTES: 50 * 1024 * 1024,
+  MAX_IMAGE_DIMENSION_PX: 1536,
   // Voice recording timeout in milliseconds (10 minutes)
   RECORDING_TIMEOUT_MS: 600000,
   // Default audio model for voice transcription
