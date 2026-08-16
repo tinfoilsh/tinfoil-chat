@@ -1360,6 +1360,7 @@ export function ChatSidebar({
                         onDeleteChat={deleteChat}
                         pinnedChatIds={pinnedChatIds}
                         showPinnedIndicators={false}
+                        showDesktopPinActions={false}
                         onTogglePin={onToggleFavorite}
                       />
                     ) : (

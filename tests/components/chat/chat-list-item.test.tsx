@@ -21,6 +21,7 @@ function renderChatListItem({
   isStreaming = false,
   isPinned = false,
   showPinnedIndicator = true,
+  showDesktopPinAction = true,
   onTogglePin,
 }: {
   href?: string
@@ -32,6 +33,7 @@ function renderChatListItem({
   isStreaming?: boolean
   isPinned?: boolean
   showPinnedIndicator?: boolean
+  showDesktopPinAction?: boolean
   onTogglePin?: () => void
 } = {}) {
   const renderItem = (item: ChatItemData, streaming: boolean) => (
@@ -47,6 +49,7 @@ function renderChatListItem({
       isStreaming={streaming}
       isPinned={isPinned}
       showPinnedIndicator={showPinnedIndicator}
+      showDesktopPinAction={showDesktopPinAction}
       onTogglePin={onTogglePin}
       onSelect={onSelect}
       onStartEdit={vi.fn()}
@@ -104,17 +107,18 @@ describe('ChatListItem favorites', () => {
     expect(onTogglePin).toHaveBeenCalledOnce()
   })
 
-  it('can hide the pinned marker while retaining the unpin action', () => {
+  it('can hide pin controls next to a favorite title', () => {
     renderChatListItem({
       isPinned: true,
       showPinnedIndicator: false,
+      showDesktopPinAction: false,
       onTogglePin: vi.fn(),
     })
 
     expect(screen.queryByLabelText('Pinned to Favorites')).toBeNull()
     expect(
-      screen.getByRole('button', { name: 'Remove from Favorites' }),
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: 'Remove from Favorites' }),
+    ).toBeNull()
   })
 
   it('does not offer pinning for temporary chats', () => {

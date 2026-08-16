@@ -1141,6 +1141,7 @@ export function ProjectSidebar({
                         onDeleteChat={handleDeleteChat}
                         pinnedChatIds={pinnedChatIds}
                         showPinnedIndicators={false}
+                        showDesktopPinActions={false}
                         onTogglePin={onToggleFavorite}
                       />
                     ) : (

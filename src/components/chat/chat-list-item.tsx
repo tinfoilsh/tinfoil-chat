@@ -116,6 +116,7 @@ interface ChatListItemProps {
   onRemoveFromProject?: () => void
   isPinned?: boolean
   showPinnedIndicator?: boolean
+  showDesktopPinAction?: boolean
   onTogglePin?: () => void | Promise<void>
 }
 
@@ -195,6 +196,7 @@ export function ChatListItem({
   onRemoveFromProject,
   isPinned = false,
   showPinnedIndicator = true,
+  showDesktopPinAction = true,
   onTogglePin,
 }: ChatListItemProps) {
   const [displayTitle, setDisplayTitle] = useState(chat.title)
@@ -559,34 +561,38 @@ export function ChatListItem({
       {!isEditing && (
         <div className="flex flex-shrink-0 items-center gap-1.5">
           <div className="pointer-events-none hidden items-center opacity-0 transition-opacity md:flex md:group-focus-within:pointer-events-auto md:group-focus-within:opacity-100 md:group-hover:pointer-events-auto md:group-hover:opacity-100">
-            {(isPinned || canPinChat(chat)) && onTogglePin && (
-              <button
-                type="button"
-                className={cn(
-                  'mr-1 rounded p-1 transition-colors',
-                  isPinned
-                    ? 'text-content-primary'
-                    : 'text-content-muted hover:text-content-secondary',
-                  isDarkMode
-                    ? 'hover:bg-surface-chat hover:text-white'
-                    : 'hover:bg-surface-sidebar',
-                )}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  void onTogglePin()
-                }}
-                aria-label={
-                  isPinned ? 'Remove from Favorites' : 'Pin to Favorites'
-                }
-                title={isPinned ? 'Remove from Favorites' : 'Pin to Favorites'}
-              >
-                {isPinned ? (
-                  <PiPushPinFill className="h-4 w-4" aria-hidden="true" />
-                ) : (
-                  <PiPushPin className="h-4 w-4" aria-hidden="true" />
-                )}
-              </button>
-            )}
+            {showDesktopPinAction &&
+              (isPinned || canPinChat(chat)) &&
+              onTogglePin && (
+                <button
+                  type="button"
+                  className={cn(
+                    'mr-1 rounded p-1 transition-colors',
+                    isPinned
+                      ? 'text-content-primary'
+                      : 'text-content-muted hover:text-content-secondary',
+                    isDarkMode
+                      ? 'hover:bg-surface-chat hover:text-white'
+                      : 'hover:bg-surface-sidebar',
+                  )}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void onTogglePin()
+                  }}
+                  aria-label={
+                    isPinned ? 'Remove from Favorites' : 'Pin to Favorites'
+                  }
+                  title={
+                    isPinned ? 'Remove from Favorites' : 'Pin to Favorites'
+                  }
+                >
+                  {isPinned ? (
+                    <PiPushPinFill className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <PiPushPin className="h-4 w-4" aria-hidden="true" />
+                  )}
+                </button>
+              )}
             {hasRealTitle && (
               <button
                 type="button"
