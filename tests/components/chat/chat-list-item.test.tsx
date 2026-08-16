@@ -121,6 +121,19 @@ describe('ChatListItem favorites', () => {
     ).toBeNull()
   })
 
+  it('can hide only the pinned marker', () => {
+    renderChatListItem({
+      isPinned: true,
+      showPinnedIndicator: false,
+      onTogglePin: vi.fn(),
+    })
+
+    expect(screen.queryByLabelText('Pinned to Favorites')).toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'Remove from Favorites' }),
+    ).toBeInTheDocument()
+  })
+
   it('does not offer pinning for temporary chats', () => {
     renderChatListItem({
       chat: { ...savedChat, isTemporary: true },

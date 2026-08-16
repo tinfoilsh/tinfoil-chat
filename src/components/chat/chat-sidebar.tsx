@@ -299,7 +299,8 @@ export function ChatSidebar({
   const [localOnlyModeEnabled, setLocalOnlyModeEnabled] = useState(
     isLocalOnlyModeEnabled(),
   )
-  const { isSignedIn } = useAuth()
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth()
+  const favoritesAvailable = Boolean(isSignedIn && cloudSyncEnabled)
   const { user } = useUser()
 
   const {
@@ -424,6 +425,18 @@ export function ChatSidebar({
       isFavoritesExpanded ? 'true' : 'false',
     )
   }, [isFavoritesExpanded, isProjectsExpanded])
+
+  useEffect(() => {
+    if (isAuthLoaded && !favoritesAvailable && isFavoritesExpanded) {
+      setIsFavoritesExpanded(false)
+      if (!isProjectsExpanded) setIsChatHistoryExpanded(true)
+    }
+  }, [
+    favoritesAvailable,
+    isAuthLoaded,
+    isFavoritesExpanded,
+    isProjectsExpanded,
+  ])
 
   // Listen for cloud sync setting changes
   useEffect(() => {
@@ -574,11 +587,12 @@ export function ChatSidebar({
   // premium session) would otherwise leave a signed-out/non-premium user
   // with no Projects section AND a collapsed chat list — an empty sidebar.
   useEffect(() => {
-    if (!hasPinnedProjectsHeader && isProjectsExpanded) {
+    if (isAuthLoaded && !hasPinnedProjectsHeader && isProjectsExpanded) {
       setIsProjectsExpanded(false)
-      if (!isFavoritesExpanded) setIsChatHistoryExpanded(true)
+      setIsFavoritesExpanded(false)
+      setIsChatHistoryExpanded(true)
     }
-  }, [hasPinnedProjectsHeader, isFavoritesExpanded, isProjectsExpanded])
+  }, [hasPinnedProjectsHeader, isAuthLoaded, isProjectsExpanded])
 
   const hideScrollbarWhileSectionsAnimate = useCallback(() => {
     setHideScrollbarDuringAnimation(true)
