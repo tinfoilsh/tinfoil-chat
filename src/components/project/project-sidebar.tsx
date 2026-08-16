@@ -329,7 +329,7 @@ export function ProjectSidebar({
   const { handleDocumentUpload: processDocument, isDocumentUploading } =
     useDocumentUploader()
   const [settingsExpanded, setSettingsExpanded] = useState(false)
-  const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(true)
+  const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(false)
   const hasLoadedFavoritesExpandedRef = useRef(false)
   const [documentsExpanded, setDocumentsExpanded] = useState(false)
   const [memoryExpanded, setMemoryExpanded] = useState(false)

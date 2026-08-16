@@ -239,7 +239,7 @@ export function ChatSidebar({
     return false
   })
   const [isCreatingProject, setIsCreatingProject] = useState(false)
-  const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(true)
+  const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(false)
   const hasLoadedFavoritesExpandedRef = useRef(false)
   const [isChatHistoryExpanded, setIsChatHistoryExpanded] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -410,9 +410,7 @@ export function ChatSidebar({
       const stored = sessionStorage.getItem(UI_SIDEBAR_FAVORITES_EXPANDED)
       const requestedSection = sessionStorage.getItem(UI_SIDEBAR_EXPAND_SECTION)
       const shouldExpand =
-        stored !== 'false' &&
-        !isProjectsExpanded &&
-        requestedSection !== 'chats'
+        stored === 'true' && !isProjectsExpanded && requestedSection !== 'chats'
       setIsFavoritesExpanded(shouldExpand)
       if (shouldExpand) {
         setIsProjectsExpanded(false)
