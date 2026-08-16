@@ -1,5 +1,12 @@
+import { canRequestChatPin } from '@/services/storage/pinned-chats'
 import { logError } from '@/utils/error-handling'
-import { useCallback, useEffect, useState, type DragEventHandler } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type DragEventHandler,
+} from 'react'
 import type { ChatItemData } from './chat-list-item'
 
 interface FavoriteDropTargetOptions {
@@ -18,24 +25,35 @@ export function useFavoriteDropTarget({
   clearDragState,
 }: FavoriteDropTargetOptions) {
   const [isFavoriteDropTarget, setIsFavoriteDropTarget] = useState(false)
+  const draggedChat = useMemo(
+    () => chats.find((chat) => chat.id === draggingChatId),
+    [chats, draggingChatId],
+  )
+  const canAcceptDraggedChat = Boolean(
+    draggedChat &&
+    onToggleFavorite &&
+    !pinnedChatIds.includes(draggedChat.id) &&
+    canRequestChatPin(draggedChat),
+  )
 
   useEffect(() => {
-    if (!draggingChatId) setIsFavoriteDropTarget(false)
-  }, [draggingChatId])
+    if (!canAcceptDraggedChat) setIsFavoriteDropTarget(false)
+  }, [canAcceptDraggedChat])
 
-  const onDragOver = useCallback<DragEventHandler<HTMLElement>>((event) => {
-    if (!event.dataTransfer.types.includes('application/x-chat-id')) return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'copy'
-    setIsFavoriteDropTarget(true)
-  }, [])
-
-  const onDragEnter = useCallback<DragEventHandler<HTMLElement>>((event) => {
-    if (!event.dataTransfer.types.includes('application/x-chat-id')) return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'copy'
-    setIsFavoriteDropTarget(true)
-  }, [])
+  const activateDropTarget = useCallback<DragEventHandler<HTMLElement>>(
+    (event) => {
+      if (
+        !canAcceptDraggedChat ||
+        !event.dataTransfer.types.includes('application/x-chat-id')
+      ) {
+        return
+      }
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'copy'
+      setIsFavoriteDropTarget(true)
+    },
+    [canAcceptDraggedChat],
+  )
 
   const onDragLeave = useCallback<DragEventHandler<HTMLElement>>((event) => {
     const nextTarget = event.relatedTarget
@@ -55,7 +73,12 @@ export function useFavoriteDropTarget({
       setIsFavoriteDropTarget(false)
       const chatId = event.dataTransfer.getData('application/x-chat-id')
       const chat = chats.find((candidate) => candidate.id === chatId)
-      if (!chat || pinnedChatIds.includes(chatId) || !onToggleFavorite) {
+      if (
+        !chat ||
+        !canRequestChatPin(chat) ||
+        pinnedChatIds.includes(chatId) ||
+        !onToggleFavorite
+      ) {
         clearDragState()
         return
       }
@@ -79,8 +102,8 @@ export function useFavoriteDropTarget({
   return {
     isFavoriteDropTarget,
     favoriteDropTargetProps: {
-      onDragOver,
-      onDragEnter,
+      onDragOver: activateDropTarget,
+      onDragEnter: activateDropTarget,
       onDragLeave,
       onDrop,
     },

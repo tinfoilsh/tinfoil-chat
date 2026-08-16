@@ -60,11 +60,12 @@ describe('useFavoriteDropTarget', () => {
       }),
     )
 
-    act(() =>
-      result.current.favoriteDropTargetProps.onDrop(
-        dragEvent('chat-a') as never,
-      ),
-    )
+    const event = dragEvent('chat-a')
+    act(() => result.current.favoriteDropTargetProps.onDragOver(event as never))
+    expect(result.current.isFavoriteDropTarget).toBe(false)
+    expect(event.preventDefault).not.toHaveBeenCalled()
+
+    act(() => result.current.favoriteDropTargetProps.onDrop(event as never))
 
     expect(onToggleFavorite).not.toHaveBeenCalled()
     expect(clearDragState).toHaveBeenCalledOnce()
@@ -77,6 +78,7 @@ describe('useFavoriteDropTarget', () => {
           chats: [{ id: 'chat-a', title: 'Chat A', createdAt: new Date() }],
           pinnedChatIds: [],
           draggingChatId,
+          onToggleFavorite: vi.fn(),
           clearDragState: vi.fn(),
         }),
       { initialProps: { draggingChatId: 'chat-a' as string | null } },
@@ -91,5 +93,36 @@ describe('useFavoriteDropTarget', () => {
 
     rerender({ draggingChatId: null })
     expect(result.current.isFavoriteDropTarget).toBe(false)
+  })
+
+  it('does not highlight for an ineligible chat', () => {
+    const onToggleFavorite = vi.fn()
+    const clearDragState = vi.fn()
+    const { result } = renderHook(() =>
+      useFavoriteDropTarget({
+        chats: [
+          {
+            id: 'chat-a',
+            title: 'Chat A',
+            createdAt: new Date(),
+            isTemporary: true,
+          },
+        ],
+        pinnedChatIds: [],
+        draggingChatId: 'chat-a',
+        onToggleFavorite,
+        clearDragState,
+      }),
+    )
+    const event = dragEvent('chat-a')
+
+    act(() => result.current.favoriteDropTargetProps.onDragOver(event as never))
+
+    expect(result.current.isFavoriteDropTarget).toBe(false)
+    expect(event.preventDefault).not.toHaveBeenCalled()
+
+    act(() => result.current.favoriteDropTargetProps.onDrop(event as never))
+    expect(onToggleFavorite).not.toHaveBeenCalled()
+    expect(clearDragState).toHaveBeenCalledOnce()
   })
 })
