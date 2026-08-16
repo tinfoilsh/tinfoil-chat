@@ -40,7 +40,7 @@ describe('SidebarSyncButton', () => {
     expect(screen.getByRole('button')).toHaveAccessibleName(
       'Sync chats. Synced',
     )
-    expect(screen.getByText('Synced!')).toBeInTheDocument()
+    expect(screen.getByText('Synced!')).toHaveAttribute('aria-hidden', 'false')
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(
@@ -81,6 +81,6 @@ describe('SidebarSyncButton', () => {
     expect(screen.getByRole('button')).toHaveAccessibleName(
       'Sync chats. Sync failed',
     )
-    expect(screen.queryByText('Synced!')).not.toBeInTheDocument()
+    expect(screen.getByText('Synced!')).toHaveAttribute('aria-hidden', 'true')
   })
 })

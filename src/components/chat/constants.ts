@@ -42,7 +42,9 @@ export const CONSTANTS = {
   CHAT_SIDEBAR_RAIL_FADE_OUT_DURATION_S: 0.1,
   SIDEBAR_SYNC_MIN_SPINNER_MS: 1000,
   SIDEBAR_SYNC_SUCCESS_FEEDBACK_MS: 1500,
-  SIDEBAR_SYNC_FEEDBACK_ANIMATION_S: 0.18,
+  SIDEBAR_SYNC_FEEDBACK_EXIT_S: 0.14,
+  SIDEBAR_SYNC_FEEDBACK_ENTER_S: 0.22,
+  SIDEBAR_SYNC_FEEDBACK_ENTER_DELAY_S: 0.06,
   // Height of a pinned sidebar section header (Projects/Chats). The Chats
   // header offsets by this amount so it stacks below the pinned Projects
   // header while scrolling.

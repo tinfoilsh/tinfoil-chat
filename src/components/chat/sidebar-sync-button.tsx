@@ -1,5 +1,5 @@
 import { cn } from '@/components/ui/utils'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useState } from 'react'
 import { GoSync } from 'react-icons/go'
 import { PiSpinner } from 'react-icons/pi'
@@ -27,6 +27,7 @@ export function SidebarSyncButton({
   const [feedback, setFeedback] = useState<SyncFeedback>('idle')
   const showSpinner = isSyncing || feedback === 'syncing'
   const isDisabled = isSyncing || feedback !== 'idle'
+  const showSuccess = feedback === 'success'
   const statusLabel = showSpinner
     ? 'Syncing'
     : syncFailed
@@ -85,38 +86,75 @@ export function SidebarSyncButton({
           )}
           <span className="font-aeonik font-medium">Sync</span>
         </span>
-        <AnimatePresence initial={false}>
-          {feedback === 'success' ? (
+        <span className="relative h-5 w-16 shrink-0">
+          <motion.span
+            initial={false}
+            animate={{
+              opacity: showSuccess ? 0 : 1,
+              filter: showSuccess ? 'blur(2px)' : 'blur(0px)',
+            }}
+            transition={
+              showSuccess
+                ? {
+                    duration: CONSTANTS.SIDEBAR_SYNC_FEEDBACK_EXIT_S,
+                    ease: 'easeOut',
+                  }
+                : {
+                    duration: CONSTANTS.SIDEBAR_SYNC_FEEDBACK_ENTER_S,
+                    delay: CONSTANTS.SIDEBAR_SYNC_FEEDBACK_ENTER_DELAY_S,
+                    ease: 'easeOut',
+                  }
+            }
+            className="absolute inset-0 flex items-center justify-end"
+            aria-hidden="true"
+          >
             <motion.span
-              key="success"
-              initial={{ opacity: 0, y: 3 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -3 }}
-              transition={{
-                duration: CONSTANTS.SIDEBAR_SYNC_FEEDBACK_ANIMATION_S,
-              }}
-              className="text-xs font-medium text-green-600 dark:text-green-400"
-            >
-              Synced!
-            </motion.span>
-          ) : (
-            <motion.span
-              key="status"
-              initial={{ opacity: 0, scale: 0.5 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.5 }}
-              transition={{
-                duration: CONSTANTS.SIDEBAR_SYNC_FEEDBACK_ANIMATION_S,
-              }}
+              initial={false}
+              animate={{ scale: showSuccess ? 0.7 : 1 }}
+              transition={
+                showSuccess
+                  ? {
+                      duration: CONSTANTS.SIDEBAR_SYNC_FEEDBACK_EXIT_S,
+                      ease: 'easeOut',
+                    }
+                  : {
+                      duration: CONSTANTS.SIDEBAR_SYNC_FEEDBACK_ENTER_S,
+                      delay: CONSTANTS.SIDEBAR_SYNC_FEEDBACK_ENTER_DELAY_S,
+                      ease: 'easeOut',
+                    }
+              }
               className={cn(
                 'h-2 w-2 rounded-full',
                 syncFailed ? 'bg-orange-500' : 'bg-green-500',
               )}
               title={statusLabel}
-              aria-hidden="true"
             />
-          )}
-        </AnimatePresence>
+          </motion.span>
+          <motion.span
+            initial={false}
+            animate={{
+              opacity: showSuccess ? 1 : 0,
+              y: showSuccess ? 0 : 3,
+              filter: showSuccess ? 'blur(0px)' : 'blur(2px)',
+            }}
+            transition={
+              showSuccess
+                ? {
+                    duration: CONSTANTS.SIDEBAR_SYNC_FEEDBACK_ENTER_S,
+                    delay: CONSTANTS.SIDEBAR_SYNC_FEEDBACK_ENTER_DELAY_S,
+                    ease: 'easeOut',
+                  }
+                : {
+                    duration: CONSTANTS.SIDEBAR_SYNC_FEEDBACK_EXIT_S,
+                    ease: 'easeOut',
+                  }
+            }
+            className="pointer-events-none absolute inset-0 flex items-center justify-end whitespace-nowrap text-xs font-medium text-green-600 dark:text-green-400"
+            aria-hidden={!showSuccess}
+          >
+            Synced!
+          </motion.span>
+        </span>
       </button>
     </div>
   )
