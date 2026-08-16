@@ -390,20 +390,20 @@ function ParseFailureCard({
           : `The response didn't match the ${toolName} widget's expected shape.`
 
   return (
-    <div className="my-4 flex items-center justify-between gap-3 rounded-lg border border-border-subtle bg-surface-card px-4 py-3 text-sm">
-      <div className="flex flex-col">
+    <div className="my-4 flex flex-col items-stretch gap-3 rounded-lg border border-border-subtle bg-surface-card px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
+      <div className="flex min-w-0 flex-col">
         <span className="font-medium text-content-primary">
           Couldn&apos;t display {prettyWidgetName(toolName)}
         </span>
         <span className="text-xs text-content-muted">{description}</span>
       </div>
-      <div className="flex flex-shrink-0 items-center gap-2">
+      <div className="flex w-full flex-shrink-0 flex-col items-stretch gap-2 md:w-auto md:flex-row md:items-center">
         {onRetryToolCall && (
           <button
             type="button"
             onClick={() => void handleRetryToolCall()}
             disabled={isRetrying}
-            className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-surface-chat-background px-3 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-surface-card disabled:cursor-default disabled:opacity-60"
+            className="inline-flex w-full flex-shrink-0 items-center justify-center gap-1.5 rounded-md border border-brand-accent-dark bg-brand-accent-dark px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-accent-dark/90 disabled:cursor-default disabled:opacity-60 md:w-auto"
           >
             <RefreshCw
               className={`h-3.5 w-3.5 ${isRetrying ? 'animate-spin' : ''}`}
@@ -416,7 +416,7 @@ function ParseFailureCard({
             type="button"
             onClick={onRetry}
             disabled={isRetrying}
-            className="inline-flex flex-shrink-0 items-center rounded-md border border-border-subtle bg-surface-chat-background px-3 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-surface-card disabled:cursor-default disabled:opacity-60"
+            className="inline-flex w-full flex-shrink-0 items-center justify-center rounded-md border border-border-subtle bg-surface-chat-background px-3 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-surface-card disabled:cursor-default disabled:opacity-60 md:w-auto"
           >
             Regenerate response
           </button>

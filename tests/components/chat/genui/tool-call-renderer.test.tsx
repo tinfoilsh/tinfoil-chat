@@ -302,6 +302,17 @@ describe('GenUIToolCallRenderer', () => {
     )
 
     const retryButton = screen.getByRole('button', { name: 'Retry widget' })
+    expect(retryButton).toHaveClass(
+      'w-full',
+      'bg-brand-accent-dark',
+      'text-white',
+      'md:w-auto',
+    )
+    expect(retryButton.parentElement).toHaveClass('flex-col', 'md:flex-row')
+    expect(retryButton.parentElement?.parentElement).toHaveClass(
+      'flex-col',
+      'md:flex-row',
+    )
     expect(
       screen.getByRole('button', { name: 'Regenerate response' }),
     ).toBeInTheDocument()

@@ -712,7 +712,8 @@ const DefaultMessageComponent = ({
 
       {/* Actions for assistant messages - hidden while streaming the last response */}
       {showAssistantFooter && (
-        <div className="mt-4 flex w-full items-center justify-between gap-3 px-4">
+        <div className="mt-4 flex w-full flex-col items-start gap-2 px-4 md:flex-row-reverse md:items-center md:justify-between md:gap-3">
+          <MessageMetadata modelDisplayName={modelDisplayName} />
           <div
             className={`flex items-center gap-1 transition-opacity duration-500 ease-in-out ${
               showActions ? 'opacity-100' : 'pointer-events-none opacity-0'
@@ -750,7 +751,6 @@ const DefaultMessageComponent = ({
               </>
             )}
           </div>
-          <MessageMetadata modelDisplayName={modelDisplayName} />
         </div>
       )}
     </div>
