@@ -22,7 +22,10 @@ if (!releaseRef?.startsWith('v')) {
 const releaseVersion = releaseRef.slice(1)
 const releaseBaseVersion = releaseVersion.split('-', 1)[0]
 
-if (releaseBaseVersion !== packageVersion) {
+if (
+  releaseVersion !== packageVersion &&
+  releaseBaseVersion !== packageVersion
+) {
   throw new Error(
     `Release tag ${releaseRef} does not match package version ${packageVersion}.`,
   )
