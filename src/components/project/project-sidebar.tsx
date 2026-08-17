@@ -40,7 +40,6 @@ import {
   CheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  DocumentIcon,
   DocumentPlusIcon,
   NoSymbolIcon,
 } from '@heroicons/react/24/outline'
@@ -1386,7 +1385,7 @@ export function ProjectSidebar({
               )}
             >
               <span className="flex items-center gap-2">
-                <DocumentIcon className="h-4 w-4" />
+                <TfDocument className="h-4 w-4" />
                 <span className="font-aeonik font-medium">
                   Documents {isLoading ? '' : `(${projectDocuments.length})`}
                 </span>

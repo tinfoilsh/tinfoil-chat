@@ -30,7 +30,6 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CloudIcon,
-  FolderPlusIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
@@ -38,6 +37,7 @@ import {
   TfChat2,
   TfFloppyDisk,
   TfFolder,
+  TfFolderPlus,
   TfLockLocked,
   TfMicrophone,
   TfSetting,
@@ -1588,7 +1588,7 @@ export function ChatSidebar({
                               {isCreatingProject ? (
                                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-content-muted border-t-transparent" />
                               ) : (
-                                <FolderPlusIcon className="h-4 w-4 shrink-0" />
+                                <TfFolderPlus className="h-4 w-4 shrink-0" />
                               )}
                               <span className="truncate">
                                 {isCreatingProject
