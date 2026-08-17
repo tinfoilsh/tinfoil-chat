@@ -4189,7 +4189,7 @@ export function ChatInterface({
                 <div
                   ref={inputAreaRef}
                   data-chat-input-area
-                  className="pointer-events-none absolute inset-x-0 bottom-0 isolate z-30 px-4 pb-4"
+                  className="pointer-events-none absolute inset-x-0 bottom-0 isolate z-20 px-4 pb-4"
                   style={{
                     minHeight: '80px',
                     maxHeight: '50dvh',
