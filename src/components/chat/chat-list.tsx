@@ -48,6 +48,10 @@ interface ChatListProps {
   onConvertToCloud?: (chatId: string) => void
   onConvertToLocal?: (chatId: string) => void
   onRemoveFromProject?: (chatId: string) => void
+  pinnedChatIds?: readonly string[]
+  showPinnedIndicators?: boolean
+  showDesktopPinActions?: boolean
+  onTogglePin?: (chat: ChatItemData) => void | Promise<void>
   loadMoreButton?: React.ReactNode
   emptyState?: React.ReactNode
   /**
@@ -85,6 +89,10 @@ export function ChatList({
   onConvertToCloud,
   onConvertToLocal,
   onRemoveFromProject,
+  pinnedChatIds = [],
+  showPinnedIndicators = true,
+  showDesktopPinActions = true,
+  onTogglePin,
   loadMoreButton,
   emptyState,
   loadingIndicator,
@@ -253,6 +261,10 @@ export function ChatList({
                     ? () => onRemoveFromProject(chat.id)
                     : undefined
                 }
+                isPinned={pinnedChatIds.includes(chat.id)}
+                showPinnedIndicator={showPinnedIndicators}
+                showDesktopPinAction={showDesktopPinActions}
+                onTogglePin={onTogglePin ? () => onTogglePin(chat) : undefined}
               />
               {deletingChatId === chat.id && (
                 <DeleteConfirmation

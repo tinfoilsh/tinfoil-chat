@@ -1,6 +1,11 @@
 import { CLOUD_SYNC } from '@/config'
-import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
+import { AUTH_ACTIVE_USER_CHANGED_EVENT } from '@/constants/auth-events'
 import {
+  PINNED_CHAT_IDS_CHANGED_EVENT,
+  PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
+} from '@/constants/settings-events'
+import {
+  AUTH_ACTIVE_USER_ID,
   SYNC_PROFILE_CHANGED_AT,
   SYNC_PROFILE_DIRTY,
 } from '@/constants/storage-keys'
@@ -10,6 +15,7 @@ import {
   changedProfileFields,
   isProfilePopulated,
   mergeProfilesThreeWay,
+  overlayProfileChanges,
 } from '@/services/cloud/profile-merge'
 import {
   applySettingsToLocal,
@@ -27,6 +33,7 @@ import {
   saveLocalProfileMetadata,
   saveProfileBaseline,
 } from '@/services/cloud/profile-sync-state'
+import { normalizePinnedChatIds } from '@/services/storage/pinned-chats'
 import {
   CLOUD_SYNC_SETTING_CHANGED_EVENT,
   isCloudSyncEnabled,
@@ -40,14 +47,21 @@ function clocksEqual(a?: EditClock, b?: EditClock): boolean {
 }
 
 function normalizeRemoteBaseline(profile: ProfileData): ProfileData {
-  if (profile.isDarkMode !== undefined || !profile.themeMode) {
-    return profile
+  let normalized = profile
+  if (profile.pinnedChatIds !== undefined) {
+    normalized = {
+      ...normalized,
+      pinnedChatIds: normalizePinnedChatIds(profile.pinnedChatIds),
+    }
   }
-  const isDarkMode =
-    profile.themeMode === 'system'
-      ? window.matchMedia('(prefers-color-scheme: dark)').matches
-      : profile.themeMode === 'dark'
-  return { ...profile, isDarkMode }
+  if (profile.isDarkMode === undefined && profile.themeMode) {
+    const isDarkMode =
+      profile.themeMode === 'system'
+        ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        : profile.themeMode === 'dark'
+    normalized = { ...normalized, isDarkMode }
+  }
+  return normalized
 }
 
 export function useProfileSync() {
@@ -127,6 +141,8 @@ export function useProfileSync() {
 
   const runFullSync = useCallback(async () => {
     if (!isSignedIn || !userId || !isCloudSyncEnabled()) return
+    const activeUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
+    if (activeUserId !== null && activeUserId !== userId) return
 
     await runSerializedProfileSync(userId, async (isCurrent) => {
       if (!isCurrent() || !isCloudSyncEnabled()) return
@@ -136,19 +152,31 @@ export function useProfileSync() {
         if (!isCurrent() || !authorizationMode) return
 
         let baseline = loadProfileBaseline(userId)
+        const wasDirtyBeforeFetch = hasLocalProfileChanges()
+        const localBeforeFetch = loadLocalSettings()
+        const remote = await profileSync.fetchProfile()
+        if (!isCurrent()) return
+        const currentActiveUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
+        if (currentActiveUserId !== null && currentActiveUserId !== userId)
+          return
+
+        const localAfterFetch = loadLocalSettings()
+        const changesDuringFetch = changedProfileFields(
+          localAfterFetch,
+          localBeforeFetch,
+        )
+        if (changesDuringFetch.length > 0) markLocalProfileChanged()
+
         const storedMetadata = loadLocalProfileMetadata(userId)
         const local = hasLocalProfileChanges()
           ? prepareLocalProfile(userId, baseline)
           : {
-              ...loadLocalSettings(),
+              ...localAfterFetch,
               version: storedMetadata?.version,
               updatedAt: storedMetadata?.updatedAt,
               fieldClocks: storedMetadata?.fieldClocks,
               clockVersion: storedMetadata?.clockVersion,
             }
-
-        const remote = await profileSync.fetchProfile()
-        if (!isCurrent()) return
 
         if (remote) {
           const remoteBaseline = normalizeRemoteBaseline(remote)
@@ -172,16 +200,34 @@ export function useProfileSync() {
             } else {
               clearLocalProfileChanged()
             }
-          } else if (hasLocalProfileChanges()) {
+          } else if (wasDirtyBeforeFetch) {
             throw new Error(
               'Profile has unsynced changes but no safe merge baseline.',
             )
+          } else if (changesDuringFetch.length > 0) {
+            const overlaid = overlayProfileChanges(
+              remoteBaseline,
+              localBeforeFetch,
+              localAfterFetch,
+            ).profile
+            saveProfileBaseline(userId, remoteBaseline)
+            applyProfile(overlaid)
+            saveLocalProfileMetadata(userId, overlaid)
+            markLocalProfileChanged()
+            return
           } else {
             applyProfile(remoteBaseline)
             saveLocalProfileMetadata(userId, remoteBaseline)
             saveProfileBaseline(userId, remoteBaseline)
             baseline = remoteBaseline
-            clearLocalProfileChanged()
+            if (
+              remoteBaseline.pinnedChatIds === undefined &&
+              loadLocalSettings().pinnedChatIds !== undefined
+            ) {
+              markLocalProfileChanged()
+            } else {
+              clearLocalProfileChanged()
+            }
           }
         } else {
           const remoteStatus = await profileSync.getSyncStatus()
@@ -346,6 +392,7 @@ export function useProfileSync() {
       'languageChanged',
       'customSystemPromptChanged',
       'promptLibraryChanged',
+      PINNED_CHAT_IDS_CHANGED_EVENT,
       'reasoningSettingsChanged',
       'webSearchEnabledChanged',
       'webSearchAvailableChanged',
@@ -367,6 +414,22 @@ export function useProfileSync() {
       }
     }
   }, [isSignedIn, markLocalProfileChanged, syncToCloud])
+
+  useEffect(() => {
+    const handleActiveUserChange = () => {
+      void runFullSync()
+    }
+    window.addEventListener(
+      AUTH_ACTIVE_USER_CHANGED_EVENT,
+      handleActiveUserChange,
+    )
+    return () => {
+      window.removeEventListener(
+        AUTH_ACTIVE_USER_CHANGED_EVENT,
+        handleActiveUserChange,
+      )
+    }
+  }, [runFullSync])
 
   return {
     syncFromCloud: runFullSync,

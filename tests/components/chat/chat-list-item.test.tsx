@@ -19,6 +19,10 @@ function renderChatListItem({
   pixelateSidebarChatTitles = true,
   enableTitleAnimation = false,
   isStreaming = false,
+  isPinned = false,
+  showPinnedIndicator = true,
+  showDesktopPinAction = true,
+  onTogglePin,
 }: {
   href?: string
   onSelect?: () => void
@@ -27,6 +31,10 @@ function renderChatListItem({
   pixelateSidebarChatTitles?: boolean
   enableTitleAnimation?: boolean
   isStreaming?: boolean
+  isPinned?: boolean
+  showPinnedIndicator?: boolean
+  showDesktopPinAction?: boolean
+  onTogglePin?: () => void
 } = {}) {
   const renderItem = (item: ChatItemData, streaming: boolean) => (
     <ChatListItem
@@ -39,6 +47,10 @@ function renderChatListItem({
       pixelateSidebarChatTitles={pixelateSidebarChatTitles}
       enableTitleAnimation={enableTitleAnimation}
       isStreaming={streaming}
+      isPinned={isPinned}
+      showPinnedIndicator={showPinnedIndicator}
+      showDesktopPinAction={showDesktopPinAction}
+      onTogglePin={onTogglePin}
       onSelect={onSelect}
       onStartEdit={vi.fn()}
       onTitleChange={vi.fn()}
@@ -80,6 +92,97 @@ describe('ChatListItem navigation semantics', () => {
     fireEvent.click(screen.getByRole('button', { name: /Trip planning/ }))
     expect(onSelect).toHaveBeenCalledOnce()
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+})
+
+describe('ChatListItem favorites', () => {
+  it('shows pinned state and removes a favorite from the desktop action', () => {
+    const onTogglePin = vi.fn()
+    renderChatListItem({ isPinned: true, onTogglePin })
+
+    expect(screen.getByLabelText('Pinned to Favorites')).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Remove from Favorites' }),
+    )
+    expect(onTogglePin).toHaveBeenCalledOnce()
+  })
+
+  it('can hide pin controls next to a favorite title', () => {
+    renderChatListItem({
+      isPinned: true,
+      showPinnedIndicator: false,
+      showDesktopPinAction: false,
+      onTogglePin: vi.fn(),
+    })
+
+    expect(screen.queryByLabelText('Pinned to Favorites')).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Remove from Favorites' }),
+    ).toBeNull()
+  })
+
+  it('can hide only the pinned marker', () => {
+    renderChatListItem({
+      isPinned: true,
+      showPinnedIndicator: false,
+      onTogglePin: vi.fn(),
+    })
+
+    expect(screen.queryByLabelText('Pinned to Favorites')).toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'Remove from Favorites' }),
+    ).toBeInTheDocument()
+  })
+
+  it('does not offer pinning for temporary chats', () => {
+    renderChatListItem({
+      chat: { ...savedChat, isTemporary: true },
+      onTogglePin: vi.fn(),
+    })
+    expect(
+      screen.queryByRole('button', { name: 'Pin to Favorites' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('only offers unpinning while a chat save is pending', () => {
+    renderChatListItem({
+      chat: { ...savedChat, pendingSave: true },
+      isPinned: true,
+      onTogglePin: vi.fn(),
+    })
+    expect(
+      screen.getByRole('button', { name: 'Remove from Favorites' }),
+    ).toBeInTheDocument()
+  })
+
+  it('does not offer pinning while a chat save is pending', () => {
+    renderChatListItem({
+      chat: { ...savedChat, pendingSave: true },
+      onTogglePin: vi.fn(),
+    })
+    expect(
+      screen.queryByRole('button', { name: 'Pin to Favorites' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('does not offer pinning for corrupted chats', () => {
+    renderChatListItem({
+      chat: { ...savedChat, dataCorrupted: true },
+      onTogglePin: vi.fn(),
+    })
+    expect(
+      screen.queryByRole('button', { name: 'Pin to Favorites' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('offers the favorite action in the mobile menu', () => {
+    const onTogglePin = vi.fn()
+    renderChatListItem({ onTogglePin })
+
+    fireEvent.click(screen.getByRole('button', { name: 'More chat options' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Pin to Favorites' }))
+
+    expect(onTogglePin).toHaveBeenCalledOnce()
   })
 })
 

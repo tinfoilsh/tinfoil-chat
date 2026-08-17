@@ -13,6 +13,7 @@ import {
   isProfilePopulated,
   mergeProfiles,
   mergeProfilesThreeWay,
+  overlayProfileChanges,
 } from '@/services/cloud/profile-merge'
 import type { ProfileData } from '@/services/cloud/profile-sync'
 import { describe, expect, it } from 'vitest'
@@ -165,6 +166,7 @@ describe('isProfilePopulated', () => {
     expect(isProfilePopulated({ nickname: 'x' })).toBe(true)
     expect(isProfilePopulated({ traits: ['a'] })).toBe(true)
     expect(isProfilePopulated({ customSystemPrompt: 'hi' })).toBe(true)
+    expect(isProfilePopulated({ pinnedChatIds: ['chat-a'] })).toBe(true)
   })
 
   it('is false for empty or default-only profiles', () => {
@@ -212,7 +214,66 @@ describe('changedProfileFields', () => {
   })
 })
 
+describe('overlayProfileChanges', () => {
+  it('overlays only fields changed between local snapshots', () => {
+    const result = overlayProfileChanges(
+      { nickname: 'Remote', profession: 'Researcher', version: 4 },
+      { nickname: 'Before', profession: 'Engineer', version: 1 },
+      { nickname: 'After', profession: 'Engineer', version: 99 },
+    )
+
+    expect(result.profile).toEqual({
+      nickname: 'After',
+      profession: 'Researcher',
+      version: 4,
+    })
+    expect(result.changedFields).toEqual(['nickname'])
+  })
+
+  it('removes a field cleared during the fetch', () => {
+    const result = overlayProfileChanges(
+      { customSystemPrompt: 'Remote prompt', version: 2 },
+      { customSystemPrompt: 'Before prompt' },
+      {},
+    )
+
+    expect(result.profile).toEqual({ version: 2 })
+    expect(result.changedFields).toEqual(['customSystemPrompt'])
+  })
+})
+
 describe('mergeProfilesThreeWay', () => {
+  it('preserves local pins when an older remote omits the field', () => {
+    const result = mergeProfilesThreeWay({
+      baseline: { pinnedChatIds: ['chat-a'] },
+      local: { pinnedChatIds: ['chat-a'] },
+      remote: { nickname: 'Remote' },
+    })
+
+    expect(result.merged.pinnedChatIds).toEqual(['chat-a'])
+  })
+
+  it('preserves locally edited pins when an older remote omits the field', () => {
+    const result = mergeProfilesThreeWay({
+      baseline: { pinnedChatIds: ['chat-a'] },
+      local: { pinnedChatIds: ['chat-b', 'chat-a'] },
+      remote: { nickname: 'Remote' },
+    })
+
+    expect(result.merged.pinnedChatIds).toEqual(['chat-b', 'chat-a'])
+    expect(result.conflicts).not.toContain('pinnedChatIds')
+  })
+
+  it('adopts an explicit remote clear of pins', () => {
+    const result = mergeProfilesThreeWay({
+      baseline: { pinnedChatIds: ['chat-a'] },
+      local: { pinnedChatIds: ['chat-a'] },
+      remote: { pinnedChatIds: [] },
+    })
+
+    expect(result.merged.pinnedChatIds).toEqual([])
+  })
+
   it('adopts populated remote fields when local stayed empty', () => {
     const result = mergeProfilesThreeWay({
       baseline: { nickname: '', customSystemPrompt: '' },

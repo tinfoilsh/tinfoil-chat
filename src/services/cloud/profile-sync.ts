@@ -73,6 +73,8 @@ export interface ProfileData {
   customPromptPresets?: ProfilePromptPreset[]
   // Ordered preset ids pinned as homescreen favorites (built-in or custom)
   favoritePromptPresetIds?: string[]
+  // Ordered durable chat ids pinned as favorites, newest first
+  pinnedChatIds?: string[]
 
   // Shared chat defaults
   reasoningEffort?: 'low' | 'medium' | 'high'

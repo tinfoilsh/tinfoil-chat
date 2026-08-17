@@ -174,11 +174,12 @@ export class ChatStorageService {
             id,
             idempotencyKey,
             userId,
-            // A never-synced chat with an in-flight create push still
-            // needs a durable delete intent: the push can commit after
-            // the local row is gone, and without the intent the chat
-            // would resurrect on the next event replay.
-            { forceQueue: cloudSync.hasPendingUpload(id) },
+            // Memory-only remote chats have no local row, while a create
+            // push can outlive its row. Both need a durable delete intent
+            // so event replay cannot resurrect them.
+            {
+              forceQueue: !existingChat || cloudSync.hasPendingUpload(id),
+            },
           )
         : false
     if (!idempotencyKey) {
@@ -200,6 +201,10 @@ export class ChatStorageService {
   }
 
   async deleteChatsByProject(projectId: string): Promise<number> {
+    return (await this.deleteChatsByProjectWithIds(projectId)).length
+  }
+
+  async deleteChatsByProjectWithIds(projectId: string): Promise<string[]> {
     const guard = cloudSync.createAccountOperationGuard()
     const userId = guard.userId
     if (!userId) {
@@ -256,7 +261,7 @@ export class ChatStorageService {
         metadata: { projectId, count: deletedIds.length },
       })
 
-      return deletedIds.length
+      return deletedIds
     })
   }
 
@@ -326,7 +331,7 @@ export class ChatStorageService {
     }
 
     const localDeleted = await indexedDBStorage.deleteAllChats()
-    chatEvents.emit({ reason: 'delete', ids: [] })
+    chatEvents.emit({ reason: 'delete-all' })
 
     logInfo('Deleted all chats', {
       component: 'ChatStorageService',

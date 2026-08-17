@@ -20,6 +20,7 @@ export const PROFILE_MERGE_FIELDS = [
   'customSystemPrompt',
   'customPromptPresets',
   'favoritePromptPresetIds',
+  'pinnedChatIds',
   'reasoningEffort',
   'thinkingEnabled',
   'webSearchEnabled',
@@ -34,7 +35,7 @@ export const PROFILE_MERGE_FIELDS = [
 // Older clients omit this field, while the setting itself has no unset state.
 const PRESERVE_LOCAL_WHEN_REMOTE_OMITS = new Set<
   (typeof PROFILE_MERGE_FIELDS)[number]
->(['pixelateSidebarChatTitlesEnabled'])
+>(['pixelateSidebarChatTitlesEnabled', 'pinnedChatIds'])
 
 // A blob's field clocks are trustworthy only when they were maintained
 // at the row's current server version. If a clock-unaware client wrote
@@ -72,6 +73,25 @@ export function changedProfileFields(
   return changed
 }
 
+export function overlayProfileChanges(
+  remote: ProfileData,
+  before: ProfileData,
+  after: ProfileData,
+): { profile: ProfileData; changedFields: string[] } {
+  const profile = { ...remote }
+  const changedFields = changedProfileFields(after, before)
+  for (const field of changedFields) {
+    if (Object.prototype.hasOwnProperty.call(after, field)) {
+      ;(profile as Record<string, unknown>)[field] = (
+        after as Record<string, unknown>
+      )[field]
+    } else {
+      delete (profile as Record<string, unknown>)[field]
+    }
+  }
+  return { profile, changedFields }
+}
+
 function nonEmptyString(value: unknown): boolean {
   return typeof value === 'string' && value.trim().length > 0
 }
@@ -94,7 +114,8 @@ export function isProfilePopulated(p: ProfileData | null | undefined): boolean {
     nonEmptyString(p.customSystemPrompt) ||
     nonEmptyArray(p.traits) ||
     nonEmptyArray(p.customPromptPresets) ||
-    nonEmptyArray(p.favoritePromptPresetIds)
+    nonEmptyArray(p.favoritePromptPresetIds) ||
+    nonEmptyArray(p.pinnedChatIds)
   )
 }
 
@@ -148,13 +169,19 @@ export function mergeProfilesThreeWay(args: {
     const lc = fieldClock(local, field, localTrusted)
     const rc = fieldClock(remote, field, remoteTrusted)
 
+    if (
+      !Object.prototype.hasOwnProperty.call(remote, field) &&
+      PRESERVE_LOCAL_WHEN_REMOTE_OMITS.has(field)
+    ) {
+      if (lc) mergedClocks[field] = lc
+      continue
+    }
+
     if (valuesEqual(localValue, baselineValue)) {
       if (Object.prototype.hasOwnProperty.call(remote, field)) {
         ;(merged as Record<string, unknown>)[field] = remoteValue
         if (rc) mergedClocks[field] = rc
         adoptedRemote ||= !valuesEqual(localValue, remoteValue)
-      } else if (PRESERVE_LOCAL_WHEN_REMOTE_OMITS.has(field)) {
-        if (lc) mergedClocks[field] = lc
       } else {
         delete (merged as Record<string, unknown>)[field]
       }

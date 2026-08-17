@@ -1,4 +1,7 @@
-import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
+import {
+  PINNED_CHAT_IDS_CHANGED_EVENT,
+  PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
+} from '@/constants/settings-events'
 import {
   SETTINGS_CHAT_FONT,
   SETTINGS_CODE_EXECUTION_ENABLED,
@@ -19,6 +22,7 @@ import {
   USER_PREFS_LANGUAGE,
   USER_PREFS_NICKNAME,
   USER_PREFS_PERSONALIZATION_ENABLED,
+  USER_PREFS_PINNED_CHAT_IDS,
   USER_PREFS_PROFESSION,
   USER_PREFS_TRAITS,
 } from '@/constants/storage-keys'
@@ -27,6 +31,10 @@ import type {
   ProfilePromptPreset,
 } from '@/services/cloud/profile-sync'
 import { logWarning } from '@/utils/error-handling'
+import {
+  loadPinnedChatIds,
+  normalizePinnedChatIds,
+} from '../storage/pinned-chats'
 import { ProfileDataSchema } from './schemas'
 
 const DEFAULT_PROFILE_LANGUAGE = 'English'
@@ -87,6 +95,8 @@ export function hasProfileChanged(
       JSON.stringify(profile2.customPromptPresets) ||
     JSON.stringify(profile1.favoritePromptPresetIds) !==
       JSON.stringify(profile2.favoritePromptPresetIds) ||
+    JSON.stringify(profile1.pinnedChatIds) !==
+      JSON.stringify(profile2.pinnedChatIds) ||
     profile1.reasoningEffort !== profile2.reasoningEffort ||
     profile1.thinkingEnabled !== profile2.thinkingEnabled ||
     profile1.webSearchEnabled !== profile2.webSearchEnabled ||
@@ -182,6 +192,14 @@ export function loadLocalSettings(): ProfileData {
     )
   }
 
+  const pinnedChatIds = localStorage.getItem(USER_PREFS_PINNED_CHAT_IDS)
+  if (pinnedChatIds !== null) {
+    const loadedPinnedChatIds = loadPinnedChatIds()
+    if (loadedPinnedChatIds !== undefined) {
+      settings.pinnedChatIds = loadedPinnedChatIds
+    }
+  }
+
   const reasoningEffort = localStorage.getItem(SETTINGS_REASONING_EFFORT)
   if (
     reasoningEffort === 'low' ||
@@ -256,6 +274,7 @@ export function resetSettingsToLocalDefaults(): ProfileData {
     customSystemPrompt: '',
     customPromptPresets: [],
     favoritePromptPresetIds: [],
+    pinnedChatIds: [],
     reasoningEffort: 'medium',
     thinkingEnabled: true,
     webSearchEnabled: true,
@@ -390,6 +409,20 @@ export function applySettingsToLocal(settings: ProfileData): void {
       JSON.stringify(settings.favoritePromptPresetIds),
     )
     window.dispatchEvent(new CustomEvent('promptLibraryChanged'))
+  }
+
+  const validatedPinnedChatIds = validation.data.pinnedChatIds
+  if (validatedPinnedChatIds !== undefined) {
+    const pinnedChatIds = normalizePinnedChatIds(validatedPinnedChatIds)
+    localStorage.setItem(
+      USER_PREFS_PINNED_CHAT_IDS,
+      JSON.stringify(pinnedChatIds),
+    )
+    window.dispatchEvent(
+      new CustomEvent(PINNED_CHAT_IDS_CHANGED_EVENT, {
+        detail: { pinnedChatIds },
+      }),
+    )
   }
 
   const shouldApplyReasoning =

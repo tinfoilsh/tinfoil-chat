@@ -69,13 +69,20 @@ import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { usePasskeyBackup } from '@/hooks/use-passkey-backup'
+import { usePinnedChats } from '@/hooks/use-pinned-chats'
 import { useProfileSync } from '@/hooks/use-profile-sync'
 import { ENCRYPTION_KEY_CHANGED_EVENT } from '@/services/encryption/encryption-service'
+import { hydratePinnedChatById } from '@/services/storage/pinned-chat-hydration'
+import {
+  canRequestChatPin,
+  isResolvedFavoriteChat,
+} from '@/services/storage/pinned-chats'
 
 import { cloudSync, SyncInProgressError } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { generateCodeExecutionAccessToken } from '@/services/exec-snapshot/access-token'
 import { isPrfSupported, PrfNotSupportedError } from '@/services/passkey'
+import { chatEvents } from '@/services/storage/chat-events'
 import { chatStorage } from '@/services/storage/chat-storage'
 import {
   INDEXED_DB_UPGRADE_BLOCKED_EVENT,
@@ -117,6 +124,7 @@ import { CONSTANTS } from './constants'
 import { getDocumentTextContent } from './document-content'
 import { useDocumentUploader } from './document-uploader'
 import { DragProvider } from './drag-context'
+import { openFavoriteChat } from './favorite-navigation'
 import {
   resolveProjectUploadTarget,
   routeChatFileUpload,
@@ -907,9 +915,9 @@ export function ChatInterface({
 
     // Actions
     handleQuery,
-    createNewChat,
+    createNewChat: createNewChatWithoutNavigationInvalidation,
     deleteChat,
-    handleChatSelect,
+    handleChatSelect: handleChatSelectWithoutNavigationInvalidation,
     toggleTheme,
     setThemeMode,
     openAndExpandVerifier,
@@ -929,7 +937,7 @@ export function ChatInterface({
     initialChatLoadFailed,
     cloudChatNotFound,
     retryInitialChatLoad,
-    loadChatById,
+    loadChatById: loadChatByIdWithoutNavigationInvalidation,
   } = useChatState({
     systemPrompt: finalSystemPrompt,
     rules: processedRules,
@@ -950,6 +958,221 @@ export function ChatInterface({
     piiCheckEnabled,
     genUIEnabled,
   })
+
+  const favoriteNavigationGenerationRef = useRef(0)
+  const invalidateFavoriteNavigation = useCallback(() => {
+    favoriteNavigationGenerationRef.current += 1
+  }, [])
+  useEffect(
+    () => () => {
+      invalidateFavoriteNavigation()
+    },
+    [invalidateFavoriteNavigation],
+  )
+  useEffect(() => {
+    invalidateFavoriteNavigation()
+  }, [authUserId, invalidateFavoriteNavigation])
+  const createNewChat = useCallback(
+    (isLocalOnly?: boolean, fromUserAction?: boolean) => {
+      invalidateFavoriteNavigation()
+      createNewChatWithoutNavigationInvalidation(isLocalOnly, fromUserAction)
+    },
+    [createNewChatWithoutNavigationInvalidation, invalidateFavoriteNavigation],
+  )
+  const handleChatSelect = useCallback(
+    (chatId: string) => {
+      invalidateFavoriteNavigation()
+      handleChatSelectWithoutNavigationInvalidation(chatId)
+    },
+    [
+      handleChatSelectWithoutNavigationInvalidation,
+      invalidateFavoriteNavigation,
+    ],
+  )
+  const loadChatById = useCallback(
+    async (chatId: string, isLocalUrl: boolean) => {
+      invalidateFavoriteNavigation()
+      await loadChatByIdWithoutNavigationInvalidation(chatId, isLocalUrl)
+    },
+    [invalidateFavoriteNavigation, loadChatByIdWithoutNavigationInvalidation],
+  )
+
+  const { pinnedChatIds, pinChat, unpinChat, unpinChats } =
+    usePinnedChats(authUserId)
+  const favoriteHydrationGenerationRef = useRef(0)
+  const favoriteHydrationAccountRef = useRef(authUserId)
+  const currentFavoriteAccountRef = useRef(authUserId)
+  currentFavoriteAccountRef.current = authUserId
+  const favoriteHydrationCloudSyncRef = useRef(cloudSyncSettingEnabled)
+  const favoriteHydrationMountedRef = useRef(false)
+  const attemptedFavoriteHydrationsRef = useRef(new Set<string>())
+  const unavailableFavoriteHydrationsRef = useRef(new Set<string>())
+  const favoriteHydrationRetrySignalRef = useRef(0)
+  const [favoriteHydrationRetryVersion, setFavoriteHydrationRetryVersion] =
+    useState(0)
+  const retryUnavailableFavoriteHydrations = useCallback(() => {
+    favoriteHydrationRetrySignalRef.current += 1
+    if (unavailableFavoriteHydrationsRef.current.size === 0) return
+    for (const chatId of unavailableFavoriteHydrationsRef.current) {
+      attemptedFavoriteHydrationsRef.current.delete(chatId)
+    }
+    unavailableFavoriteHydrationsRef.current.clear()
+    setFavoriteHydrationRetryVersion((version) => version + 1)
+  }, [])
+  const missingPinnedChatIds = useMemo(() => {
+    const loadedIds = new Set(chats.map((chat) => chat.id))
+    return pinnedChatIds.filter((chatId) => !loadedIds.has(chatId))
+  }, [chats, pinnedChatIds])
+  const missingPinnedChatIdsKey = missingPinnedChatIds.join('\u0000')
+
+  useEffect(() => {
+    favoriteHydrationMountedRef.current = true
+    return () => {
+      favoriteHydrationMountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (
+      favoriteHydrationAccountRef.current === authUserId &&
+      favoriteHydrationCloudSyncRef.current === cloudSyncSettingEnabled
+    ) {
+      return
+    }
+    favoriteHydrationAccountRef.current = authUserId
+    favoriteHydrationCloudSyncRef.current = cloudSyncSettingEnabled
+    favoriteHydrationGenerationRef.current += 1
+    attemptedFavoriteHydrationsRef.current.clear()
+    unavailableFavoriteHydrationsRef.current.clear()
+  }, [authUserId, cloudSyncSettingEnabled])
+
+  useEffect(() => {
+    const unsubscribeChats = chatEvents.on((event) => {
+      if (
+        event.reason === 'sync' ||
+        event.reason === 'pagination' ||
+        event.reason === 'recovery'
+      ) {
+        retryUnavailableFavoriteHydrations()
+      }
+    })
+    window.addEventListener('online', retryUnavailableFavoriteHydrations)
+    window.addEventListener(
+      ENCRYPTION_KEY_CHANGED_EVENT,
+      retryUnavailableFavoriteHydrations,
+    )
+    return () => {
+      unsubscribeChats()
+      window.removeEventListener('online', retryUnavailableFavoriteHydrations)
+      window.removeEventListener(
+        ENCRYPTION_KEY_CHANGED_EVENT,
+        retryUnavailableFavoriteHydrations,
+      )
+    }
+  }, [retryUnavailableFavoriteHydrations])
+
+  useEffect(() => {
+    const pinnedIds = new Set(pinnedChatIds)
+    const loadedIds = new Set(chats.map((chat) => chat.id))
+    for (const attemptedId of attemptedFavoriteHydrationsRef.current) {
+      if (!pinnedIds.has(attemptedId) || loadedIds.has(attemptedId)) {
+        attemptedFavoriteHydrationsRef.current.delete(attemptedId)
+        unavailableFavoriteHydrationsRef.current.delete(attemptedId)
+      }
+    }
+    const invalidLoadedFavoriteIds = chats
+      .filter(
+        (chat) =>
+          pinnedIds.has(chat.id) &&
+          (chat.isBlankChat || chat.isTemporary || chat.dataCorrupted),
+      )
+      .map((chat) => chat.id)
+    if (invalidLoadedFavoriteIds.length > 0) {
+      unpinChats(invalidLoadedFavoriteIds)
+    }
+    if (!isSignedIn || !cloudSyncSettingEnabled || !missingPinnedChatIdsKey)
+      return
+
+    const chatIds = missingPinnedChatIds.filter(
+      (chatId) => !attemptedFavoriteHydrationsRef.current.has(chatId),
+    )
+    if (chatIds.length === 0) return
+    chatIds.forEach((chatId) =>
+      attemptedFavoriteHydrationsRef.current.add(chatId),
+    )
+    const generation = favoriteHydrationGenerationRef.current
+    const retrySignal = favoriteHydrationRetrySignalRef.current
+    const accountId = authUserId
+
+    const hydrateFavorites = async () => {
+      const results = await Promise.all(
+        chatIds.map(async (chatId) => {
+          try {
+            return { chatId, result: await hydratePinnedChatById(chatId) }
+          } catch (error) {
+            logError('Failed to hydrate favorite', error, {
+              component: 'ChatInterface',
+              action: 'hydrateFavorites',
+              metadata: { chatId },
+            })
+            return { chatId, result: { status: 'unavailable' } as const }
+          }
+        }),
+      )
+      if (
+        !favoriteHydrationMountedRef.current ||
+        currentFavoriteAccountRef.current !== accountId ||
+        favoriteHydrationGenerationRef.current !== generation
+      ) {
+        return
+      }
+
+      const idsToPrune = results
+        .filter(({ result }) => result.status === 'invalid')
+        .map(({ chatId }) => chatId)
+      if (idsToPrune.length > 0) unpinChats(idsToPrune)
+      let shouldRetry = false
+      for (const { chatId, result } of results) {
+        if (result.status === 'unavailable') {
+          if (favoriteHydrationRetrySignalRef.current !== retrySignal) {
+            attemptedFavoriteHydrationsRef.current.delete(chatId)
+            shouldRetry = true
+          } else {
+            unavailableFavoriteHydrationsRef.current.add(chatId)
+          }
+        }
+      }
+      if (shouldRetry) {
+        setFavoriteHydrationRetryVersion((version) => version + 1)
+      }
+
+      const hydratedChats = results.flatMap(({ result }) =>
+        result.status === 'ready' ? [result.chat] : [],
+      )
+      if (hydratedChats.length === 0) return
+      setChats((current) => {
+        let updated = current
+        for (const hydrated of hydratedChats) {
+          if (updated.some((chat) => chat.id === hydrated.id)) continue
+          updated = upsertChatById(updated, hydrated)
+        }
+        return updated
+      })
+    }
+
+    void hydrateFavorites()
+  }, [
+    authUserId,
+    chats,
+    cloudSyncSettingEnabled,
+    favoriteHydrationRetryVersion,
+    isSignedIn,
+    missingPinnedChatIds,
+    missingPinnedChatIdsKey,
+    pinnedChatIds,
+    setChats,
+    unpinChats,
+  ])
 
   const isTemporaryMode = currentChat?.isTemporary === true
   const currentChatId = currentChat?.id
@@ -1999,6 +2222,7 @@ export function ChatInterface({
   }, [passkeyActive, setupPasskey])
 
   const handleCreateProject = useCallback(async () => {
+    invalidateFavoriteNavigation()
     try {
       const name = `My Project #${projects.length + 1}`
       const project = await createProject({ name, description: '' })
@@ -2014,7 +2238,13 @@ export function ChatInterface({
         variant: 'destructive',
       })
     }
-  }, [createProject, enterProjectMode, projects.length, toast])
+  }, [
+    createProject,
+    enterProjectMode,
+    invalidateFavoriteNavigation,
+    projects.length,
+    toast,
+  ])
 
   // Handler for exiting project mode - creates a new chat and exits
   const handleExitProject = useCallback(() => {
@@ -2025,6 +2255,7 @@ export function ChatInterface({
   }, [createNewChat, exitProjectMode])
 
   const handleToggleTemporaryMode = useCallback(() => {
+    invalidateFavoriteNavigation()
     if (!canToggleTemporaryChat(currentChat)) return
 
     const hasMessages = (currentChat?.messages?.length ?? 0) > 0
@@ -2132,7 +2363,15 @@ export function ChatInterface({
       isLocalOnly: currentChat?.isLocalOnly,
     })
     setCurrentChat(tempChat)
-  }, [chats, createNewChat, currentChat, isSignedIn, setChats, setCurrentChat])
+  }, [
+    chats,
+    createNewChat,
+    currentChat,
+    invalidateFavoriteNavigation,
+    isSignedIn,
+    setChats,
+    setCurrentChat,
+  ])
 
   useEffect(() => {
     if (!isTemporaryMode && previousChatRef.current !== null) {
@@ -2143,10 +2382,11 @@ export function ChatInterface({
   // Handler for exiting project mode while dragging - does NOT create a new chat
   // so the drag operation can continue and drop into cloud/local tabs
   const handleExitProjectWhileDragging = useCallback(() => {
+    invalidateFavoriteNavigation()
     setPendingProjectUpload(null)
     setShowAddToProjectModal(false)
     exitProjectMode()
-  }, [exitProjectMode])
+  }, [exitProjectMode, invalidateFavoriteNavigation])
 
   // Handler for moving a chat to a project via drag and drop
   const handleMoveChatToProject = useCallback(
@@ -2229,7 +2469,9 @@ export function ChatInterface({
   const handleDeleteProjectChats = useCallback(
     async (projectId: string): Promise<void> => {
       try {
-        await chatStorage.deleteChatsByProject(projectId)
+        const deletedChatIds =
+          await chatStorage.deleteChatsByProjectWithIds(projectId)
+        unpinChats(deletedChatIds)
         await reloadChats()
       } catch (error) {
         logError('Failed to delete project chats', error, {
@@ -2244,12 +2486,12 @@ export function ChatInterface({
         throw error
       }
     },
-    [reloadChats],
+    [reloadChats, unpinChats],
   )
 
   // Handler for converting a local-only chat to cloud chat via drag and drop
   const handleConvertChatToCloud = useCallback(
-    async (chatId: string): Promise<void> => {
+    async (chatId: string): Promise<boolean> => {
       try {
         await chatStorage.convertChatToCloud(chatId)
         await reloadChats()
@@ -2258,6 +2500,7 @@ export function ChatInterface({
           title: 'Chat moved to cloud',
           description: 'The chat will now sync across your devices.',
         })
+        return true
       } catch (error) {
         logError('Failed to convert chat to cloud', error, {
           component: 'ChatInterface',
@@ -2270,16 +2513,107 @@ export function ChatInterface({
           description: 'Please try again.',
           variant: 'destructive',
         })
+        return false
       }
     },
     [reloadChats, toast],
   )
+
+  const handleToggleFavorite = useCallback(
+    async (favorite: Pick<Chat, 'id' | 'isLocalOnly'>) => {
+      if (pinnedChatIds.includes(favorite.id)) {
+        unpinChat(favorite.id)
+        return
+      }
+
+      const accountId = authUserId
+      const hydrationGeneration = favoriteHydrationGenerationRef.current
+      let chat = chats.find((candidate) => candidate.id === favorite.id)
+      if (!chat) {
+        try {
+          const hydration = await hydratePinnedChatById(favorite.id)
+          if (
+            hydration.status !== 'ready' ||
+            currentFavoriteAccountRef.current !== accountId ||
+            favoriteHydrationGenerationRef.current !== hydrationGeneration
+          ) {
+            return
+          }
+          chat = hydration.chat
+          const loadedChat = chat
+          setChats((current) => upsertChatById(current, loadedChat))
+        } catch (error) {
+          logError('Failed to load chat before pinning', error, {
+            component: 'ChatInterface',
+            action: 'handleToggleFavorite',
+            metadata: { chatId: favorite.id },
+          })
+          return
+        }
+      }
+      if (!canRequestChatPin(chat)) {
+        return
+      }
+      if (chat.isLocalOnly && !(await handleConvertChatToCloud(chat.id))) return
+      if (
+        currentFavoriteAccountRef.current !== accountId ||
+        favoriteHydrationGenerationRef.current !== hydrationGeneration
+      ) {
+        return
+      }
+      pinChat(chat.id)
+    },
+    [
+      chats,
+      authUserId,
+      handleConvertChatToCloud,
+      pinChat,
+      pinnedChatIds,
+      setChats,
+      unpinChat,
+    ],
+  )
+
+  const handleOpenFavorite = useCallback(
+    async (favorite: Pick<Chat, 'id' | 'projectId'>) => {
+      const generation = favoriteNavigationGenerationRef.current + 1
+      favoriteNavigationGenerationRef.current = generation
+      await openFavoriteChat({
+        favorite,
+        activeProjectId: activeProject?.id,
+        isProjectMode,
+        enterProjectMode: (projectId, isCurrent) =>
+          enterProjectMode(projectId, undefined, { isCurrent }),
+        exitProjectMode,
+        openChat: (chatId) =>
+          loadChatByIdWithoutNavigationInvalidation(chatId, false),
+        isCurrent: () => favoriteNavigationGenerationRef.current === generation,
+      })
+    },
+    [
+      activeProject?.id,
+      enterProjectMode,
+      exitProjectMode,
+      isProjectMode,
+      loadChatByIdWithoutNavigationInvalidation,
+    ],
+  )
+
+  const favoriteChats = useMemo(() => {
+    const chatsById = new Map(chats.map((chat) => [chat.id, chat]))
+    return pinnedChatIds
+      .map((chatId) => chatsById.get(chatId))
+      .filter((chat): chat is Chat =>
+        Boolean(chat && isResolvedFavoriteChat(chat)),
+      )
+  }, [chats, pinnedChatIds])
 
   // Handler for converting a cloud chat to local-only via drag and drop
   const handleConvertChatToLocal = useCallback(
     async (chatId: string): Promise<void> => {
       try {
         await chatStorage.convertChatToLocal(chatId)
+        unpinChat(chatId)
         await reloadChats()
 
         toast({
@@ -2300,7 +2634,7 @@ export function ChatInterface({
         })
       }
     },
-    [reloadChats, toast],
+    [reloadChats, toast, unpinChat],
   )
 
   // Helper to process file and add to chat attachments
@@ -3405,6 +3739,10 @@ export function ChatInterface({
                       updatedAt: c.updatedAt,
                       projectId: c.projectId,
                       isBlankChat: c.isBlankChat,
+                      decryptionFailed: c.decryptionFailed,
+                      dataCorrupted: c.dataCorrupted,
+                      isTemporary: c.isTemporary,
+                      pendingSave: c.pendingSave,
                     }))}
                   deleteChat={deleteChat}
                   updateChatTitle={updateChatTitle}
@@ -3422,6 +3760,11 @@ export function ChatInterface({
                     name: p.name,
                   }))}
                   onSettingsClick={handleOpenSettingsModal}
+                  favoriteChats={favoriteChats}
+                  pinnedChatIds={pinnedChatIds}
+                  onToggleFavorite={handleToggleFavorite}
+                  onOpenFavorite={handleOpenFavorite}
+                  cloudSyncEnabled={cloudSyncSettingEnabled}
                   windowWidth={windowWidth}
                 />
               ) : (
@@ -3452,10 +3795,19 @@ export function ChatInterface({
                       updatedAt: c.updatedAt,
                       projectId: c.projectId,
                       isBlankChat: c.isBlankChat,
+                      decryptionFailed: c.decryptionFailed,
+                      dataCorrupted: c.dataCorrupted,
+                      isTemporary: c.isTemporary,
+                      pendingSave: c.pendingSave,
                     }))}
                   deleteChat={deleteChat}
                   updateChatTitle={updateChatTitle}
                   onSettingsClick={handleOpenSettingsModal}
+                  favoriteChats={favoriteChats}
+                  pinnedChatIds={pinnedChatIds}
+                  onToggleFavorite={handleToggleFavorite}
+                  onOpenFavorite={handleOpenFavorite}
+                  cloudSyncEnabled={cloudSyncSettingEnabled}
                   windowWidth={windowWidth}
                 />
               )}
@@ -3526,6 +3878,9 @@ export function ChatInterface({
                 onConvertChatToCloud={handleConvertChatToCloud}
                 onConvertChatToLocal={handleConvertChatToLocal}
                 onSettingsClick={handleOpenSettingsModal}
+                pinnedChatIds={pinnedChatIds}
+                onToggleFavorite={handleToggleFavorite}
+                onOpenFavorite={handleOpenFavorite}
                 windowWidth={windowWidth}
                 chatDecryptionProgress={decryptionProgress}
               />

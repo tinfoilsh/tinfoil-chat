@@ -19,12 +19,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildProjectContext,
   estimateTokenCount,
-  type LoadingProject,
   ProjectContext,
+  type EnterProjectModeOptions,
+  type LoadingProject,
   type ProjectContextValue,
   type UploadingFile,
 } from './project-context'
 import { hydrateProjectDocuments } from './project-document-hydration'
+import { canCommitProjectLoad } from './project-load-validity'
 
 interface ProjectProviderProps {
   children: React.ReactNode
@@ -161,7 +163,11 @@ export function ProjectProvider({
   }, [activeProject, processMessages])
 
   const enterProjectMode = useCallback(
-    async (projectId: string, projectName?: string): Promise<boolean> => {
+    async (
+      projectId: string,
+      projectName?: string,
+      options?: EnterProjectModeOptions,
+    ): Promise<boolean> => {
       const generation = projectLoadGenerationRef.current + 1
       const cacheGeneration = projectCache.captureGeneration()
       projectLoadGenerationRef.current = generation
@@ -223,9 +229,17 @@ export function ProjectProvider({
         )
 
         if (
-          projectLoadGenerationRef.current !== generation ||
-          pendingProjectIdRef.current !== projectId
+          !canCommitProjectLoad(
+            generation,
+            projectLoadGenerationRef.current,
+            projectId,
+            pendingProjectIdRef.current,
+            options?.isCurrent,
+          )
         ) {
+          if (projectLoadGenerationRef.current === generation) {
+            pendingProjectIdRef.current = committedProjectIdRef.current
+          }
           return false
         }
 
@@ -242,6 +256,7 @@ export function ProjectProvider({
       } catch (err) {
         if (projectLoadGenerationRef.current !== generation) return false
         pendingProjectIdRef.current = committedProjectIdRef.current
+        if (options?.isCurrent && !options.isCurrent()) return false
         const message =
           err instanceof Error ? err.message : 'Failed to load project'
         setError(message)

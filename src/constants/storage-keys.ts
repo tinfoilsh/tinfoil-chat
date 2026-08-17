@@ -115,6 +115,7 @@ export const USER_PREFS_CUSTOM_PROMPT_PRESETS =
   'tinfoil-user-prefs-custom-prompt-presets'
 export const USER_PREFS_FAVORITE_PROMPT_PRESETS =
   'tinfoil-user-prefs-favorite-prompt-presets'
+export const USER_PREFS_PINNED_CHAT_IDS = 'tinfoil-user-prefs-pinned-chat-ids'
 export const USER_PREFS_NATIVE_APP_DISMISSED =
   'tinfoil-user-prefs-native-app-dismissed'
 
@@ -170,6 +171,8 @@ export const UI_SIDEBAR_PROJECTS_EXPANDED =
   'tinfoil-ui-sidebar-projects-expanded'
 export const UI_SIDEBAR_CHAT_HISTORY_EXPANDED =
   'tinfoil-ui-sidebar-chat-history-expanded'
+export const UI_SIDEBAR_FAVORITES_EXPANDED =
+  'tinfoil-ui-sidebar-favorites-expanded'
 export const UI_SIDEBAR_EXPAND_SECTION = 'tinfoil-ui-sidebar-expand-section'
 export const UI_EXPAND_PROJECTS_ON_MOUNT = 'tinfoil-ui-expand-projects-on-mount'
 export const UI_EXPAND_PROJECT_DOCUMENTS = 'tinfoil-ui-expand-project-documents'

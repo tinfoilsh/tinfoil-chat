@@ -5,6 +5,7 @@ import {
   UI_SIDEBAR_ACTIVE_TAB,
   UI_SIDEBAR_CHAT_HISTORY_EXPANDED,
   UI_SIDEBAR_EXPAND_SECTION,
+  UI_SIDEBAR_FAVORITES_EXPANDED,
   UI_SIDEBAR_PROJECTS_EXPANDED,
   USER_PREFS_NATIVE_APP_DISMISSED,
 } from '@/constants/storage-keys'
@@ -14,6 +15,7 @@ import { toast } from '@/hooks/use-toast'
 import { useUpgradeToPro } from '@/hooks/use-upgrade-to-pro'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
+import { isResolvedFavoriteChat } from '@/services/storage/pinned-chats'
 import {
   CLOUD_SYNC_SETTING_CHANGED_EVENT,
   hasUserSetLocalOnlyPreference,
@@ -45,6 +47,7 @@ import {
   PiFolder,
   PiMicrophone,
   PiNotePencilLight,
+  PiPushPin,
   PiSparkle,
   PiSpinner,
 } from 'react-icons/pi'
@@ -53,6 +56,7 @@ import { formatRelativeTime } from './chat-list-utils'
 import { CONSTANTS } from './constants'
 import { useDrag } from './drag-context'
 import { SidebarSyncButton } from './sidebar-sync-button'
+import { useFavoriteDropTarget } from './use-favorite-drop-target'
 
 import { useProject } from '@/components/project/project-context'
 import {
@@ -78,6 +82,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
 import type { Chat } from './types'
+
+const FAVORITES_PANEL_ID = 'sidebar-favorites-panel'
 
 // Utility function to detect iOS devices
 function isIOSDevice() {
@@ -134,9 +140,12 @@ type ChatSidebarProps = {
   onCreateProject?: () => Promise<void>
   onMoveChatToProject?: (chatId: string, projectId: string) => Promise<void>
   onRemoveChatFromProject?: (chatId: string) => Promise<void>
-  onConvertChatToCloud?: (chatId: string) => Promise<void>
+  onConvertChatToCloud?: (chatId: string) => Promise<boolean>
   onConvertChatToLocal?: (chatId: string) => Promise<void>
   onSettingsClick?: () => void
+  pinnedChatIds?: readonly string[]
+  onToggleFavorite?: (chat: ChatItemData) => void | Promise<void>
+  onOpenFavorite?: (chat: ChatItemData) => void | Promise<void>
   windowWidth: number
   /**
    * Progress of the post-unlock background chat decryption. When
@@ -208,6 +217,9 @@ export function ChatSidebar({
   onConvertChatToCloud,
   onConvertChatToLocal,
   onSettingsClick,
+  pinnedChatIds = [],
+  onToggleFavorite,
+  onOpenFavorite,
   windowWidth,
   chatDecryptionProgress,
 }: ChatSidebarProps) {
@@ -232,6 +244,8 @@ export function ChatSidebar({
     return false
   })
   const [isCreatingProject, setIsCreatingProject] = useState(false)
+  const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(false)
+  const hasLoadedFavoritesExpandedRef = useRef(false)
   const [isChatHistoryExpanded, setIsChatHistoryExpanded] = useState(() => {
     if (typeof window !== 'undefined') {
       const shouldExpandProjects = sessionStorage.getItem(
@@ -259,6 +273,7 @@ export function ChatSidebar({
     return true
   })
   const sidebarScrollRef = useRef<HTMLDivElement>(null)
+  const favoritesSectionRef = useRef<HTMLElement>(null)
   // Hides the sidebar scrollbar while a section expand/collapse animates;
   // the scroll height changes every frame and the scrollbar would flicker.
   const [hideScrollbarDuringAnimation, setHideScrollbarDuringAnimation] =
@@ -289,7 +304,8 @@ export function ChatSidebar({
   const [localOnlyModeEnabled, setLocalOnlyModeEnabled] = useState(
     isLocalOnlyModeEnabled(),
   )
-  const { isSignedIn } = useAuth()
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth()
+  const favoritesAvailable = Boolean(isSignedIn && cloudSyncEnabled)
   const { user } = useUser()
 
   const {
@@ -396,6 +412,38 @@ export function ChatSidebar({
       isChatHistoryExpanded ? 'true' : 'false',
     )
   }, [isChatHistoryExpanded])
+
+  useEffect(() => {
+    if (!hasLoadedFavoritesExpandedRef.current) {
+      hasLoadedFavoritesExpandedRef.current = true
+      const stored = sessionStorage.getItem(UI_SIDEBAR_FAVORITES_EXPANDED)
+      const requestedSection = sessionStorage.getItem(UI_SIDEBAR_EXPAND_SECTION)
+      const shouldExpand =
+        stored === 'true' && !isProjectsExpanded && requestedSection !== 'chats'
+      setIsFavoritesExpanded(shouldExpand)
+      if (shouldExpand) {
+        setIsProjectsExpanded(false)
+        setIsChatHistoryExpanded(false)
+      }
+      return
+    }
+    sessionStorage.setItem(
+      UI_SIDEBAR_FAVORITES_EXPANDED,
+      isFavoritesExpanded ? 'true' : 'false',
+    )
+  }, [isFavoritesExpanded, isProjectsExpanded])
+
+  useEffect(() => {
+    if (isAuthLoaded && !favoritesAvailable && isFavoritesExpanded) {
+      setIsFavoritesExpanded(false)
+      if (!isProjectsExpanded) setIsChatHistoryExpanded(true)
+    }
+  }, [
+    favoritesAvailable,
+    isAuthLoaded,
+    isFavoritesExpanded,
+    isProjectsExpanded,
+  ])
 
   // Listen for cloud sync setting changes
   useEffect(() => {
@@ -512,10 +560,12 @@ export function ChatSidebar({
       if (expandSection === 'projects') {
         setIsProjectsExpanded(true)
         setIsChatHistoryExpanded(false)
+        setIsFavoritesExpanded(false)
         refreshProjects()
       } else if (expandSection === 'chats') {
         setIsProjectsExpanded(false)
         setIsChatHistoryExpanded(true)
+        setIsFavoritesExpanded(false)
       }
       sessionStorage.removeItem(UI_SIDEBAR_EXPAND_SECTION)
     }
@@ -544,11 +594,12 @@ export function ChatSidebar({
   // premium session) would otherwise leave a signed-out/non-premium user
   // with no Projects section AND a collapsed chat list — an empty sidebar.
   useEffect(() => {
-    if (!hasPinnedProjectsHeader && isProjectsExpanded) {
+    if (isAuthLoaded && !hasPinnedProjectsHeader && isProjectsExpanded) {
       setIsProjectsExpanded(false)
+      setIsFavoritesExpanded(false)
       setIsChatHistoryExpanded(true)
     }
-  }, [hasPinnedProjectsHeader, isProjectsExpanded])
+  }, [hasPinnedProjectsHeader, isAuthLoaded, isProjectsExpanded])
 
   const hideScrollbarWhileSectionsAnimate = useCallback(() => {
     setHideScrollbarDuringAnimation(true)
@@ -570,16 +621,17 @@ export function ChatSidebar({
     [],
   )
 
-  // Projects and Chats behave as an accordion: expanding one collapses the
-  // other. This keeps the newly opened section at the top of the scroll
-  // area (expanding a section while scrolled deep into the other would
-  // otherwise appear to do nothing, since the new content renders at its
+  // Favorites, Projects, and Chats behave as an accordion: expanding one
+  // collapses the others. This keeps the newly opened section at the top
+  // of the scroll area. Expanding while scrolled deep into another section
+  // would otherwise appear to do nothing, since the new content renders at its
   // flow position far above the viewport) and resets the scroll so the
   // opened section's content is immediately visible.
   const expandProjectsSection = useCallback(() => {
     hideScrollbarWhileSectionsAnimate()
     setIsProjectsExpanded(true)
     setIsChatHistoryExpanded(false)
+    setIsFavoritesExpanded(false)
     sidebarScrollRef.current?.scrollTo({ top: 0 })
     if (projects.length === 0) {
       refreshProjects()
@@ -590,7 +642,15 @@ export function ChatSidebar({
     hideScrollbarWhileSectionsAnimate()
     setIsChatHistoryExpanded(true)
     setIsProjectsExpanded(false)
+    setIsFavoritesExpanded(false)
     sidebarScrollRef.current?.scrollTo({ top: 0 })
+  }, [hideScrollbarWhileSectionsAnimate])
+
+  const expandFavoritesSection = useCallback(() => {
+    hideScrollbarWhileSectionsAnimate()
+    setIsFavoritesExpanded(true)
+    setIsProjectsExpanded(false)
+    setIsChatHistoryExpanded(false)
   }, [hideScrollbarWhileSectionsAnimate])
 
   const filteredChats = useMemo(() => {
@@ -613,6 +673,25 @@ export function ChatSidebar({
         (chat as any).isLocalOnly && !chat.projectId && !chat.isBlankChat,
     )
   }, [chats, activeTab, isSignedIn, cloudSyncEnabled, localOnlyModeEnabled])
+
+  const favoriteChats = useMemo(() => {
+    const chatsById = new Map(chats.map((chat) => [chat.id, chat]))
+    return pinnedChatIds
+      .map((chatId) => chatsById.get(chatId))
+      .filter((chat): chat is Chat =>
+        Boolean(chat && isResolvedFavoriteChat(chat)),
+      )
+  }, [chats, pinnedChatIds])
+
+  const { isFavoriteDropTarget, favoriteDropTargetProps } =
+    useFavoriteDropTarget({
+      chats,
+      pinnedChatIds,
+      draggingChatId,
+      onToggleFavorite,
+      onActivate: expandFavoritesSection,
+      clearDragState,
+    })
 
   const paginatesCloudChats =
     isSignedIn &&
@@ -881,6 +960,36 @@ export function ChatSidebar({
                 </span>
               </div>
 
+              {isSignedIn && cloudSyncEnabled && (
+                <div className="group relative" {...favoriteDropTargetProps}>
+                  <button
+                    onClick={() => {
+                      expandFavoritesSection()
+                      setIsOpen(true)
+                      requestAnimationFrame(() =>
+                        favoritesSectionRef.current?.scrollIntoView({
+                          block: 'start',
+                        }),
+                      )
+                    }}
+                    className={cn(
+                      'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                      'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                      isFavoriteDropTarget &&
+                        (isDarkMode
+                          ? 'border border-white/30 bg-white/10'
+                          : 'border border-gray-400 bg-gray-200/30'),
+                    )}
+                    aria-label="Favorites"
+                  >
+                    <PiPushPin className="h-5 w-5" />
+                  </button>
+                  <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                    Favorites
+                  </span>
+                </div>
+              )}
+
               {/* Projects button - only for premium users */}
               {isSignedIn && isPremium && (
                 <div className="group relative">
@@ -890,8 +999,7 @@ export function ChatSidebar({
                         UI_SIDEBAR_EXPAND_SECTION,
                         'projects',
                       )
-                      setIsProjectsExpanded(true)
-                      setIsChatHistoryExpanded(false)
+                      expandProjectsSection()
                       setIsOpen(true)
                     }}
                     className={cn(
@@ -913,8 +1021,7 @@ export function ChatSidebar({
                 <button
                   onClick={() => {
                     sessionStorage.setItem(UI_SIDEBAR_EXPAND_SECTION, 'chats')
-                    setIsChatHistoryExpanded(true)
-                    setIsProjectsExpanded(false)
+                    expandChatsSection()
                     setIsOpen(true)
                   }}
                   className={cn(
@@ -1232,6 +1339,93 @@ export function ChatSidebar({
               </span>
             </Link>
           </div>
+
+          {isSignedIn && cloudSyncEnabled && (
+            <section
+              ref={favoritesSectionRef}
+              {...favoriteDropTargetProps}
+              className={cn(
+                'relative z-10 flex-none border-t border-border-subtle transition-colors',
+                isFavoriteDropTarget &&
+                  (isDarkMode ? 'bg-white/10' : 'bg-gray-200/50'),
+              )}
+            >
+              <button
+                type="button"
+                aria-expanded={isFavoritesExpanded}
+                aria-controls={FAVORITES_PANEL_ID}
+                onClick={() => {
+                  if (isFavoritesExpanded) {
+                    hideScrollbarWhileSectionsAnimate()
+                    setIsFavoritesExpanded(false)
+                  } else {
+                    expandFavoritesSection()
+                  }
+                }}
+                className="flex w-full items-center justify-between px-4 py-3 text-sm text-content-secondary transition-colors hover:text-content-primary"
+              >
+                <span className="flex items-center gap-2">
+                  <PiPushPin className="h-4 w-4" aria-hidden="true" />
+                  <span
+                    role="heading"
+                    aria-level={2}
+                    className="font-aeonik font-medium"
+                  >
+                    Favorites
+                  </span>
+                </span>
+                {isFavoritesExpanded ? (
+                  <ChevronDownIcon className="h-4 w-4" />
+                ) : (
+                  <ChevronRightIcon className="h-4 w-4" />
+                )}
+              </button>
+              <AnimatePresence initial={false}>
+                {isFavoritesExpanded && (
+                  <motion.div
+                    id={FAVORITES_PANEL_ID}
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{
+                      duration: CONSTANTS.SIDEBAR_SECTION_ANIMATION_S,
+                      ease: 'easeInOut',
+                    }}
+                    className="overflow-hidden"
+                  >
+                    {favoriteChats.length > 0 ? (
+                      <ChatList
+                        chats={favoriteChats}
+                        currentChatId={currentChat?.id}
+                        isDarkMode={isDarkMode}
+                        pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+                        showSyncStatus={true}
+                        getChatHref={(chat) =>
+                          getChatPath(chat.id, { projectId: chat.projectId })
+                        }
+                        onSelectChat={(chatId) => {
+                          const favorite = favoriteChats.find(
+                            (chat) => chat.id === chatId,
+                          )
+                          if (favorite) void onOpenFavorite?.(favorite)
+                        }}
+                        onUpdateTitle={updateChatTitle}
+                        onDeleteChat={deleteChat}
+                        pinnedChatIds={pinnedChatIds}
+                        showPinnedIndicators={false}
+                        showDesktopPinActions={false}
+                        onTogglePin={onToggleFavorite}
+                      />
+                    ) : (
+                      <p className="px-4 pb-3 font-aeonik-fono text-xs text-content-muted">
+                        Pin chats for quick access.
+                      </p>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </section>
+          )}
 
           {/* Projects dropdown - show for premium users. The header and
               list are direct children of the scroll container (no section
@@ -2158,6 +2352,8 @@ export function ChatSidebar({
                         }
                         onConvertToCloud={onConvertChatToCloud}
                         onConvertToLocal={onConvertChatToLocal}
+                        pinnedChatIds={pinnedChatIds}
+                        onTogglePin={onToggleFavorite}
                         emptyState={
                           isSearchActive ? (
                             <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">

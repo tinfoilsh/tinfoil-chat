@@ -6,6 +6,7 @@ import { getDocumentTextContent } from '@/components/chat/document-content'
 import { useDocumentUploader } from '@/components/chat/document-uploader'
 import { useDrag } from '@/components/chat/drag-context'
 import { TypingAnimation } from '@/components/chat/typing-animation'
+import { useFavoriteDropTarget } from '@/components/chat/use-favorite-drop-target'
 import { PiSpinnerThin } from '@/components/icons/lazy-icons'
 import { Link } from '@/components/link'
 import { Logo } from '@/components/logo'
@@ -20,8 +21,12 @@ import {
   PROJECT_COLORS,
   projectColorTintLayer,
 } from '@/constants/project-colors'
-import { UI_EXPAND_PROJECT_DOCUMENTS } from '@/constants/storage-keys'
+import {
+  UI_EXPAND_PROJECT_DOCUMENTS,
+  UI_SIDEBAR_FAVORITES_EXPANDED,
+} from '@/constants/storage-keys'
 import { toast } from '@/hooks/use-toast'
+import { isResolvedFavoriteChat } from '@/services/storage/pinned-chats'
 import type { Fact } from '@/types/memory'
 import type { Project } from '@/types/project'
 import {
@@ -73,11 +78,12 @@ import {
   BsFiletypeXml,
 } from 'react-icons/bs'
 import { GoSidebarCollapse, GoSidebarExpand } from 'react-icons/go'
-import { PiNotePencilLight } from 'react-icons/pi'
+import { PiNotePencilLight, PiPushPin } from 'react-icons/pi'
 import { CONSTANTS } from '../chat/constants'
 import { useProject } from './project-context'
 
 const MOBILE_BREAKPOINT = 1024
+const FAVORITES_PANEL_ID = 'project-sidebar-favorites-panel'
 
 interface ProjectChat {
   id: string
@@ -87,6 +93,10 @@ interface ProjectChat {
   updatedAt?: string
   projectId?: string
   isBlankChat?: boolean
+  decryptionFailed?: boolean
+  dataCorrupted?: boolean
+  isTemporary?: boolean
+  pendingSave?: boolean
 }
 
 interface ProjectOption {
@@ -119,6 +129,11 @@ interface ProjectSidebarProps {
   onMoveChatToProject?: (chatId: string, projectId: string) => Promise<void>
   projects?: ProjectOption[]
   onSettingsClick?: () => void
+  favoriteChats?: ChatItemData[]
+  pinnedChatIds?: readonly string[]
+  onToggleFavorite?: (chat: ChatItemData) => void | Promise<void>
+  onOpenFavorite?: (chat: ChatItemData) => void | Promise<void>
+  cloudSyncEnabled: boolean
   windowWidth: number
 }
 
@@ -289,10 +304,15 @@ export function ProjectSidebar({
   onMoveChatToProject,
   projects = [],
   onSettingsClick,
+  favoriteChats = [],
+  pinnedChatIds = [],
+  onToggleFavorite,
+  onOpenFavorite,
+  cloudSyncEnabled,
   windowWidth,
 }: ProjectSidebarProps) {
   const { isSignedIn } = useAuth()
-  const { setDraggingChat, clearDragState } = useDrag()
+  const { draggingChatId, setDraggingChat, clearDragState } = useDrag()
   const {
     projectDocuments,
     uploadDocument,
@@ -309,6 +329,8 @@ export function ProjectSidebar({
   const { handleDocumentUpload: processDocument, isDocumentUploading } =
     useDocumentUploader()
   const [settingsExpanded, setSettingsExpanded] = useState(false)
+  const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(false)
+  const hasLoadedFavoritesExpandedRef = useRef(false)
   const [documentsExpanded, setDocumentsExpanded] = useState(false)
   const [memoryExpanded, setMemoryExpanded] = useState(false)
   const [memoryText, setMemoryText] = useState('')
@@ -345,6 +367,7 @@ export function ProjectSidebar({
   const skipNextAnimationRef = useRef(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const favoritesSectionRef = useRef<HTMLElement>(null)
   const exitHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isExitButtonDragHover, setIsExitButtonDragHover] = useState(false)
   const [isDropTargetChatList, setIsDropTargetChatList] = useState(false)
@@ -385,6 +408,19 @@ export function ProjectSidebar({
   }, [refreshDocuments])
 
   // Expand documents section when signal is set (from file upload to project context)
+  useEffect(() => {
+    if (!hasLoadedFavoritesExpandedRef.current) {
+      hasLoadedFavoritesExpandedRef.current = true
+      const stored = sessionStorage.getItem(UI_SIDEBAR_FAVORITES_EXPANDED)
+      if (stored !== null) setIsFavoritesExpanded(stored === 'true')
+      return
+    }
+    sessionStorage.setItem(
+      UI_SIDEBAR_FAVORITES_EXPANDED,
+      isFavoritesExpanded ? 'true' : 'false',
+    )
+  }, [isFavoritesExpanded])
+
   useEffect(() => {
     if (isOpen) {
       const shouldExpandDocs = sessionStorage.getItem(
@@ -681,11 +717,29 @@ export function ProjectSidebar({
         (c.createdAt instanceof Date
           ? c.createdAt.toISOString()
           : new Date(c.createdAt).toISOString()),
+      projectId: c.projectId,
+      decryptionFailed: c.decryptionFailed,
+      dataCorrupted: c.dataCorrupted,
+      isTemporary: c.isTemporary,
+      pendingSave: c.pendingSave,
     }))
     .sort(
       (a, b) =>
         new Date(b.updatedAt!).getTime() - new Date(a.updatedAt!).getTime(),
     )
+
+  const resolvedFavoriteChats = favoriteChats.filter(isResolvedFavoriteChat)
+
+  const favoriteDropChats = [...projectChats, ...resolvedFavoriteChats]
+  const { isFavoriteDropTarget, favoriteDropTargetProps } =
+    useFavoriteDropTarget({
+      chats: favoriteDropChats,
+      pinnedChatIds,
+      draggingChatId,
+      onToggleFavorite,
+      onActivate: () => setIsFavoritesExpanded(true),
+      clearDragState,
+    })
 
   const isMobile = windowWidth < MOBILE_BREAKPOINT
 
@@ -768,6 +822,36 @@ export function ProjectSidebar({
                   </span>
                 </span>
               </div>
+
+              {isSignedIn && cloudSyncEnabled && (
+                <div className="group relative" {...favoriteDropTargetProps}>
+                  <button
+                    onClick={() => {
+                      setIsFavoritesExpanded(true)
+                      setIsOpen(true)
+                      requestAnimationFrame(() =>
+                        favoritesSectionRef.current?.scrollIntoView({
+                          block: 'start',
+                        }),
+                      )
+                    }}
+                    className={cn(
+                      'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                      'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                      isFavoriteDropTarget &&
+                        (isDarkMode
+                          ? 'border border-white/30 bg-white/10'
+                          : 'border border-gray-400 bg-gray-200/30'),
+                    )}
+                    aria-label="Favorites"
+                  >
+                    <PiPushPin className="h-5 w-5" />
+                  </button>
+                  <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                    Favorites
+                  </span>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -995,6 +1079,85 @@ export function ProjectSidebar({
               </span>
             </Link>
           </div>
+
+          {isSignedIn && cloudSyncEnabled && (
+            <section
+              ref={favoritesSectionRef}
+              {...favoriteDropTargetProps}
+              className={cn(
+                'relative z-10 flex-none border-y border-border-subtle transition-colors',
+                isFavoriteDropTarget &&
+                  (isDarkMode ? 'bg-white/10' : 'bg-gray-200/50'),
+              )}
+            >
+              <button
+                type="button"
+                aria-expanded={isFavoritesExpanded}
+                aria-controls={FAVORITES_PANEL_ID}
+                onClick={() => setIsFavoritesExpanded((expanded) => !expanded)}
+                className="flex w-full items-center justify-between px-4 py-3 text-sm text-content-secondary transition-colors hover:text-content-primary"
+              >
+                <span className="flex items-center gap-2">
+                  <PiPushPin className="h-4 w-4" aria-hidden="true" />
+                  <span
+                    role="heading"
+                    aria-level={2}
+                    className="font-aeonik font-medium"
+                  >
+                    Favorites
+                  </span>
+                </span>
+                {isFavoritesExpanded ? (
+                  <ChevronUpIcon className="h-4 w-4" />
+                ) : (
+                  <ChevronDownIcon className="h-4 w-4" />
+                )}
+              </button>
+              <AnimatePresence initial={false}>
+                {isFavoritesExpanded && (
+                  <motion.div
+                    id={FAVORITES_PANEL_ID}
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2, ease: 'easeInOut' }}
+                    className="overflow-hidden"
+                  >
+                    {resolvedFavoriteChats.length > 0 ? (
+                      <ChatList
+                        chats={resolvedFavoriteChats}
+                        currentChatId={currentChatId}
+                        isDarkMode={isDarkMode}
+                        pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+                        getChatHref={(chat) =>
+                          getChatPath(chat.id, { projectId: chat.projectId })
+                        }
+                        onSelectChat={(chatId) => {
+                          const favorite = resolvedFavoriteChats.find(
+                            (chat) => chat.id === chatId,
+                          )
+                          if (favorite) {
+                            void onOpenFavorite?.(favorite)
+                            if (isMobile) setIsOpen(false)
+                          }
+                        }}
+                        onUpdateTitle={updateChatTitle}
+                        onDeleteChat={handleDeleteChat}
+                        pinnedChatIds={pinnedChatIds}
+                        showPinnedIndicators={false}
+                        showDesktopPinActions={false}
+                        onTogglePin={onToggleFavorite}
+                      />
+                    ) : (
+                      <p className="px-4 pb-3 font-aeonik-fono text-xs text-content-muted">
+                        Pin chats for quick access.
+                      </p>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </section>
+          )}
 
           {/* Project Settings Dropdown */}
           <div className="relative z-10 flex-none border-y border-border-subtle">
@@ -1464,6 +1627,8 @@ export function ProjectSidebar({
               onDragEnd={() => clearDragState()}
               onMoveToProject={onMoveChatToProject}
               onRemoveFromProject={onRemoveChatFromProject}
+              pinnedChatIds={pinnedChatIds}
+              onTogglePin={onToggleFavorite}
             />
           </div>
         </div>

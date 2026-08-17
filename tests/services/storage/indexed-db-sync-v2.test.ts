@@ -271,6 +271,27 @@ describe('IndexedDB sync protocol v2 migration', () => {
     await expect(storage.getPendingDeletes('user-1')).resolves.toEqual([])
   })
 
+  it('persists a forced delete intent when the local row is missing', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+
+    const queued = await storage.deleteChatWithPendingIntent(
+      'memory-only-chat',
+      'forced-delete-key',
+      'user-1',
+      { forceQueue: true },
+    )
+
+    expect(queued).toBe(true)
+    await expect(storage.getPendingDeletes('user-1')).resolves.toEqual([
+      expect.objectContaining({
+        id: 'memory-only-chat',
+        userId: 'user-1',
+        idempotencyKey: 'forced-delete-key',
+      }),
+    ])
+  })
+
   it('removes a matching delete intent with a remote deletion', async () => {
     const storage = new IndexedDBStorage()
     await storage.initialize()

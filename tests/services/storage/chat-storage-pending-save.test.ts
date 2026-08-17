@@ -20,7 +20,10 @@ const {
   resetChatTimestampsSpy,
   updateChatLocalOnlySpy,
   updateChatProjectSpy,
+  deleteChatWithPendingIntentSpy,
+  deleteLocalChatSpy,
   deleteFromCloudSpy,
+  hasPendingUploadSpy,
   isDeletedSpy,
 } = vi.hoisted(() => ({
   saveChatSpy: vi.fn(async (chat: unknown) => ({
@@ -43,7 +46,10 @@ const {
   resetChatTimestampsSpy: vi.fn(async () => {}),
   updateChatLocalOnlySpy: vi.fn(async () => {}),
   updateChatProjectSpy: vi.fn(async () => {}),
+  deleteChatWithPendingIntentSpy: vi.fn(async () => true),
+  deleteLocalChatSpy: vi.fn(async () => {}),
   deleteFromCloudSpy: vi.fn(async () => {}),
+  hasPendingUploadSpy: vi.fn(() => false),
   isDeletedSpy: vi.fn((_id: unknown) => false),
 }))
 
@@ -56,6 +62,8 @@ vi.mock('@/services/storage/indexed-db', () => ({
     resetChatTimestamps: resetChatTimestampsSpy,
     updateChatLocalOnly: updateChatLocalOnlySpy,
     updateChatProject: updateChatProjectSpy,
+    deleteChatWithPendingIntent: deleteChatWithPendingIntentSpy,
+    deleteChat: deleteLocalChatSpy,
     deleteChatsByProject: deleteChatsByProjectSpy,
     acknowledgePendingDeletes: acknowledgePendingDeletesSpy,
   },
@@ -64,6 +72,7 @@ vi.mock('@/services/cloud/cloud-sync', () => ({
   cloudSync: {
     backupChat: backupChatSpy,
     deleteFromCloud: deleteFromCloudSpy,
+    hasPendingUpload: hasPendingUploadSpy,
     createAccountOperationGuard: createAccountOperationGuardSpy,
     withProjectUploadBarrier: withProjectUploadBarrierSpy,
   },
@@ -113,6 +122,8 @@ describe('chatStorage pendingSave is not persisted', () => {
     deleteRemoteProjectChatsSpy.mockResolvedValue({ deleted: 0 })
     acknowledgePendingDeletesSpy.mockResolvedValue(undefined)
     listChatIdsByProjectSpy.mockResolvedValue([])
+    deleteChatWithPendingIntentSpy.mockResolvedValue(true)
+    hasPendingUploadSpy.mockReturnValue(false)
     createAccountOperationGuardSpy.mockImplementation(() => {
       const userId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
       const isCurrent = () =>
@@ -156,6 +167,34 @@ describe('chatStorage pendingSave is not persisted', () => {
 
     expect(saveChatSpy).not.toHaveBeenCalled()
     expect(backupChatSpy).not.toHaveBeenCalled()
+  })
+
+  it('queues and dispatches cloud deletion for a memory-only remote chat', async () => {
+    getChatSpy.mockResolvedValueOnce(null)
+
+    await chatStorage.deleteChat('memory-only-chat')
+
+    expect(deleteChatWithPendingIntentSpy).toHaveBeenCalledWith(
+      'memory-only-chat',
+      'delete-key',
+      'user-1',
+      { forceQueue: true },
+    )
+    expect(deleteFromCloudSpy).toHaveBeenCalledWith(
+      'memory-only-chat',
+      'delete-key',
+    )
+    expect(deleteLocalChatSpy).not.toHaveBeenCalled()
+  })
+
+  it('preserves local-only deletion behavior', async () => {
+    getChatSpy.mockResolvedValueOnce({ isLocalOnly: true } as never)
+
+    await chatStorage.deleteChat('local-chat')
+
+    expect(deleteLocalChatSpy).toHaveBeenCalledWith('local-chat')
+    expect(deleteChatWithPendingIntentSpy).not.toHaveBeenCalled()
+    expect(deleteFromCloudSpy).not.toHaveBeenCalled()
   })
 
   it('does not recreate deleted guest chats in session storage', () => {
@@ -224,7 +263,9 @@ describe('chatStorage pendingSave is not persisted', () => {
     listChatIdsByProjectSpy.mockResolvedValueOnce(['remote-1', 'remote-2'])
     deleteChatsByProjectSpy.mockResolvedValue(['remote-1', 'remote-2'])
 
-    await expect(chatStorage.deleteChatsByProject('project-1')).resolves.toBe(2)
+    await expect(
+      chatStorage.deleteChatsByProjectWithIds('project-1'),
+    ).resolves.toEqual(['remote-1', 'remote-2'])
 
     expect(withProjectUploadBarrierSpy).toHaveBeenCalledWith(
       'project-1',
