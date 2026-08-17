@@ -155,6 +155,7 @@ import { useSidebarChat } from './hooks/use-sidebar-chat'
 import { MessageQueue } from './message-queue'
 import { getBlankQueueId } from './message-queue-identity'
 import { ModelSelector } from './model-selector'
+import { openProjectChat } from './project-navigation'
 import { QuoteSelectionPopover } from './quote-selection-popover'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
@@ -2226,7 +2227,11 @@ export function ChatInterface({
     try {
       const name = `My Project #${projects.length + 1}`
       const project = await createProject({ name, description: '' })
-      await enterProjectMode(project.id)
+      await openProjectChat({
+        projectId: project.id,
+        createNewChat,
+        enterProjectMode,
+      })
     } catch (error) {
       logError('Failed to create project', error, {
         component: 'ChatInterface',
@@ -2240,6 +2245,7 @@ export function ChatInterface({
     }
   }, [
     createProject,
+    createNewChat,
     enterProjectMode,
     invalidateFavoriteNavigation,
     projects.length,
@@ -3869,8 +3875,12 @@ export function ChatInterface({
                 onEnterProject={async (projectId, projectName) => {
                   // Create a new blank chat before entering project mode
                   // This prevents the current chat from being associated with the project
-                  createNewChat(false, true)
-                  await enterProjectMode(projectId, projectName)
+                  await openProjectChat({
+                    projectId,
+                    projectName,
+                    createNewChat,
+                    enterProjectMode,
+                  })
                 }}
                 onCreateProject={handleCreateProject}
                 onMoveChatToProject={handleMoveChatToProject}
