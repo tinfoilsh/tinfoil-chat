@@ -1,6 +1,5 @@
-import { TfChat2 } from '@tinfoilsh/tinfoil-icons'
+import { TfChat2, TfQuote } from '@tinfoilsh/tinfoil-icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { PiQuotes } from 'react-icons/pi'
 
 type PopoverPosition = {
   top: number
@@ -181,7 +180,7 @@ export function QuoteSelectionPopover({
         onClick={handleQuoteClick}
         className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat-background"
       >
-        <PiQuotes className="h-4 w-4" aria-hidden="true" />
+        <TfQuote className="h-4 w-4" aria-hidden="true" />
         <span>Quote</span>
       </button>
       {onAsk && (

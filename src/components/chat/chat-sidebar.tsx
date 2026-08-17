@@ -36,6 +36,7 @@ import {
 } from '@heroicons/react/24/outline'
 import {
   TfChat2,
+  TfFloppyDisk,
   TfFolder,
   TfLockLocked,
   TfMicrophone,
@@ -46,7 +47,6 @@ import {
   TfWriting2,
 } from '@tinfoilsh/tinfoil-icons'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CiFloppyDisk } from 'react-icons/ci'
 import { GoSidebarCollapse, GoSidebarExpand } from 'react-icons/go'
 import { PiPushPin, PiSpinner } from 'react-icons/pi'
 import { ChatList, type ChatItemData } from './chat-list'
@@ -2113,7 +2113,7 @@ export function ChatSidebar({
                               : 'text-content-muted hover:text-content-secondary',
                         )}
                       >
-                        <CiFloppyDisk className="h-3.5 w-3.5" />
+                        <TfFloppyDisk className="h-3.5 w-3.5" />
                         Local
                       </button>
                     </div>

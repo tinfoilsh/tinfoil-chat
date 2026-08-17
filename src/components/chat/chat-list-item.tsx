@@ -11,6 +11,7 @@ import {
 } from '@heroicons/react/24/outline'
 import {
   TfCloudSync,
+  TfFloppyDisk,
   TfFolder,
   TfLockLocked,
   TfTrash,
@@ -20,7 +21,6 @@ import {
 import Link from 'next/link'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CiFloppyDisk } from 'react-icons/ci'
 import { PiPushPin, PiPushPinFill } from 'react-icons/pi'
 import { RedactedText } from '../ui/redacted-text'
 import { cn } from '../ui/utils'
@@ -522,7 +522,7 @@ export function ChatListItem({
                             ·
                           </span>
                         )}
-                        <CiFloppyDisk className="h-3 w-3" aria-hidden="true" />
+                        <TfFloppyDisk className="h-3 w-3" aria-hidden="true" />
                         Only saved locally
                       </span>
                     ) : !chat.isBlankChat && syncFailed ? (
@@ -851,7 +851,7 @@ export function ChatListItem({
                                 onConvertToLocal()
                               }}
                             >
-                              <CiFloppyDisk
+                              <TfFloppyDisk
                                 className="h-4 w-4"
                                 aria-hidden="true"
                               />

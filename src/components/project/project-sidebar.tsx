@@ -45,6 +45,7 @@ import {
   NoSymbolIcon,
 } from '@heroicons/react/24/outline'
 import {
+  TfDocument,
   TfFolder,
   TfSetting,
   TfTrash,
@@ -54,7 +55,6 @@ import {
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  BsFile,
   BsFiletypeCss,
   BsFiletypeCsv,
   BsFiletypeDoc,
@@ -211,7 +211,7 @@ function getFileIcon(filename: string, className: string) {
     case 'mov':
       return <BsFiletypeMov className={className} />
     default:
-      return <BsFile className={className} />
+      return <TfDocument className={className} />
   }
 }
 

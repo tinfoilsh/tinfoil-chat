@@ -1,5 +1,5 @@
+import { TfDocument } from '@tinfoilsh/tinfoil-icons'
 import {
-  BsFile,
   BsFiletypeCss,
   BsFiletypeCsv,
   BsFiletypeDoc,
@@ -105,7 +105,7 @@ export function MacFileIcon({
       case 'mov':
         return <BsFiletypeMov size={size} className={iconClass} />
       default:
-        return <BsFile size={size} className={iconClass} />
+        return <TfDocument width={size} size={size} className={iconClass} />
     }
   }
 
