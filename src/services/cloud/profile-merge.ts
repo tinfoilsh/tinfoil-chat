@@ -98,12 +98,11 @@ export function reconcileDirtyProfileWithoutBaseline(args: {
   localAfterFetch: ProfileData
 }): ProfileData | null {
   const { remote, localBeforeFetch, localAfterFetch } = args
-  const localHasPinnedChats = Object.prototype.hasOwnProperty.call(
-    localBeforeFetch,
-    'pinnedChatIds',
+  const localHasMigrationSafeField = [...PRESERVE_LOCAL_WHEN_REMOTE_OMITS].some(
+    (field) => Object.prototype.hasOwnProperty.call(localBeforeFetch, field),
   )
 
-  if (!localHasPinnedChats) return null
+  if (!localHasMigrationSafeField) return null
 
   const profile = { ...remote }
   for (const field of PROFILE_MERGE_FIELDS) {

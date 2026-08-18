@@ -288,6 +288,22 @@ describe('reconcileDirtyProfileWithoutBaseline', () => {
     expect(profile?.pinnedChatIds).toEqual([])
   })
 
+  it('recovers another migration-safe field without local pins', () => {
+    const profile = reconcileDirtyProfileWithoutBaseline({
+      remote: { nickname: 'Remote', version: 4 },
+      localBeforeFetch: {
+        nickname: 'Remote',
+        pixelateSidebarChatTitlesEnabled: false,
+      },
+      localAfterFetch: {
+        nickname: 'Remote',
+        pixelateSidebarChatTitlesEnabled: false,
+      },
+    })
+
+    expect(profile?.pixelateSidebarChatTitlesEnabled).toBe(false)
+  })
+
   it('overlays settings changed while the remote profile was loading', () => {
     const profile = reconcileDirtyProfileWithoutBaseline({
       remote: { nickname: 'Remote', profession: 'Researcher', version: 4 },
