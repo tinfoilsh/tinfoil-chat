@@ -69,7 +69,7 @@ export function SidebarSyncButton({
         type="button"
         onClick={() => void handleSync()}
         disabled={isDisabled}
-        aria-label={`Sync chats. ${feedback === 'success' ? 'Synced' : statusLabel}`}
+        aria-label={`Sync cloud data. ${feedback === 'success' ? 'Synced' : statusLabel}`}
         className={cn(
           'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors disabled:cursor-default',
           showSpinner && 'opacity-60',

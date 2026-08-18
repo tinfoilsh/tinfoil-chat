@@ -71,6 +71,7 @@ import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { usePasskeyBackup } from '@/hooks/use-passkey-backup'
 import { usePinnedChats } from '@/hooks/use-pinned-chats'
 import { useProfileSync } from '@/hooks/use-profile-sync'
+import { runManualCloudSync } from '@/services/cloud/manual-cloud-sync'
 import { ENCRYPTION_KEY_CHANGED_EVENT } from '@/services/encryption/encryption-service'
 import { hydratePinnedChatById } from '@/services/storage/pinned-chat-hydration'
 import {
@@ -2055,17 +2056,19 @@ export function ChatInterface({
 
   const handleManualSync = useCallback(async () => {
     try {
-      const result = await syncChats()
-      await reloadChats()
-      return result !== false && result.errors.length === 0
+      return await runManualCloudSync({
+        syncChats,
+        syncProfile: syncProfileFromCloud,
+        reloadChats,
+      })
     } catch (error) {
-      logError('Manual chat sync failed', error, {
+      logError('Manual cloud sync failed', error, {
         component: 'ChatInterface',
         action: 'handleManualSync',
       })
       return false
     }
-  }, [syncChats, reloadChats])
+  }, [syncChats, syncProfileFromCloud, reloadChats])
 
   // Handler for opening verifier sidebar
   const handleOpenVerifierSidebar = () => {
@@ -3769,6 +3772,7 @@ export function ChatInterface({
                   favoriteChats={favoriteChats}
                   pinnedChatIds={pinnedChatIds}
                   onToggleFavorite={handleToggleFavorite}
+                  onRemoveFavorite={unpinChat}
                   onOpenFavorite={handleOpenFavorite}
                   cloudSyncEnabled={cloudSyncSettingEnabled}
                   windowWidth={windowWidth}
@@ -3812,6 +3816,7 @@ export function ChatInterface({
                   favoriteChats={favoriteChats}
                   pinnedChatIds={pinnedChatIds}
                   onToggleFavorite={handleToggleFavorite}
+                  onRemoveFavorite={unpinChat}
                   onOpenFavorite={handleOpenFavorite}
                   cloudSyncEnabled={cloudSyncSettingEnabled}
                   windowWidth={windowWidth}
@@ -3890,6 +3895,7 @@ export function ChatInterface({
                 onSettingsClick={handleOpenSettingsModal}
                 pinnedChatIds={pinnedChatIds}
                 onToggleFavorite={handleToggleFavorite}
+                onRemoveFavorite={unpinChat}
                 onOpenFavorite={handleOpenFavorite}
                 windowWidth={windowWidth}
                 chatDecryptionProgress={decryptionProgress}

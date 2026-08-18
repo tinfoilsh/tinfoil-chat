@@ -55,6 +55,7 @@ import { ChatList, type ChatItemData } from './chat-list'
 import { formatRelativeTime } from './chat-list-utils'
 import { CONSTANTS } from './constants'
 import { useDrag } from './drag-context'
+import { consumeFavoriteDrop } from './favorite-drag'
 import { SidebarSyncButton } from './sidebar-sync-button'
 import { useFavoriteDropTarget } from './use-favorite-drop-target'
 
@@ -145,6 +146,7 @@ type ChatSidebarProps = {
   onSettingsClick?: () => void
   pinnedChatIds?: readonly string[]
   onToggleFavorite?: (chat: ChatItemData) => void | Promise<void>
+  onRemoveFavorite?: (chatId: string) => void
   onOpenFavorite?: (chat: ChatItemData) => void | Promise<void>
   windowWidth: number
   /**
@@ -219,6 +221,7 @@ export function ChatSidebar({
   onSettingsClick,
   pinnedChatIds = [],
   onToggleFavorite,
+  onRemoveFavorite,
   onOpenFavorite,
   windowWidth,
   chatDecryptionProgress,
@@ -311,6 +314,7 @@ export function ChatSidebar({
   const {
     draggingChatId,
     draggingChatFromProjectId,
+    draggingChatSource,
     dropTargetProjectId,
     dropTargetTab,
     isDropTargetChatHistory,
@@ -1411,9 +1415,13 @@ export function ChatSidebar({
                         }}
                         onUpdateTitle={updateChatTitle}
                         onDeleteChat={deleteChat}
+                        isDraggable={Boolean(onRemoveFavorite)}
+                        onDragStart={(chatId) =>
+                          setDraggingChat(chatId, null, 'favorites')
+                        }
+                        onDragEnd={clearDragState}
                         pinnedChatIds={pinnedChatIds}
                         showPinnedIndicators={false}
-                        showDesktopPinActions={false}
                         onTogglePin={onToggleFavorite}
                       />
                     ) : (
@@ -1461,7 +1469,10 @@ export function ChatSidebar({
                   ) {
                     e.preventDefault()
                     setIsDropTargetProjectsHeader(true)
-                    if (!isProjectsExpanded) {
+                    if (
+                      !isProjectsExpanded &&
+                      draggingChatSource !== 'favorites'
+                    ) {
                       expandProjectsSection()
                     }
                   }
@@ -1469,8 +1480,19 @@ export function ChatSidebar({
                 onDragLeave={() => {
                   setIsDropTargetProjectsHeader(false)
                 }}
-                onDrop={() => {
+                onDrop={(e) => {
+                  e.preventDefault()
+                  const chatId = e.dataTransfer.getData('application/x-chat-id')
+                  if (chatId) {
+                    consumeFavoriteDrop({
+                      source: draggingChatSource,
+                      chatId,
+                      pinnedChatIds,
+                      onRemoveFavorite,
+                    })
+                  }
                   setIsDropTargetProjectsHeader(false)
+                  clearDragState()
                 }}
                 style={{
                   // Explicit height shared with the Chats header's stacking
@@ -1735,15 +1757,15 @@ export function ChatSidebar({
                                           projectHoverTimerRef.current,
                                         )
                                       }
-                                      projectHoverTimerRef.current = setTimeout(
-                                        () => {
-                                          onEnterProject?.(
-                                            project.id,
-                                            project.name,
-                                          )
-                                        },
-                                        400,
-                                      )
+                                      if (draggingChatSource !== 'favorites') {
+                                        projectHoverTimerRef.current =
+                                          setTimeout(() => {
+                                            onEnterProject?.(
+                                              project.id,
+                                              project.name,
+                                            )
+                                          }, 400)
+                                      }
                                     }
                                   },
                                   onDragLeave: (
@@ -1777,7 +1799,16 @@ export function ChatSidebar({
                                     const chatId = e.dataTransfer.getData(
                                       'application/x-chat-id',
                                     )
+                                    const favoriteDropConsumed = chatId
+                                      ? consumeFavoriteDrop({
+                                          source: draggingChatSource,
+                                          chatId,
+                                          pinnedChatIds,
+                                          onRemoveFavorite,
+                                        })
+                                      : false
                                     if (
+                                      !favoriteDropConsumed &&
                                       chatId &&
                                       onMoveChatToProject &&
                                       !project.decryptionFailed
@@ -1877,7 +1908,10 @@ export function ChatSidebar({
                 if (chatId) {
                   e.preventDefault()
                   setDropTargetChatHistory(true)
-                  if (!isChatHistoryExpanded) {
+                  if (
+                    !isChatHistoryExpanded &&
+                    draggingChatSource !== 'favorites'
+                  ) {
                     expandChatsSection()
                   }
                 }
@@ -1888,7 +1922,17 @@ export function ChatSidebar({
               onDrop={async (e) => {
                 e.preventDefault()
                 const chatId = e.dataTransfer.getData('application/x-chat-id')
-                if (chatId && onRemoveChatFromProject) {
+                const favoriteDropConsumed = chatId
+                  ? consumeFavoriteDrop({
+                      source: draggingChatSource,
+                      chatId,
+                      pinnedChatIds,
+                      onRemoveFavorite,
+                    })
+                  : false
+                if (favoriteDropConsumed) {
+                  expandChatsSection()
+                } else if (chatId && onRemoveChatFromProject) {
                   await onRemoveChatFromProject(chatId)
                 }
                 clearDragState()
@@ -2009,13 +2053,23 @@ export function ChatSidebar({
                             'application/x-chat-id',
                           )
                           if (chatId) {
+                            const favoriteDropConsumed = consumeFavoriteDrop({
+                              source: draggingChatSource,
+                              chatId,
+                              pinnedChatIds,
+                              onRemoveFavorite,
+                            })
                             if (
+                              !favoriteDropConsumed &&
                               draggingChatFromProjectId &&
                               onRemoveChatFromProject
                             ) {
                               // Chat from project is already cloud, just remove from project
                               await onRemoveChatFromProject(chatId)
-                            } else if (onConvertChatToCloud) {
+                            } else if (
+                              !favoriteDropConsumed &&
+                              onConvertChatToCloud
+                            ) {
                               // Only convert if dragging from local (not from project)
                               await onConvertChatToCloud(chatId)
                             }
@@ -2078,7 +2132,19 @@ export function ChatSidebar({
                           const chatId = e.dataTransfer.getData(
                             'application/x-chat-id',
                           )
-                          if (chatId && onConvertChatToLocal) {
+                          const favoriteDropConsumed = chatId
+                            ? consumeFavoriteDrop({
+                                source: draggingChatSource,
+                                chatId,
+                                pinnedChatIds,
+                                onRemoveFavorite,
+                              })
+                            : false
+                          if (
+                            !favoriteDropConsumed &&
+                            chatId &&
+                            onConvertChatToLocal
+                          ) {
                             // convertChatToLocal also clears projectId
                             await onConvertChatToLocal(chatId)
                           }
@@ -2223,7 +2289,16 @@ export function ChatSidebar({
                       )
                       if (chatId) {
                         const chat = chats.find((c) => c.id === chatId)
-                        if (draggingChatFromProjectId) {
+                        const favoriteDropConsumed = consumeFavoriteDrop({
+                          source: draggingChatSource,
+                          chatId,
+                          pinnedChatIds,
+                          onRemoveFavorite,
+                        })
+                        if (
+                          !favoriteDropConsumed &&
+                          draggingChatFromProjectId
+                        ) {
                           // Dragging from project - remove from project
                           if (activeTab === 'local' && onConvertChatToLocal) {
                             await onConvertChatToLocal(chatId)

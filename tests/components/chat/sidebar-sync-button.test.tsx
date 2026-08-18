@@ -20,9 +20,9 @@ describe('SidebarSyncButton', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /sync chats/i }))
+    fireEvent.click(screen.getByRole('button', { name: /sync cloud data/i }))
     expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Sync chats. Syncing',
+      'Sync cloud data. Syncing',
     )
 
     await act(async () => {
@@ -31,14 +31,14 @@ describe('SidebarSyncButton', () => {
       )
     })
     expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Sync chats. Syncing',
+      'Sync cloud data. Syncing',
     )
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1)
     })
     expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Sync chats. Synced',
+      'Sync cloud data. Synced',
     )
     expect(screen.getByText('Synced!')).toHaveAttribute('aria-hidden', 'false')
 
@@ -48,7 +48,7 @@ describe('SidebarSyncButton', () => {
       )
     })
     expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Sync chats. Sync healthy',
+      'Sync cloud data. Sync healthy',
     )
   })
 
@@ -64,7 +64,7 @@ describe('SidebarSyncButton', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /sync chats/i }))
+    fireEvent.click(screen.getByRole('button', { name: /sync cloud data/i }))
     rerender(
       <SidebarSyncButton
         isDarkMode={false}
@@ -79,7 +79,7 @@ describe('SidebarSyncButton', () => {
     })
 
     expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Sync chats. Sync failed',
+      'Sync cloud data. Sync failed',
     )
     expect(screen.getByText('Synced!')).toHaveAttribute('aria-hidden', 'true')
   })

@@ -141,10 +141,11 @@ export function useProfileSync() {
   )
 
   const runFullSync = useCallback(async () => {
-    if (!isSignedIn || !userId || !isCloudSyncEnabled()) return
+    if (!isSignedIn || !userId || !isCloudSyncEnabled()) return false
     const activeUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
-    if (activeUserId !== null && activeUserId !== userId) return
+    if (activeUserId !== null && activeUserId !== userId) return false
 
+    let syncSucceeded = false
     await runSerializedProfileSync(userId, async (isCurrent) => {
       if (!isCurrent() || !isCloudSyncEnabled()) return
 
@@ -258,6 +259,7 @@ export function useProfileSync() {
             component: 'ProfileSync',
             action: 'runFullSync',
           })
+          syncSucceeded = true
           return
         }
 
@@ -271,6 +273,7 @@ export function useProfileSync() {
         const profileToPush = prepareLocalProfile(userId, baseline)
         if (baseline && !hasProfileChanged(profileToPush, baseline)) {
           clearLocalProfileChanged()
+          syncSucceeded = true
           return
         }
 
@@ -322,6 +325,7 @@ export function useProfileSync() {
             adoptedRemote: !!result.remoteProfile,
           },
         })
+        syncSucceeded = true
       } catch (error) {
         if (isCurrent()) {
           logError('Failed to synchronize profile', error, {
@@ -331,6 +335,7 @@ export function useProfileSync() {
         }
       }
     })
+    return syncSucceeded
   }, [
     applyProfile,
     clearLocalProfileChanged,
