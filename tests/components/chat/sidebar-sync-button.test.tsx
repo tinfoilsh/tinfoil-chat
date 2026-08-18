@@ -55,7 +55,7 @@ describe('SidebarSyncButton', () => {
   it('returns to the failure dot without showing success feedback', async () => {
     vi.useFakeTimers()
     const onSync = vi.fn().mockResolvedValue(false)
-    const { rerender } = render(
+    render(
       <SidebarSyncButton
         isDarkMode={false}
         isSyncing={false}
@@ -65,14 +65,6 @@ describe('SidebarSyncButton', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /sync cloud data/i }))
-    rerender(
-      <SidebarSyncButton
-        isDarkMode={false}
-        isSyncing={false}
-        syncFailed
-        onSync={onSync}
-      />,
-    )
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(CONSTANTS.SIDEBAR_SYNC_MIN_SPINNER_MS)

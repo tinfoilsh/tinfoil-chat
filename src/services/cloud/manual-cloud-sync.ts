@@ -15,12 +15,14 @@ export async function runManualCloudSync({
     syncChats(),
     syncProfile(),
   ])
-  await reloadChats()
+  const [reloadOutcome] = await Promise.allSettled([reloadChats()])
   if (chatOutcome.status === 'rejected') throw chatOutcome.reason
   if (profileOutcome.status === 'rejected') throw profileOutcome.reason
-  return (
+  const syncSucceeded =
     chatOutcome.value !== false &&
     chatOutcome.value.errors.length === 0 &&
     profileOutcome.value
-  )
+  if (!syncSucceeded) return false
+  if (reloadOutcome.status === 'rejected') throw reloadOutcome.reason
+  return true
 }

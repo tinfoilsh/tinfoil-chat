@@ -225,10 +225,10 @@ export function useProfileSync() {
               localAfterFetch,
             ).profile
             saveProfileBaseline(userId, remoteBaseline)
+            baseline = remoteBaseline
             applyProfile(overlaid)
             saveLocalProfileMetadata(userId, overlaid)
             markLocalProfileChanged()
-            return
           } else {
             applyProfile(remoteBaseline)
             saveLocalProfileMetadata(userId, remoteBaseline)

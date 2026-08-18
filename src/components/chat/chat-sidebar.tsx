@@ -1455,7 +1455,8 @@ export function ChatSidebar({
                 onDragOver={(e) => {
                   if (
                     e.dataTransfer.types.includes('application/x-chat-id') &&
-                    cloudSyncEnabled
+                    cloudSyncEnabled &&
+                    draggingChatSource !== 'favorites'
                   ) {
                     e.preventDefault()
                     e.dataTransfer.dropEffect = 'move'
@@ -1465,14 +1466,12 @@ export function ChatSidebar({
                 onDragEnter={(e) => {
                   if (
                     e.dataTransfer.types.includes('application/x-chat-id') &&
-                    cloudSyncEnabled
+                    cloudSyncEnabled &&
+                    draggingChatSource !== 'favorites'
                   ) {
                     e.preventDefault()
                     setIsDropTargetProjectsHeader(true)
-                    if (
-                      !isProjectsExpanded &&
-                      draggingChatSource !== 'favorites'
-                    ) {
+                    if (!isProjectsExpanded) {
                       expandProjectsSection()
                     }
                   }
@@ -1734,7 +1733,8 @@ export function ChatSidebar({
                                       e.dataTransfer.types.includes(
                                         'application/x-chat-id',
                                       ) &&
-                                      !project.decryptionFailed
+                                      !project.decryptionFailed &&
+                                      draggingChatSource !== 'favorites'
                                     ) {
                                       e.preventDefault()
                                       e.dataTransfer.dropEffect = 'move'
@@ -1748,7 +1748,8 @@ export function ChatSidebar({
                                       e.dataTransfer.types.includes(
                                         'application/x-chat-id',
                                       ) &&
-                                      !project.decryptionFailed
+                                      !project.decryptionFailed &&
+                                      draggingChatSource !== 'favorites'
                                     ) {
                                       e.preventDefault()
                                       setDropTargetProject(project.id)
@@ -1757,15 +1758,15 @@ export function ChatSidebar({
                                           projectHoverTimerRef.current,
                                         )
                                       }
-                                      if (draggingChatSource !== 'favorites') {
-                                        projectHoverTimerRef.current =
-                                          setTimeout(() => {
-                                            onEnterProject?.(
-                                              project.id,
-                                              project.name,
-                                            )
-                                          }, 400)
-                                      }
+                                      projectHoverTimerRef.current = setTimeout(
+                                        () => {
+                                          onEnterProject?.(
+                                            project.id,
+                                            project.name,
+                                          )
+                                        },
+                                        400,
+                                      )
                                     }
                                   },
                                   onDragLeave: (
@@ -2023,7 +2024,8 @@ export function ChatSidebar({
                             e.dataTransfer.types.includes(
                               'application/x-chat-id',
                             ) &&
-                            onConvertChatToCloud
+                            onConvertChatToCloud &&
+                            draggingChatSource !== 'favorites'
                           ) {
                             e.preventDefault()
                             e.dataTransfer.dropEffect = 'move'
@@ -2035,7 +2037,8 @@ export function ChatSidebar({
                             e.dataTransfer.types.includes(
                               'application/x-chat-id',
                             ) &&
-                            onConvertChatToCloud
+                            onConvertChatToCloud &&
+                            draggingChatSource !== 'favorites'
                           ) {
                             e.preventDefault()
                             setDropTargetTab('cloud')
@@ -2103,7 +2106,8 @@ export function ChatSidebar({
                             e.dataTransfer.types.includes(
                               'application/x-chat-id',
                             ) &&
-                            onConvertChatToLocal
+                            onConvertChatToLocal &&
+                            draggingChatSource !== 'favorites'
                           ) {
                             e.preventDefault()
                             e.dataTransfer.dropEffect = 'move'
@@ -2115,7 +2119,8 @@ export function ChatSidebar({
                             e.dataTransfer.types.includes(
                               'application/x-chat-id',
                             ) &&
-                            onConvertChatToLocal
+                            onConvertChatToLocal &&
+                            draggingChatSource !== 'favorites'
                           ) {
                             e.preventDefault()
                             setActiveTab('local')

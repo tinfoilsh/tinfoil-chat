@@ -13,7 +13,13 @@ export function consumeFavoriteDrop({
   pinnedChatIds,
   onRemoveFavorite,
 }: ConsumeFavoriteDropOptions): boolean {
-  if (source !== 'favorites') return false
-  if (pinnedChatIds.includes(chatId)) onRemoveFavorite?.(chatId)
+  if (
+    source !== 'favorites' ||
+    !pinnedChatIds.includes(chatId) ||
+    !onRemoveFavorite
+  ) {
+    return false
+  }
+  onRemoveFavorite(chatId)
   return true
 }

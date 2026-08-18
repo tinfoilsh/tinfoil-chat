@@ -29,4 +29,18 @@ describe('consumeFavoriteDrop', () => {
     ).toBe(false)
     expect(onRemoveFavorite).not.toHaveBeenCalled()
   })
+
+  it('leaves stale favorite sources for other drop handlers', () => {
+    const onRemoveFavorite = vi.fn()
+
+    expect(
+      consumeFavoriteDrop({
+        source: 'favorites',
+        chatId: 'chat-a',
+        pinnedChatIds: [],
+        onRemoveFavorite,
+      }),
+    ).toBe(false)
+    expect(onRemoveFavorite).not.toHaveBeenCalled()
+  })
 })

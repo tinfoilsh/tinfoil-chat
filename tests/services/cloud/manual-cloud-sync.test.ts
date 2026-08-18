@@ -77,4 +77,24 @@ describe('runManualCloudSync', () => {
       }),
     ).resolves.toBe(false)
   })
+
+  it('prioritizes sync failures over reload failures', async () => {
+    await expect(
+      runManualCloudSync({
+        syncChats: vi.fn().mockRejectedValue(new Error('chat sync failed')),
+        syncProfile: vi.fn().mockResolvedValue(true),
+        reloadChats: vi.fn().mockRejectedValue(new Error('reload failed')),
+      }),
+    ).rejects.toThrow('chat sync failed')
+  })
+
+  it('reports a resolved sync failure before a reload rejection', async () => {
+    await expect(
+      runManualCloudSync({
+        syncChats: vi.fn().mockResolvedValue(false),
+        syncProfile: vi.fn().mockResolvedValue(true),
+        reloadChats: vi.fn().mockRejectedValue(new Error('reload failed')),
+      }),
+    ).resolves.toBe(false)
+  })
 })
