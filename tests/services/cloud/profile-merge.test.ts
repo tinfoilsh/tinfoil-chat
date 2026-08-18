@@ -424,6 +424,22 @@ describe('reconcileDirtyProfileWithoutBaseline', () => {
     expect(profile?.pinnedChatIds).toEqual(['remote-chat'])
   })
 
+  it('does not treat a missing local snapshot as an explicit clear', () => {
+    const profile = reconcileDirtyProfileWithoutBaseline({
+      remote: {
+        pixelateSidebarChatTitlesEnabled: true,
+        pinnedChatIds: ['remote-chat'],
+      },
+      localBeforeFetch: { pixelateSidebarChatTitlesEnabled: true },
+      localAfterFetch: {
+        pixelateSidebarChatTitlesEnabled: true,
+        pinnedChatIds: [],
+      },
+    })
+
+    expect(profile?.pinnedChatIds).toEqual(['remote-chat'])
+  })
+
   it('combines a first pin added while the remote profile was loading', () => {
     const profile = reconcileDirtyProfileWithoutBaseline({
       remote: {
