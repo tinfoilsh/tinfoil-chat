@@ -14,6 +14,7 @@ import {
   mergeProfiles,
   mergeProfilesThreeWay,
   overlayProfileChanges,
+  reconcileDirtyProfileWithoutBaseline,
 } from '@/services/cloud/profile-merge'
 import type { ProfileData } from '@/services/cloud/profile-sync'
 import { describe, expect, it } from 'vitest'
@@ -239,6 +240,132 @@ describe('overlayProfileChanges', () => {
 
     expect(result.profile).toEqual({ version: 2 })
     expect(result.changedFields).toEqual(['customSystemPrompt'])
+  })
+})
+
+describe('reconcileDirtyProfileWithoutBaseline', () => {
+  it('preserves local pins without replacing remote settings', () => {
+    const profile = reconcileDirtyProfileWithoutBaseline({
+      remote: {
+        nickname: 'Remote',
+        themeMode: 'light',
+        profession: 'Researcher',
+        version: 4,
+      },
+      localBeforeFetch: {
+        nickname: 'Remote',
+        themeMode: 'light',
+        profession: 'Researcher',
+        pinnedChatIds: ['chat-a'],
+      },
+      localAfterFetch: {
+        nickname: 'Remote',
+        themeMode: 'light',
+        profession: 'Researcher',
+        pinnedChatIds: ['chat-a'],
+      },
+    })
+
+    expect(profile).toEqual({
+      nickname: 'Remote',
+      themeMode: 'light',
+      profession: 'Researcher',
+      pinnedChatIds: ['chat-a'],
+      version: 4,
+    })
+  })
+
+  it('preserves an explicit local clear when the remote omits pins', () => {
+    const profile = reconcileDirtyProfileWithoutBaseline({
+      remote: { nickname: 'Remote', version: 4 },
+      localBeforeFetch: { pinnedChatIds: [] },
+      localAfterFetch: { pinnedChatIds: [] },
+    })
+
+    expect(profile?.pinnedChatIds).toEqual([])
+  })
+
+  it('overlays settings changed while the remote profile was loading', () => {
+    const profile = reconcileDirtyProfileWithoutBaseline({
+      remote: { nickname: 'Remote', profession: 'Researcher', version: 4 },
+      localBeforeFetch: {
+        nickname: 'Remote',
+        profession: 'Researcher',
+        pinnedChatIds: ['chat-a'],
+      },
+      localAfterFetch: {
+        nickname: 'Changed during fetch',
+        profession: 'Researcher',
+        pinnedChatIds: ['chat-a'],
+      },
+    })
+
+    expect(profile).toMatchObject({
+      nickname: 'Changed during fetch',
+      profession: 'Researcher',
+      pinnedChatIds: ['chat-a'],
+    })
+  })
+
+  it('accepts matching remote pins', () => {
+    const profile = reconcileDirtyProfileWithoutBaseline({
+      remote: { nickname: 'Remote', pinnedChatIds: ['chat-a'] },
+      localBeforeFetch: {
+        nickname: 'Remote',
+        pinnedChatIds: ['chat-a'],
+      },
+      localAfterFetch: {
+        nickname: 'Remote',
+        pinnedChatIds: ['chat-a'],
+      },
+    })
+
+    expect(profile?.pinnedChatIds).toEqual(['chat-a'])
+  })
+
+  it('rejects reconciliation without pins or with overlapping changes', () => {
+    expect(
+      reconcileDirtyProfileWithoutBaseline({
+        remote: { nickname: 'Remote' },
+        localBeforeFetch: { nickname: 'Local' },
+        localAfterFetch: { nickname: 'Local' },
+      }),
+    ).toBeNull()
+    expect(
+      reconcileDirtyProfileWithoutBaseline({
+        remote: { nickname: 'Remote' },
+        localBeforeFetch: {
+          nickname: 'Remote',
+          profession: 'Researcher',
+          pinnedChatIds: ['chat-a'],
+        },
+        localAfterFetch: {
+          nickname: 'Remote',
+          profession: 'Researcher',
+          pinnedChatIds: ['chat-a'],
+        },
+      }),
+    ).toBeNull()
+    expect(
+      reconcileDirtyProfileWithoutBaseline({
+        remote: { nickname: 'Remote' },
+        localBeforeFetch: {
+          nickname: 'Local',
+          pinnedChatIds: ['chat-a'],
+        },
+        localAfterFetch: {
+          nickname: 'Local',
+          pinnedChatIds: ['chat-a'],
+        },
+      }),
+    ).toBeNull()
+    expect(
+      reconcileDirtyProfileWithoutBaseline({
+        remote: { pinnedChatIds: ['remote-chat'] },
+        localBeforeFetch: { pinnedChatIds: ['local-chat'] },
+        localAfterFetch: { pinnedChatIds: ['local-chat'] },
+      }),
+    ).toBeNull()
   })
 })
 

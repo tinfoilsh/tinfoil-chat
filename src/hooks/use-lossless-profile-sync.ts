@@ -16,6 +16,7 @@ import {
   isProfilePopulated,
   mergeProfilesThreeWay,
   overlayProfileChanges,
+  reconcileDirtyProfileWithoutBaseline,
 } from '@/services/cloud/profile-merge'
 import {
   applySettingsToLocal,
@@ -201,9 +202,21 @@ export function useProfileSync() {
               clearLocalProfileChanged()
             }
           } else if (wasDirtyBeforeFetch) {
-            throw new Error(
-              'Profile has unsynced changes but no safe merge baseline.',
-            )
+            const reconciled = reconcileDirtyProfileWithoutBaseline({
+              remote: remoteBaseline,
+              localBeforeFetch,
+              localAfterFetch,
+            })
+            if (!reconciled) {
+              throw new Error(
+                'Profile has unsynced changes but no safe merge baseline.',
+              )
+            }
+            saveProfileBaseline(userId, remoteBaseline)
+            baseline = remoteBaseline
+            applyProfile(reconciled)
+            saveLocalProfileMetadata(userId, reconciled)
+            markLocalProfileChanged()
           } else if (changesDuringFetch.length > 0) {
             const overlaid = overlayProfileChanges(
               remoteBaseline,

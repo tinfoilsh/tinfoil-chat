@@ -92,6 +92,47 @@ export function overlayProfileChanges(
   return { profile, changedFields }
 }
 
+export function reconcileDirtyProfileWithoutBaseline(args: {
+  remote: ProfileData
+  localBeforeFetch: ProfileData
+  localAfterFetch: ProfileData
+}): ProfileData | null {
+  const { remote, localBeforeFetch, localAfterFetch } = args
+  const localHasPinnedChats = Object.prototype.hasOwnProperty.call(
+    localBeforeFetch,
+    'pinnedChatIds',
+  )
+
+  if (!localHasPinnedChats) return null
+
+  const profile = { ...remote }
+  for (const field of PROFILE_MERGE_FIELDS) {
+    const localHasField = Object.prototype.hasOwnProperty.call(
+      localBeforeFetch,
+      field,
+    )
+    if (!localHasField) continue
+
+    const remoteHasField = Object.prototype.hasOwnProperty.call(remote, field)
+    const localValue = (localBeforeFetch as Record<string, unknown>)[field]
+    if (
+      remoteHasField &&
+      !valuesEqual(localValue, (remote as Record<string, unknown>)[field])
+    ) {
+      return null
+    }
+    if (!remoteHasField) {
+      if (field !== 'pinnedChatIds') return null
+      profile.pinnedChatIds = localBeforeFetch.pinnedChatIds
+    }
+  }
+
+  // Only the migration-safe favorites field may be missing remotely. Any
+  // other difference remains blocked until a baseline exists.
+  return overlayProfileChanges(profile, localBeforeFetch, localAfterFetch)
+    .profile
+}
+
 function nonEmptyString(value: unknown): boolean {
   return typeof value === 'string' && value.trim().length > 0
 }
