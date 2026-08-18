@@ -122,13 +122,13 @@ export function reconcileDirtyProfileWithoutBaseline(args: {
       return null
     }
     if (!remoteHasField) {
-      if (field !== 'pinnedChatIds') return null
-      profile.pinnedChatIds = localBeforeFetch.pinnedChatIds
+      if (!PRESERVE_LOCAL_WHEN_REMOTE_OMITS.has(field)) return null
+      ;(profile as Record<string, unknown>)[field] = localValue
     }
   }
 
-  // Only the migration-safe favorites field may be missing remotely. Any
-  // other difference remains blocked until a baseline exists.
+  // Only migration-safe fields may be missing remotely. Any other
+  // difference remains blocked until a baseline exists.
   return overlayProfileChanges(profile, localBeforeFetch, localAfterFetch)
     .profile
 }

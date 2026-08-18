@@ -256,12 +256,14 @@ describe('reconcileDirtyProfileWithoutBaseline', () => {
         nickname: 'Remote',
         themeMode: 'light',
         profession: 'Researcher',
+        pixelateSidebarChatTitlesEnabled: false,
         pinnedChatIds: ['chat-a'],
       },
       localAfterFetch: {
         nickname: 'Remote',
         themeMode: 'light',
         profession: 'Researcher',
+        pixelateSidebarChatTitlesEnabled: false,
         pinnedChatIds: ['chat-a'],
       },
     })
@@ -270,6 +272,7 @@ describe('reconcileDirtyProfileWithoutBaseline', () => {
       nickname: 'Remote',
       themeMode: 'light',
       profession: 'Researcher',
+      pixelateSidebarChatTitlesEnabled: false,
       pinnedChatIds: ['chat-a'],
       version: 4,
     })
