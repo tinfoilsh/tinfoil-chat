@@ -9,7 +9,10 @@ import {
   SYNC_PROFILE_CHANGED_AT,
   SYNC_PROFILE_DIRTY,
 } from '@/constants/storage-keys'
-import { getCurrentCloudKeyAuthorizationMode } from '@/services/cloud/cloud-key-authorization'
+import {
+  canWriteToCloud,
+  getCurrentCloudKeyAuthorizationMode,
+} from '@/services/cloud/cloud-key-authorization'
 import { nextClock, type EditClock } from '@/services/cloud/edit-clock'
 import {
   changedProfileFields,
@@ -141,17 +144,15 @@ export function useProfileSync() {
   )
 
   const runFullSync = useCallback(async () => {
-    if (!isSignedIn || !userId || !isCloudSyncEnabled()) return
+    if (!isSignedIn || !userId || !isCloudSyncEnabled()) return false
     const activeUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
-    if (activeUserId !== null && activeUserId !== userId) return
+    if (activeUserId !== null && activeUserId !== userId) return false
 
+    let syncSucceeded = false
     await runSerializedProfileSync(userId, async (isCurrent) => {
       if (!isCurrent() || !isCloudSyncEnabled()) return
 
       try {
-        const authorizationMode = await getCurrentCloudKeyAuthorizationMode()
-        if (!isCurrent() || !authorizationMode) return
-
         let baseline = loadProfileBaseline(userId)
         const wasDirtyBeforeFetch = hasLocalProfileChanges()
         const localBeforeFetch = loadLocalSettings()
@@ -224,10 +225,10 @@ export function useProfileSync() {
               localAfterFetch,
             ).profile
             saveProfileBaseline(userId, remoteBaseline)
+            baseline = remoteBaseline
             applyProfile(overlaid)
             saveLocalProfileMetadata(userId, overlaid)
             markLocalProfileChanged()
-            return
           } else {
             applyProfile(remoteBaseline)
             saveLocalProfileMetadata(userId, remoteBaseline)
@@ -245,10 +246,8 @@ export function useProfileSync() {
         } else {
           const remoteStatus = await profileSync.getSyncStatus()
           if (!isCurrent()) return
-          if (
-            remoteStatus?.deleted &&
-            isProfilePopulated(loadLocalSettings())
-          ) {
+          if (!remoteStatus || remoteStatus.exists) return
+          if (isProfilePopulated(loadLocalSettings())) {
             markLocalProfileChanged()
           }
         }
@@ -258,6 +257,20 @@ export function useProfileSync() {
             component: 'ProfileSync',
             action: 'runFullSync',
           })
+          syncSucceeded = true
+          return
+        }
+
+        const authorizationMode = await getCurrentCloudKeyAuthorizationMode()
+        if (!isCurrent() || !authorizationMode || !(await canWriteToCloud())) {
+          return
+        }
+        const activeUserBeforePush = localStorage.getItem(AUTH_ACTIVE_USER_ID)
+        if (
+          !isCurrent() ||
+          !isCloudSyncEnabled() ||
+          (activeUserBeforePush !== null && activeUserBeforePush !== userId)
+        ) {
           return
         }
 
@@ -271,6 +284,7 @@ export function useProfileSync() {
         const profileToPush = prepareLocalProfile(userId, baseline)
         if (baseline && !hasProfileChanged(profileToPush, baseline)) {
           clearLocalProfileChanged()
+          syncSucceeded = true
           return
         }
 
@@ -322,6 +336,7 @@ export function useProfileSync() {
             adoptedRemote: !!result.remoteProfile,
           },
         })
+        syncSucceeded = true
       } catch (error) {
         if (isCurrent()) {
           logError('Failed to synchronize profile', error, {
@@ -331,6 +346,7 @@ export function useProfileSync() {
         }
       }
     })
+    return syncSucceeded
   }, [
     applyProfile,
     clearLocalProfileChanged,

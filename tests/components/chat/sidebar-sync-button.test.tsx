@@ -20,9 +20,9 @@ describe('SidebarSyncButton', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /sync chats/i }))
+    fireEvent.click(screen.getByRole('button', { name: /sync cloud data/i }))
     expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Sync chats. Syncing',
+      'Sync cloud data. Syncing',
     )
 
     await act(async () => {
@@ -31,14 +31,14 @@ describe('SidebarSyncButton', () => {
       )
     })
     expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Sync chats. Syncing',
+      'Sync cloud data. Syncing',
     )
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1)
     })
     expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Sync chats. Synced',
+      'Sync cloud data. Synced',
     )
     expect(screen.getByText('Synced!')).toHaveAttribute('aria-hidden', 'false')
 
@@ -48,14 +48,14 @@ describe('SidebarSyncButton', () => {
       )
     })
     expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Sync chats. Sync healthy',
+      'Sync cloud data. Sync healthy',
     )
   })
 
   it('returns to the failure dot without showing success feedback', async () => {
     vi.useFakeTimers()
     const onSync = vi.fn().mockResolvedValue(false)
-    const { rerender } = render(
+    render(
       <SidebarSyncButton
         isDarkMode={false}
         isSyncing={false}
@@ -64,22 +64,14 @@ describe('SidebarSyncButton', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /sync chats/i }))
-    rerender(
-      <SidebarSyncButton
-        isDarkMode={false}
-        isSyncing={false}
-        syncFailed
-        onSync={onSync}
-      />,
-    )
+    fireEvent.click(screen.getByRole('button', { name: /sync cloud data/i }))
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(CONSTANTS.SIDEBAR_SYNC_MIN_SPINNER_MS)
     })
 
     expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Sync chats. Sync failed',
+      'Sync cloud data. Sync failed',
     )
     expect(screen.getByText('Synced!')).toHaveAttribute('aria-hidden', 'true')
   })

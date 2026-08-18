@@ -1,3 +1,7 @@
+import {
+  MAX_PINNED_CHATS,
+  normalizePinnedChatIds,
+} from '../storage/pinned-chats'
 import type { EditClock } from './edit-clock'
 import type { ProfileData } from './profile-sync'
 import { remoteWins } from './sync-predicates'
@@ -114,6 +118,9 @@ export function reconcileDirtyProfileWithoutBaseline(args: {
 
     const remoteHasField = Object.prototype.hasOwnProperty.call(remote, field)
     const localValue = (localBeforeFetch as Record<string, unknown>)[field]
+    if (field === 'pinnedChatIds' && remoteHasField) {
+      continue
+    }
     if (
       remoteHasField &&
       !valuesEqual(localValue, (remote as Record<string, unknown>)[field])
@@ -128,8 +135,42 @@ export function reconcileDirtyProfileWithoutBaseline(args: {
 
   // Only migration-safe fields may be missing remotely. Any other
   // difference remains blocked until a baseline exists.
-  return overlayProfileChanges(profile, localBeforeFetch, localAfterFetch)
-    .profile
+  const reconciled = overlayProfileChanges(
+    profile,
+    localBeforeFetch,
+    localAfterFetch,
+  ).profile
+  if (
+    localBeforeFetch.pinnedChatIds !== undefined ||
+    localAfterFetch.pinnedChatIds !== undefined
+  ) {
+    const localBeforePins = localBeforeFetch.pinnedChatIds ?? []
+    const localAfterPins = localAfterFetch.pinnedChatIds ?? localBeforePins
+    if (
+      localBeforeFetch.pinnedChatIds !== undefined &&
+      localAfterFetch.pinnedChatIds !== undefined &&
+      localBeforePins.length === 0 &&
+      localAfterPins.length === 0
+    ) {
+      reconciled.pinnedChatIds = []
+      return reconciled
+    }
+    const removedDuringFetch = new Set(
+      localBeforePins.filter((chatId) => !localAfterPins.includes(chatId)),
+    )
+    const candidates = [
+      ...localAfterPins,
+      ...(remote.pinnedChatIds ?? []).filter(
+        (chatId) => !removedDuringFetch.has(chatId),
+      ),
+    ]
+    const uniqueCandidateCount = new Set(
+      candidates.map((chatId) => chatId.trim()).filter(Boolean),
+    ).size
+    if (uniqueCandidateCount > MAX_PINNED_CHATS) return null
+    reconciled.pinnedChatIds = normalizePinnedChatIds(candidates)
+  }
+  return reconciled
 }
 
 function nonEmptyString(value: unknown): boolean {

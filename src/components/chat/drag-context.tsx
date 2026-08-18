@@ -8,9 +8,12 @@ import {
   type ReactNode,
 } from 'react'
 
+export type ChatDragSource = 'chat-history' | 'project' | 'favorites'
+
 interface DragContextValue {
   draggingChatId: string | null
   draggingChatFromProjectId: string | null
+  draggingChatSource: ChatDragSource | null
   dropTargetProjectId: string | null
   dropTargetTab: 'cloud' | 'local' | null
   isDropTargetChatHistory: boolean
@@ -18,6 +21,7 @@ interface DragContextValue {
   setDraggingChat: (
     chatId: string | null,
     fromProjectId?: string | null,
+    source?: ChatDragSource,
   ) => void
   setDropTargetProject: (projectId: string | null) => void
   setDropTargetTab: (tab: 'cloud' | 'local' | null) => void
@@ -32,6 +36,8 @@ export function DragProvider({ children }: { children: ReactNode }) {
   const [draggingChatFromProjectId, setDraggingChatFromProjectId] = useState<
     string | null
   >(null)
+  const [draggingChatSource, setDraggingChatSource] =
+    useState<ChatDragSource | null>(null)
   const [dropTargetProjectId, setDropTargetProjectId] = useState<string | null>(
     null,
   )
@@ -41,9 +47,18 @@ export function DragProvider({ children }: { children: ReactNode }) {
   const [isDropTargetChatHistory, setIsDropTargetChatHistory] = useState(false)
 
   const setDraggingChat = useCallback(
-    (chatId: string | null, fromProjectId?: string | null) => {
+    (
+      chatId: string | null,
+      fromProjectId?: string | null,
+      source?: ChatDragSource,
+    ) => {
       setDraggingChatId(chatId)
       setDraggingChatFromProjectId(fromProjectId ?? null)
+      setDraggingChatSource(
+        chatId === null
+          ? null
+          : (source ?? (fromProjectId ? 'project' : 'chat-history')),
+      )
     },
     [],
   )
@@ -51,6 +66,7 @@ export function DragProvider({ children }: { children: ReactNode }) {
   const clearDragState = useCallback(() => {
     setDraggingChatId(null)
     setDraggingChatFromProjectId(null)
+    setDraggingChatSource(null)
     setDropTargetProjectId(null)
     setDropTargetTab(null)
     setIsDropTargetChatHistory(false)
@@ -61,6 +77,7 @@ export function DragProvider({ children }: { children: ReactNode }) {
       value={{
         draggingChatId,
         draggingChatFromProjectId,
+        draggingChatSource,
         dropTargetProjectId,
         dropTargetTab,
         isDropTargetChatHistory,

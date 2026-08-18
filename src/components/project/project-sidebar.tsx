@@ -5,6 +5,7 @@ import { formatRelativeTime } from '@/components/chat/chat-list-utils'
 import { getDocumentTextContent } from '@/components/chat/document-content'
 import { useDocumentUploader } from '@/components/chat/document-uploader'
 import { useDrag } from '@/components/chat/drag-context'
+import { consumeFavoriteDrop } from '@/components/chat/favorite-drag'
 import { TypingAnimation } from '@/components/chat/typing-animation'
 import { useFavoriteDropTarget } from '@/components/chat/use-favorite-drop-target'
 import { PiSpinnerThin } from '@/components/icons/lazy-icons'
@@ -132,6 +133,7 @@ interface ProjectSidebarProps {
   favoriteChats?: ChatItemData[]
   pinnedChatIds?: readonly string[]
   onToggleFavorite?: (chat: ChatItemData) => void | Promise<void>
+  onRemoveFavorite?: (chatId: string) => void
   onOpenFavorite?: (chat: ChatItemData) => void | Promise<void>
   cloudSyncEnabled: boolean
   windowWidth: number
@@ -307,12 +309,18 @@ export function ProjectSidebar({
   favoriteChats = [],
   pinnedChatIds = [],
   onToggleFavorite,
+  onRemoveFavorite,
   onOpenFavorite,
   cloudSyncEnabled,
   windowWidth,
 }: ProjectSidebarProps) {
   const { isSignedIn } = useAuth()
-  const { draggingChatId, setDraggingChat, clearDragState } = useDrag()
+  const {
+    draggingChatId,
+    draggingChatSource,
+    setDraggingChat,
+    clearDragState,
+  } = useDrag()
   const {
     projectDocuments,
     uploadDocument,
@@ -942,9 +950,11 @@ export function ProjectSidebar({
                   if (exitHoverTimerRef.current) {
                     clearTimeout(exitHoverTimerRef.current)
                   }
-                  exitHoverTimerRef.current = setTimeout(() => {
-                    onExitProjectWhileDragging?.()
-                  }, 400)
+                  if (draggingChatSource !== 'favorites') {
+                    exitHoverTimerRef.current = setTimeout(() => {
+                      onExitProjectWhileDragging?.()
+                    }, 400)
+                  }
                 }
               }}
               onDragOver={(e) => {
@@ -967,6 +977,16 @@ export function ProjectSidebar({
                   clearTimeout(exitHoverTimerRef.current)
                   exitHoverTimerRef.current = null
                 }
+                const chatId = e.dataTransfer.getData('application/x-chat-id')
+                if (chatId) {
+                  consumeFavoriteDrop({
+                    source: draggingChatSource,
+                    chatId,
+                    pinnedChatIds,
+                    onRemoveFavorite,
+                  })
+                }
+                clearDragState()
               }}
               className={cn(
                 'flex w-full items-center gap-2 rounded-lg p-2 text-sm transition-colors',
@@ -1143,9 +1163,13 @@ export function ProjectSidebar({
                         }}
                         onUpdateTitle={updateChatTitle}
                         onDeleteChat={handleDeleteChat}
+                        isDraggable={Boolean(onRemoveFavorite)}
+                        onDragStart={(chatId) =>
+                          setDraggingChat(chatId, null, 'favorites')
+                        }
+                        onDragEnd={clearDragState}
                         pinnedChatIds={pinnedChatIds}
                         showPinnedIndicators={false}
-                        showDesktopPinActions={false}
                         onTogglePin={onToggleFavorite}
                       />
                     ) : (
@@ -1580,7 +1604,15 @@ export function ProjectSidebar({
               e.preventDefault()
               setIsDropTargetChatList(false)
               const chatId = e.dataTransfer.getData('application/x-chat-id')
-              if (chatId && onAddChatToProject) {
+              const favoriteDropConsumed = chatId
+                ? consumeFavoriteDrop({
+                    source: draggingChatSource,
+                    chatId,
+                    pinnedChatIds,
+                    onRemoveFavorite,
+                  })
+                : false
+              if (!favoriteDropConsumed && chatId && onAddChatToProject) {
                 await onAddChatToProject(chatId)
               }
               clearDragState()

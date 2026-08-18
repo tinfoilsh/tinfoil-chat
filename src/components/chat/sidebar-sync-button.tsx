@@ -25,18 +25,21 @@ export function SidebarSyncButton({
   onSync,
 }: SidebarSyncButtonProps) {
   const [feedback, setFeedback] = useState<SyncFeedback>('idle')
+  const [manualSyncFailed, setManualSyncFailed] = useState(false)
   const showSpinner = isSyncing || feedback === 'syncing'
   const isDisabled = isSyncing || feedback !== 'idle'
   const showSuccess = feedback === 'success'
+  const hasSyncFailure = syncFailed || manualSyncFailed
   const statusLabel = showSpinner
     ? 'Syncing'
-    : syncFailed
+    : hasSyncFailure
       ? 'Sync failed'
       : 'Sync healthy'
 
   const handleSync = async () => {
     const startedAt = Date.now()
     setFeedback('syncing')
+    setManualSyncFailed(false)
 
     let succeeded = false
     try {
@@ -54,6 +57,7 @@ export function SidebarSyncButton({
     }
 
     if (!succeeded) {
+      setManualSyncFailed(true)
       setFeedback('idle')
       return
     }
@@ -69,7 +73,7 @@ export function SidebarSyncButton({
         type="button"
         onClick={() => void handleSync()}
         disabled={isDisabled}
-        aria-label={`Sync chats. ${feedback === 'success' ? 'Synced' : statusLabel}`}
+        aria-label={`Sync cloud data. ${feedback === 'success' ? 'Synced' : statusLabel}`}
         className={cn(
           'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors disabled:cursor-default',
           showSpinner && 'opacity-60',
@@ -125,7 +129,7 @@ export function SidebarSyncButton({
               }
               className={cn(
                 'h-2 w-2 rounded-full',
-                syncFailed ? 'bg-orange-500' : 'bg-green-500',
+                hasSyncFailure ? 'bg-orange-500' : 'bg-green-500',
               )}
               title={statusLabel}
             />

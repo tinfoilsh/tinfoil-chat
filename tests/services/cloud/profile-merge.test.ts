@@ -17,6 +17,7 @@ import {
   reconcileDirtyProfileWithoutBaseline,
 } from '@/services/cloud/profile-merge'
 import type { ProfileData } from '@/services/cloud/profile-sync'
+import { MAX_PINNED_CHATS } from '@/services/storage/pinned-chats'
 import { describe, expect, it } from 'vitest'
 
 // A trusted blob has clockVersion === version, so its field clocks are
@@ -278,9 +279,13 @@ describe('reconcileDirtyProfileWithoutBaseline', () => {
     })
   })
 
-  it('preserves an explicit local clear when the remote omits pins', () => {
+  it('preserves an explicit local clear when the remote has pins', () => {
     const profile = reconcileDirtyProfileWithoutBaseline({
-      remote: { nickname: 'Remote', version: 4 },
+      remote: {
+        nickname: 'Remote',
+        pinnedChatIds: ['remote-chat'],
+        version: 4,
+      },
       localBeforeFetch: { pinnedChatIds: [] },
       localAfterFetch: { pinnedChatIds: [] },
     })
@@ -306,7 +311,12 @@ describe('reconcileDirtyProfileWithoutBaseline', () => {
 
   it('overlays settings changed while the remote profile was loading', () => {
     const profile = reconcileDirtyProfileWithoutBaseline({
-      remote: { nickname: 'Remote', profession: 'Researcher', version: 4 },
+      remote: {
+        nickname: 'Remote',
+        profession: 'Researcher',
+        pinnedChatIds: ['remote-chat'],
+        version: 4,
+      },
       localBeforeFetch: {
         nickname: 'Remote',
         profession: 'Researcher',
@@ -315,14 +325,14 @@ describe('reconcileDirtyProfileWithoutBaseline', () => {
       localAfterFetch: {
         nickname: 'Changed during fetch',
         profession: 'Researcher',
-        pinnedChatIds: ['chat-a'],
+        pinnedChatIds: ['chat-b', 'chat-a'],
       },
     })
 
     expect(profile).toMatchObject({
       nickname: 'Changed during fetch',
       profession: 'Researcher',
-      pinnedChatIds: ['chat-a'],
+      pinnedChatIds: ['chat-b', 'chat-a', 'remote-chat'],
     })
   })
 
@@ -378,13 +388,86 @@ describe('reconcileDirtyProfileWithoutBaseline', () => {
         },
       }),
     ).toBeNull()
-    expect(
-      reconcileDirtyProfileWithoutBaseline({
-        remote: { pinnedChatIds: ['remote-chat'] },
-        localBeforeFetch: { pinnedChatIds: ['local-chat'] },
-        localAfterFetch: { pinnedChatIds: ['local-chat'] },
-      }),
-    ).toBeNull()
+  })
+
+  it('combines divergent pins when no baseline exists', () => {
+    const profile = reconcileDirtyProfileWithoutBaseline({
+      remote: { pinnedChatIds: ['remote-chat', 'shared-chat'] },
+      localBeforeFetch: { pinnedChatIds: ['local-chat', 'shared-chat'] },
+      localAfterFetch: { pinnedChatIds: ['local-chat', 'shared-chat'] },
+    })
+
+    expect(profile?.pinnedChatIds).toEqual([
+      'local-chat',
+      'shared-chat',
+      'remote-chat',
+    ])
+  })
+
+  it('preserves pins removed while the remote profile was loading', () => {
+    const profile = reconcileDirtyProfileWithoutBaseline({
+      remote: { pinnedChatIds: ['removed-chat', 'remote-chat'] },
+      localBeforeFetch: { pinnedChatIds: ['removed-chat', 'local-chat'] },
+      localAfterFetch: { pinnedChatIds: ['local-chat'] },
+    })
+
+    expect(profile?.pinnedChatIds).toEqual(['local-chat', 'remote-chat'])
+  })
+
+  it('preserves remote-only pins when the last local pin is removed', () => {
+    const profile = reconcileDirtyProfileWithoutBaseline({
+      remote: { pinnedChatIds: ['local-chat', 'remote-chat'] },
+      localBeforeFetch: { pinnedChatIds: ['local-chat'] },
+      localAfterFetch: { pinnedChatIds: [] },
+    })
+
+    expect(profile?.pinnedChatIds).toEqual(['remote-chat'])
+  })
+
+  it('does not treat a missing local snapshot as an explicit clear', () => {
+    const profile = reconcileDirtyProfileWithoutBaseline({
+      remote: {
+        pixelateSidebarChatTitlesEnabled: true,
+        pinnedChatIds: ['remote-chat'],
+      },
+      localBeforeFetch: { pixelateSidebarChatTitlesEnabled: true },
+      localAfterFetch: {
+        pixelateSidebarChatTitlesEnabled: true,
+        pinnedChatIds: [],
+      },
+    })
+
+    expect(profile?.pinnedChatIds).toEqual(['remote-chat'])
+  })
+
+  it('combines a first pin added while the remote profile was loading', () => {
+    const profile = reconcileDirtyProfileWithoutBaseline({
+      remote: {
+        pixelateSidebarChatTitlesEnabled: true,
+        pinnedChatIds: ['remote-chat'],
+      },
+      localBeforeFetch: { pixelateSidebarChatTitlesEnabled: true },
+      localAfterFetch: {
+        pixelateSidebarChatTitlesEnabled: true,
+        pinnedChatIds: ['local-chat'],
+      },
+    })
+
+    expect(profile?.pinnedChatIds).toEqual(['local-chat', 'remote-chat'])
+  })
+
+  it('rejects a baseline-free pin merge that exceeds the limit', () => {
+    const localPins = Array.from(
+      { length: MAX_PINNED_CHATS },
+      (_, index) => `local-${index}`,
+    )
+    const profile = reconcileDirtyProfileWithoutBaseline({
+      remote: { pinnedChatIds: ['remote-chat'] },
+      localBeforeFetch: { pinnedChatIds: localPins },
+      localAfterFetch: { pinnedChatIds: localPins },
+    })
+
+    expect(profile).toBeNull()
   })
 })
 
