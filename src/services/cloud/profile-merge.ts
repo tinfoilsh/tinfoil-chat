@@ -92,6 +92,46 @@ export function overlayProfileChanges(
   return { profile, changedFields }
 }
 
+export function reconcileDirtyProfileWithoutBaseline(args: {
+  remote: ProfileData
+  localBeforeFetch: ProfileData
+  localAfterFetch: ProfileData
+}): ProfileData | null {
+  const { remote, localBeforeFetch, localAfterFetch } = args
+  const localHasMigrationSafeField = [...PRESERVE_LOCAL_WHEN_REMOTE_OMITS].some(
+    (field) => Object.prototype.hasOwnProperty.call(localBeforeFetch, field),
+  )
+
+  if (!localHasMigrationSafeField) return null
+
+  const profile = { ...remote }
+  for (const field of PROFILE_MERGE_FIELDS) {
+    const localHasField = Object.prototype.hasOwnProperty.call(
+      localBeforeFetch,
+      field,
+    )
+    if (!localHasField) continue
+
+    const remoteHasField = Object.prototype.hasOwnProperty.call(remote, field)
+    const localValue = (localBeforeFetch as Record<string, unknown>)[field]
+    if (
+      remoteHasField &&
+      !valuesEqual(localValue, (remote as Record<string, unknown>)[field])
+    ) {
+      return null
+    }
+    if (!remoteHasField) {
+      if (!PRESERVE_LOCAL_WHEN_REMOTE_OMITS.has(field)) return null
+      ;(profile as Record<string, unknown>)[field] = localValue
+    }
+  }
+
+  // Only migration-safe fields may be missing remotely. Any other
+  // difference remains blocked until a baseline exists.
+  return overlayProfileChanges(profile, localBeforeFetch, localAfterFetch)
+    .profile
+}
+
 function nonEmptyString(value: unknown): boolean {
   return typeof value === 'string' && value.trim().length > 0
 }
