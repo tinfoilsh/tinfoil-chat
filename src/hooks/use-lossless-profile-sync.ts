@@ -247,7 +247,7 @@ export function useProfileSync() {
           const remoteStatus = await profileSync.getSyncStatus()
           if (!isCurrent()) return
           if (!remoteStatus || remoteStatus.exists) return
-          if (!remoteStatus.exists && isProfilePopulated(loadLocalSettings())) {
+          if (isProfilePopulated(loadLocalSettings())) {
             markLocalProfileChanged()
           }
         }

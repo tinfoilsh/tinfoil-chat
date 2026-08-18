@@ -17,6 +17,7 @@ import {
   reconcileDirtyProfileWithoutBaseline,
 } from '@/services/cloud/profile-merge'
 import type { ProfileData } from '@/services/cloud/profile-sync'
+import { MAX_PINNED_CHATS } from '@/services/storage/pinned-chats'
 import { describe, expect, it } from 'vitest'
 
 // A trusted blob has clockVersion === version, so its field clocks are
@@ -278,9 +279,13 @@ describe('reconcileDirtyProfileWithoutBaseline', () => {
     })
   })
 
-  it('preserves an explicit local clear when the remote omits pins', () => {
+  it('preserves an explicit local clear when the remote has pins', () => {
     const profile = reconcileDirtyProfileWithoutBaseline({
-      remote: { nickname: 'Remote', version: 4 },
+      remote: {
+        nickname: 'Remote',
+        pinnedChatIds: ['remote-chat'],
+        version: 4,
+      },
       localBeforeFetch: { pinnedChatIds: [] },
       localAfterFetch: { pinnedChatIds: [] },
     })
@@ -426,7 +431,10 @@ describe('reconcileDirtyProfileWithoutBaseline', () => {
   })
 
   it('rejects a baseline-free pin merge that exceeds the limit', () => {
-    const localPins = Array.from({ length: 20 }, (_, index) => `local-${index}`)
+    const localPins = Array.from(
+      { length: MAX_PINNED_CHATS },
+      (_, index) => `local-${index}`,
+    )
     const profile = reconcileDirtyProfileWithoutBaseline({
       remote: { pinnedChatIds: ['remote-chat'] },
       localBeforeFetch: { pinnedChatIds: localPins },

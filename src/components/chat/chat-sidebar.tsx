@@ -1455,24 +1455,26 @@ export function ChatSidebar({
                 onDragOver={(e) => {
                   if (
                     e.dataTransfer.types.includes('application/x-chat-id') &&
-                    cloudSyncEnabled &&
-                    draggingChatSource !== 'favorites'
+                    cloudSyncEnabled
                   ) {
                     e.preventDefault()
-                    e.dataTransfer.dropEffect = 'move'
-                    setIsDropTargetProjectsHeader(true)
+                    if (draggingChatSource !== 'favorites') {
+                      e.dataTransfer.dropEffect = 'move'
+                      setIsDropTargetProjectsHeader(true)
+                    }
                   }
                 }}
                 onDragEnter={(e) => {
                   if (
                     e.dataTransfer.types.includes('application/x-chat-id') &&
-                    cloudSyncEnabled &&
-                    draggingChatSource !== 'favorites'
+                    cloudSyncEnabled
                   ) {
                     e.preventDefault()
-                    setIsDropTargetProjectsHeader(true)
-                    if (!isProjectsExpanded) {
-                      expandProjectsSection()
+                    if (draggingChatSource !== 'favorites') {
+                      setIsDropTargetProjectsHeader(true)
+                      if (!isProjectsExpanded) {
+                        expandProjectsSection()
+                      }
                     }
                   }
                 }}
@@ -1733,12 +1735,13 @@ export function ChatSidebar({
                                       e.dataTransfer.types.includes(
                                         'application/x-chat-id',
                                       ) &&
-                                      !project.decryptionFailed &&
-                                      draggingChatSource !== 'favorites'
+                                      !project.decryptionFailed
                                     ) {
                                       e.preventDefault()
-                                      e.dataTransfer.dropEffect = 'move'
-                                      setDropTargetProject(project.id)
+                                      if (draggingChatSource !== 'favorites') {
+                                        e.dataTransfer.dropEffect = 'move'
+                                        setDropTargetProject(project.id)
+                                      }
                                     }
                                   },
                                   onDragEnter: (
@@ -1748,25 +1751,24 @@ export function ChatSidebar({
                                       e.dataTransfer.types.includes(
                                         'application/x-chat-id',
                                       ) &&
-                                      !project.decryptionFailed &&
-                                      draggingChatSource !== 'favorites'
+                                      !project.decryptionFailed
                                     ) {
                                       e.preventDefault()
-                                      setDropTargetProject(project.id)
-                                      if (projectHoverTimerRef.current) {
-                                        clearTimeout(
-                                          projectHoverTimerRef.current,
-                                        )
-                                      }
-                                      projectHoverTimerRef.current = setTimeout(
-                                        () => {
-                                          onEnterProject?.(
-                                            project.id,
-                                            project.name,
+                                      if (draggingChatSource !== 'favorites') {
+                                        setDropTargetProject(project.id)
+                                        if (projectHoverTimerRef.current) {
+                                          clearTimeout(
+                                            projectHoverTimerRef.current,
                                           )
-                                        },
-                                        400,
-                                      )
+                                        }
+                                        projectHoverTimerRef.current =
+                                          setTimeout(() => {
+                                            onEnterProject?.(
+                                              project.id,
+                                              project.name,
+                                            )
+                                          }, 400)
+                                      }
                                     }
                                   },
                                   onDragLeave: (
@@ -2024,12 +2026,13 @@ export function ChatSidebar({
                             e.dataTransfer.types.includes(
                               'application/x-chat-id',
                             ) &&
-                            onConvertChatToCloud &&
-                            draggingChatSource !== 'favorites'
+                            onConvertChatToCloud
                           ) {
                             e.preventDefault()
-                            e.dataTransfer.dropEffect = 'move'
-                            setDropTargetTab('cloud')
+                            if (draggingChatSource !== 'favorites') {
+                              e.dataTransfer.dropEffect = 'move'
+                              setDropTargetTab('cloud')
+                            }
                           }
                         }}
                         onDragEnter={(e) => {
@@ -2037,12 +2040,13 @@ export function ChatSidebar({
                             e.dataTransfer.types.includes(
                               'application/x-chat-id',
                             ) &&
-                            onConvertChatToCloud &&
-                            draggingChatSource !== 'favorites'
+                            onConvertChatToCloud
                           ) {
                             e.preventDefault()
-                            setDropTargetTab('cloud')
-                            setActiveTab('cloud')
+                            if (draggingChatSource !== 'favorites') {
+                              setDropTargetTab('cloud')
+                              setActiveTab('cloud')
+                            }
                           }
                         }}
                         onDragLeave={() => {
@@ -2106,12 +2110,13 @@ export function ChatSidebar({
                             e.dataTransfer.types.includes(
                               'application/x-chat-id',
                             ) &&
-                            onConvertChatToLocal &&
-                            draggingChatSource !== 'favorites'
+                            onConvertChatToLocal
                           ) {
                             e.preventDefault()
-                            e.dataTransfer.dropEffect = 'move'
-                            setDropTargetTab('local')
+                            if (draggingChatSource !== 'favorites') {
+                              e.dataTransfer.dropEffect = 'move'
+                              setDropTargetTab('local')
+                            }
                           }
                         }}
                         onDragEnter={(e) => {
@@ -2119,12 +2124,13 @@ export function ChatSidebar({
                             e.dataTransfer.types.includes(
                               'application/x-chat-id',
                             ) &&
-                            onConvertChatToLocal &&
-                            draggingChatSource !== 'favorites'
+                            onConvertChatToLocal
                           ) {
                             e.preventDefault()
-                            setActiveTab('local')
-                            setDropTargetTab('local')
+                            if (draggingChatSource !== 'favorites') {
+                              setActiveTab('local')
+                              setDropTargetTab('local')
+                            }
                           }
                         }}
                         onDragLeave={() => {
