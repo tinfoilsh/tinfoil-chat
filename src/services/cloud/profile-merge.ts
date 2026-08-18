@@ -146,7 +146,7 @@ export function reconcileDirtyProfileWithoutBaseline(args: {
   ) {
     const localBeforePins = localBeforeFetch.pinnedChatIds ?? []
     const localAfterPins = localAfterFetch.pinnedChatIds ?? localBeforePins
-    if (localAfterPins.length === 0) {
+    if (localBeforePins.length === 0 && localAfterPins.length === 0) {
       reconciled.pinnedChatIds = []
       return reconciled
     }

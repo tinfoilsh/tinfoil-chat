@@ -414,6 +414,16 @@ describe('reconcileDirtyProfileWithoutBaseline', () => {
     expect(profile?.pinnedChatIds).toEqual(['local-chat', 'remote-chat'])
   })
 
+  it('preserves remote-only pins when the last local pin is removed', () => {
+    const profile = reconcileDirtyProfileWithoutBaseline({
+      remote: { pinnedChatIds: ['local-chat', 'remote-chat'] },
+      localBeforeFetch: { pinnedChatIds: ['local-chat'] },
+      localAfterFetch: { pinnedChatIds: [] },
+    })
+
+    expect(profile?.pinnedChatIds).toEqual(['remote-chat'])
+  })
+
   it('combines a first pin added while the remote profile was loading', () => {
     const profile = reconcileDirtyProfileWithoutBaseline({
       remote: {
