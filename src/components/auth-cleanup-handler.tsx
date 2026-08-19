@@ -61,34 +61,13 @@ export function AuthCleanupHandler() {
     userId: user?.id,
   }
 
-  const refreshPendingRecovery = useCallback(async () => {
+  const refreshSignedOutRecovery = useCallback(() => {
     setRecoveryKey(null)
     setShowModal(false)
 
     const latestAuthState = latestAuthStateRef.current
-    if (!latestAuthState.isLoaded) return
-    if (latestAuthState.isSignedIn) {
-      if (latestAuthState.userId) {
-        try {
-          await restorePendingKeyForOwner(latestAuthState.userId)
-        } catch (error) {
-          logError('Failed to restore pending encryption key', error, {
-            component: 'AuthCleanupHandler',
-            action: 'refreshPendingRecovery',
-          })
-          setCleanupError({
-            message:
-              'Your encryption key could not be restored. Your recovery remains available.',
-            retryStorage: false,
-            recovery: true,
-          })
-          return
-        }
-        setCleanupError((current) => (current?.recovery ? null : current))
-      }
+    if (!latestAuthState.isLoaded || latestAuthState.isSignedIn !== false)
       return
-    }
-    if (latestAuthState.isSignedIn !== false) return
 
     if (cleanupErrorRef.current?.recovery && !hasCheckedRef.current) return
     setCleanupError((current) => (current?.recovery ? null : current))
@@ -97,19 +76,60 @@ export function AuthCleanupHandler() {
     setShowModal(pending !== null)
   }, [])
 
+  const restorePendingRecoveryForAuthOwner = useCallback(async () => {
+    setRecoveryKey(null)
+    setShowModal(false)
+
+    const latestAuthState = latestAuthStateRef.current
+    if (
+      !latestAuthState.isLoaded ||
+      !latestAuthState.isSignedIn ||
+      !latestAuthState.userId
+    ) {
+      return
+    }
+
+    try {
+      await restorePendingKeyForOwner(latestAuthState.userId)
+    } catch (error) {
+      logError('Failed to restore pending encryption key', error, {
+        component: 'AuthCleanupHandler',
+        action: 'restorePendingRecoveryForAuthOwner',
+      })
+      setCleanupError({
+        message:
+          'Your encryption key could not be restored. Your recovery remains available.',
+        retryStorage: false,
+        recovery: true,
+      })
+      return
+    }
+    setCleanupError((current) => (current?.recovery ? null : current))
+  }, [])
+
   useEffect(() => {
-    void refreshPendingRecovery()
-  }, [isLoaded, isSignedIn, user?.id, refreshPendingRecovery])
+    if (isLoaded && isSignedIn && user?.id) {
+      void restorePendingRecoveryForAuthOwner()
+      return
+    }
+    refreshSignedOutRecovery()
+  }, [
+    isLoaded,
+    isSignedIn,
+    user?.id,
+    refreshSignedOutRecovery,
+    restorePendingRecoveryForAuthOwner,
+  ])
 
   useEffect(() => {
     const handlePendingRecoveryChange = (event: StorageEvent) => {
       if (event.key !== PENDING_ENCRYPTION_KEY_RECOVERY) return
-      void refreshPendingRecovery()
+      refreshSignedOutRecovery()
     }
     window.addEventListener('storage', handlePendingRecoveryChange)
     return () =>
       window.removeEventListener('storage', handlePendingRecoveryChange)
-  }, [refreshPendingRecovery])
+  }, [refreshSignedOutRecovery])
 
   useEffect(() => {
     const handleCrossTabResetFailure = () => {
@@ -149,7 +169,7 @@ export function AuthCleanupHandler() {
         action: 'resumePendingRecovery',
       })
       hideSignoutProgress()
-      void refreshPendingRecovery()
+      refreshSignedOutRecovery()
       return
     }
     const encryptionKey = getEncryptionKey()
@@ -201,7 +221,7 @@ export function AuthCleanupHandler() {
         // Check theme from data-theme attribute (source of truth)
         const dataTheme = document.documentElement.getAttribute('data-theme')
         setIsDarkMode(dataTheme === 'dark')
-        void refreshPendingRecovery()
+        refreshSignedOutRecovery()
       })
       .catch((error) => {
         logError('Failed to cleanup on signout (preserving key)', error, {
@@ -214,7 +234,7 @@ export function AuthCleanupHandler() {
           retryStorage: false,
         })
       })
-  }, [refreshPendingRecovery])
+  }, [refreshSignedOutRecovery])
 
   useEffect(() => {
     if (!isLoaded) return
@@ -339,7 +359,7 @@ export function AuthCleanupHandler() {
             onClick={() => {
               if (cleanupError.recovery) {
                 setCleanupRetrying(true)
-                void refreshPendingRecovery().finally(() =>
+                void restorePendingRecoveryForAuthOwner().finally(() =>
                   setCleanupRetrying(false),
                 )
                 return

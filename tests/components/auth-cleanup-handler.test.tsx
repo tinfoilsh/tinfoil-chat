@@ -542,27 +542,43 @@ describe('AuthCleanupHandler', () => {
     expect(screen.queryByText('key_from_event')).toBeNull()
   })
 
-  it('restores pending recovery on storage events for the signed-in owner', () => {
+  it('does not consume a departing account key created by another tab', () => {
     authState = { isSignedIn: true, isLoaded: true }
     userState = { user: { id: 'user_123' } }
     render(createElement(AuthCleanupHandler))
     mockRestorePendingKeyForOwner.mockClear()
+    mockRestorePendingKeyForOwner.mockImplementationOnce(async () => {
+      localStorage.removeItem(PENDING_ENCRYPTION_KEY_RECOVERY)
+      return true
+    })
+
+    const pendingRecovery = JSON.stringify({
+      version: 1,
+      ownerUserId: 'user_123',
+      encryptionKey: 'key_from_departing_tab',
+    })
+    localStorage.setItem(PENDING_ENCRYPTION_KEY_RECOVERY, pendingRecovery)
 
     act(() => {
       window.dispatchEvent(
         new StorageEvent('storage', {
           key: PENDING_ENCRYPTION_KEY_RECOVERY,
-          newValue: 'key_from_event',
+          oldValue: null,
+          newValue: pendingRecovery,
+          storageArea: localStorage,
         }),
       )
     })
 
-    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_123')
+    expect(mockRestorePendingKeyForOwner).not.toHaveBeenCalled()
     expect(mockGetPendingKeyRecovery).not.toHaveBeenCalled()
-    expect(screen.queryByText('key_from_event')).toBeNull()
+    expect(localStorage.getItem(PENDING_ENCRYPTION_KEY_RECOVERY)).toBe(
+      pendingRecovery,
+    )
+    expect(screen.queryByText('key_from_departing_tab')).toBeNull()
   })
 
-  it('discards pending recovery on storage events for another owner', () => {
+  it('does not discard another owner recovery on signed-in storage events', () => {
     authState = { isSignedIn: true, isLoaded: true }
     userState = { user: { id: 'user_other' } }
     render(createElement(AuthCleanupHandler))
@@ -577,7 +593,7 @@ describe('AuthCleanupHandler', () => {
       )
     })
 
-    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_other')
+    expect(mockRestorePendingKeyForOwner).not.toHaveBeenCalled()
     expect(mockGetPendingKeyRecovery).not.toHaveBeenCalled()
     expect(screen.queryByText('key_from_event')).toBeNull()
   })
