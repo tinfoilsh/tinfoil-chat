@@ -6,10 +6,15 @@ import {
 import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
+  PENDING_ENCRYPTION_KEY_RECOVERY,
 } from '@/constants/storage-keys'
 import { logError, logInfo } from '@/utils/error-handling'
 import {
-  deleteEncryptionKey,
+  deletePendingKeyRecovery,
+  getPendingKeyRecovery,
+  restorePendingKeyForOwner,
+} from '@/utils/pending-key-recovery'
+import {
   getEncryptionKey,
   hasPasskeyBackup,
   performSignoutCleanup,
@@ -30,7 +35,15 @@ const SIGNOUT_CLEANUP_GRACE_MS = 2000
 export function AuthCleanupHandler() {
   const { isSignedIn, isLoaded } = useAuth()
   const { user } = useUser()
-  const [showModal, setShowModal] = useState(false)
+  const restoredPendingForSignedInUser = Boolean(
+    isLoaded && isSignedIn && user?.id && restorePendingKeyForOwner(user.id),
+  )
+
+  const initialPending = getPendingKeyRecovery()
+  const [recoveryKey, setRecoveryKey] = useState<string | null>(
+    initialPending?.encryptionKey ?? null,
+  )
+  const [showModal, setShowModal] = useState(initialPending !== null)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [cleanupError, setCleanupError] = useState<{
     message: string
@@ -45,6 +58,25 @@ export function AuthCleanupHandler() {
     isSignedIn,
     userId: user?.id,
   })
+
+  useEffect(() => {
+    if (restoredPendingForSignedInUser) {
+      setRecoveryKey(null)
+      setShowModal(false)
+    }
+  }, [restoredPendingForSignedInUser])
+
+  useEffect(() => {
+    const handlePendingRecoveryChange = (event: StorageEvent) => {
+      if (event.key !== PENDING_ENCRYPTION_KEY_RECOVERY) return
+      const pending = getPendingKeyRecovery()
+      setRecoveryKey(pending?.encryptionKey ?? null)
+      setShowModal(pending !== null)
+    }
+    window.addEventListener('storage', handlePendingRecoveryChange)
+    return () =>
+      window.removeEventListener('storage', handlePendingRecoveryChange)
+  }, [])
 
   useEffect(() => {
     latestAuthStateRef.current = {
@@ -86,6 +118,7 @@ export function AuthCleanupHandler() {
   const runSignoutCleanup = useCallback(() => {
     completeSignoutStep(SIGNOUT_STEPS.SIGN_OUT)
     const encryptionKey = getEncryptionKey()
+    const ownerUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
 
     if (hasPasskeyBackup() || !encryptionKey) {
       const action = hasPasskeyBackup()
@@ -118,12 +151,22 @@ export function AuthCleanupHandler() {
       component: 'AuthCleanupHandler',
       action: 'signoutWithoutPasskey',
     })
-    performSignoutCleanup({ preserveEncryptionKey: true })
+    if (!ownerUserId) {
+      hideSignoutProgress()
+      setCleanupError({
+        message: 'The encryption key owner could not be verified.',
+        retryStorage: false,
+      })
+      return
+    }
+
+    performSignoutCleanup({ recoverEncryptionKeyForOwner: ownerUserId })
       .then(() => {
         hideSignoutProgress()
         // Check theme from data-theme attribute (source of truth)
         const dataTheme = document.documentElement.getAttribute('data-theme')
         setIsDarkMode(dataTheme === 'dark')
+        setRecoveryKey(getPendingKeyRecovery()?.encryptionKey ?? null)
         setShowModal(true)
       })
       .catch((error) => {
@@ -226,7 +269,8 @@ export function AuthCleanupHandler() {
   useEffect(() => clearPendingSignoutCleanup, [clearPendingSignoutCleanup])
 
   const handleDone = () => {
-    deleteEncryptionKey()
+    deletePendingKeyRecovery()
+    setRecoveryKey(null)
     setShowModal(false)
     window.location.reload()
   }
@@ -288,7 +332,7 @@ export function AuthCleanupHandler() {
     <SignoutConfirmationModal
       isOpen={showModal}
       onDone={handleDone}
-      encryptionKey={getEncryptionKey()}
+      encryptionKey={recoveryKey}
       isDarkMode={isDarkMode}
     />
   )

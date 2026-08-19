@@ -2,6 +2,7 @@ import { resetRendererRegistry } from '@/components/chat/renderers'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
+  PENDING_ENCRYPTION_KEY_RECOVERY,
   SECRET_PASSKEY_BACKED_UP,
   SETTINGS_HAS_SEEN_ONBOARDING,
   USER_ENCRYPTION_KEY,
@@ -22,6 +23,7 @@ import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { projectCache } from '@/services/storage/project-cache'
 import { resetSyncEnclaveClient } from '@/services/sync-enclave'
 import { logError, logInfo } from '@/utils/error-handling'
+import { writePendingKeyRecovery } from '@/utils/pending-key-recovery'
 import {
   completeSignoutStep,
   reportSignoutStep,
@@ -31,8 +33,8 @@ import {
 interface ClearUserDataOptions {
   /** If set, preserve this user ID in localStorage after clearing */
   preserveUserId?: string
-  /** If true, keep the encryption key in localStorage (for signout without passkey backup) */
-  preserveEncryptionKey?: boolean
+  /** Move the primary key into recovery storage owned by this user. */
+  recoverEncryptionKeyForOwner?: string
   /**
    * If true, don't surface progress in the signout overlay. Used for
    * user-switch cleanup, which is not a signout.
@@ -46,7 +48,7 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   const {
     context,
     preserveUserId,
-    preserveEncryptionKey,
+    recoverEncryptionKeyForOwner,
     skipProgressReporting = false,
   } = options
 
@@ -66,9 +68,13 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   // Clear encryption key immediately (in-memory + localStorage) before any
   // async work, so concurrent code cannot re-persist a stale key.
   reportStep(SIGNOUT_STEPS.CLEAR_KEY)
-  if (!preserveEncryptionKey) {
-    encryptionService.clearKey({ persist: true })
+  if (recoverEncryptionKeyForOwner) {
+    const encryptionKey = getEncryptionKey()
+    if (!encryptionKey)
+      throw new Error('No encryption key available for recovery')
+    writePendingKeyRecovery(recoverEncryptionKeyForOwner, encryptionKey)
   }
+  encryptionService.clearKey({ persist: true })
   completeStep(SIGNOUT_STEPS.CLEAR_KEY)
 
   // Reset renderer registry to clear any cached renderers
@@ -108,7 +114,9 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
     const preservedKeys = new Set([
       AUTH_ACTIVE_USER_ID,
       SETTINGS_HAS_SEEN_ONBOARDING,
-      ...(preserveEncryptionKey ? [USER_ENCRYPTION_KEY] : []),
+      ...(recoverEncryptionKeyForOwner
+        ? [PENDING_ENCRYPTION_KEY_RECOVERY]
+        : []),
     ])
     const keys = Array.from({ length: localStorage.length }, (_, index) =>
       localStorage.key(index),
@@ -162,16 +170,16 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
 }
 
 export async function performSignoutCleanup(opts?: {
-  preserveEncryptionKey?: boolean
+  recoverEncryptionKeyForOwner?: string
 }): Promise<void> {
-  const preserveKey = opts?.preserveEncryptionKey ?? false
-  const action = preserveKey
-    ? 'performSignoutCleanup(preserveKey)'
+  const recoveryOwner = opts?.recoverEncryptionKeyForOwner
+  const action = recoveryOwner
+    ? 'performSignoutCleanup(recoverKey)'
     : 'performSignoutCleanup'
 
   try {
     logInfo(
-      `Starting signout cleanup${preserveKey ? ' (preserving encryption key)' : ''}`,
+      `Starting signout cleanup${recoveryOwner ? ' (recovering encryption key)' : ''}`,
       {
         component: 'signoutCleanup',
         action,
@@ -180,11 +188,11 @@ export async function performSignoutCleanup(opts?: {
 
     await clearAllUserData({
       context: 'signoutCleanup',
-      preserveEncryptionKey: preserveKey,
+      recoverEncryptionKeyForOwner: recoveryOwner,
     })
 
     logInfo(
-      `Signout cleanup completed${preserveKey ? ' (encryption key preserved)' : ''}`,
+      `Signout cleanup completed${recoveryOwner ? ' (encryption key recoverable)' : ''}`,
       {
         component: 'signoutCleanup',
         action,
@@ -239,6 +247,14 @@ export function getEncryptionKey(): string | null {
 export function hasPasskeyBackup(): boolean {
   if (typeof window === 'undefined') return false
   return localStorage.getItem(SECRET_PASSKEY_BACKED_UP) === 'true'
+}
+
+export async function shouldWarnAboutLocalOnlyChats(): Promise<boolean> {
+  try {
+    return (await indexedDBStorage.getLocalOnlyChatCount()) > 0
+  } catch {
+    return true
+  }
 }
 
 export async function retryFailedStorageCleanup(): Promise<void> {

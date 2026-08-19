@@ -521,8 +521,10 @@ describe('IndexedDB pending sync index', () => {
     ])
     await expect(storage.hasPendingChatRecoveries()).resolves.toBe(true)
     await expect(storage.getCloudChatCount()).resolves.toBe(1)
+    await expect(storage.getLocalOnlyChatCount()).resolves.toBe(1)
     await expect(storage.getProjectChatCount('project-1')).resolves.toBe(1)
     expect(cursorStoreNames).toEqual([
+      'chatSummaries',
       'chatSummaries',
       'chatSummaries',
       'chatSummaries',

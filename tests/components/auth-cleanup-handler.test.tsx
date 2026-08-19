@@ -3,6 +3,7 @@ import { ACCOUNT_RESET_FAILED_EVENT } from '@/constants/auth-events'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
+  PENDING_ENCRYPTION_KEY_RECOVERY,
 } from '@/constants/storage-keys'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { createElement } from 'react'
@@ -13,6 +14,9 @@ const mockPerformUserSwitchCleanup = vi.fn()
 const mockGetEncryptionKey = vi.fn()
 const mockHasPasskeyBackup = vi.fn()
 const mockRetryFailedStorageCleanup = vi.fn()
+const mockGetPendingKeyRecovery = vi.fn()
+const mockRestorePendingKeyForOwner = vi.fn()
+const mockDeletePendingKeyRecovery = vi.fn()
 
 let authState: { isSignedIn: boolean; isLoaded: boolean } = {
   isSignedIn: false,
@@ -28,7 +32,26 @@ vi.mock('@clerk/nextjs', () => ({
 }))
 
 vi.mock('@/components/modals/signout-confirmation-modal', () => ({
-  SignoutConfirmationModal: () => null,
+  SignoutConfirmationModal: ({
+    encryptionKey,
+    onDone,
+  }: {
+    encryptionKey: string
+    onDone: () => void
+  }) => (
+    <div>
+      <span>{encryptionKey}</span>
+      <button onClick={onDone}>Done</button>
+    </div>
+  ),
+}))
+
+vi.mock('@/utils/pending-key-recovery', () => ({
+  deletePendingKeyRecovery: (...args: any[]) =>
+    mockDeletePendingKeyRecovery(...args),
+  getPendingKeyRecovery: (...args: any[]) => mockGetPendingKeyRecovery(...args),
+  restorePendingKeyForOwner: (...args: any[]) =>
+    mockRestorePendingKeyForOwner(...args),
 }))
 
 vi.mock('@/utils/error-handling', () => ({
@@ -67,6 +90,8 @@ describe('AuthCleanupHandler', () => {
     mockRetryFailedStorageCleanup.mockResolvedValue(undefined)
     mockGetEncryptionKey.mockReturnValue(null)
     mockHasPasskeyBackup.mockReturnValue(true)
+    mockGetPendingKeyRecovery.mockReturnValue(null)
+    mockRestorePendingKeyForOwner.mockReturnValue(false)
     vi.spyOn(window.location, 'reload').mockImplementation(() => {})
   })
 
@@ -260,5 +285,69 @@ describe('AuthCleanupHandler', () => {
         name: 'Unable to clear local data',
       }),
     ).toBeTruthy()
+  })
+
+  it('restores the save-key prompt after a reload', () => {
+    mockGetPendingKeyRecovery.mockReturnValue({
+      version: 1,
+      ownerUserId: 'user_123',
+      encryptionKey: 'key_recovery',
+    })
+
+    render(createElement(AuthCleanupHandler))
+
+    expect(screen.getByText('key_recovery')).toBeTruthy()
+  })
+
+  it('restores pending recovery before the same owner continues', () => {
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_123' } }
+
+    render(createElement(AuthCleanupHandler))
+
+    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_123')
+  })
+
+  it('silently discards recovery when a different owner signs in', () => {
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_other' } }
+
+    render(createElement(AuthCleanupHandler))
+
+    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_other')
+  })
+
+  it('deletes pending recovery when Done is clicked', () => {
+    mockGetPendingKeyRecovery.mockReturnValue({
+      version: 1,
+      ownerUserId: 'user_123',
+      encryptionKey: 'key_recovery',
+    })
+    render(createElement(AuthCleanupHandler))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+
+    expect(mockDeletePendingKeyRecovery).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes the recovery prompt when another tab consumes it', () => {
+    mockGetPendingKeyRecovery.mockReturnValue({
+      version: 1,
+      ownerUserId: 'user_123',
+      encryptionKey: 'key_recovery',
+    })
+    render(createElement(AuthCleanupHandler))
+    mockGetPendingKeyRecovery.mockReturnValue(null)
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: PENDING_ENCRYPTION_KEY_RECOVERY,
+          newValue: null,
+        }),
+      )
+    })
+
+    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull()
   })
 })

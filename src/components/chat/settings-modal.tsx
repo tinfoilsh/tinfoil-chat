@@ -4,6 +4,7 @@ import { UserAvatar } from '@/components/user-avatar'
 import { API_BASE_URL } from '@/config'
 import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
 import {
+  SECRET_PASSKEY_BACKED_UP,
   SETTINGS_CHAT_FONT,
   SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED,
   SETTINGS_GENUI_ENABLED,
@@ -66,6 +67,7 @@ import {
 } from '@/utils/cloud-sync-settings'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { generateReverseId } from '@/utils/reverse-id'
+import { shouldWarnAboutLocalOnlyChats } from '@/utils/signout-cleanup'
 import {
   hideSignoutProgress,
   showSignoutProgress,
@@ -341,7 +343,9 @@ type SettingsModalProps = {
   passkeyAddDeviceAvailable?: boolean
   onSetupPasskey?: () => Promise<boolean>
   onAddPasskeyToThisDevice?: () => Promise<boolean>
-  onRefreshBundleState?: () => Promise<void>
+  onRefreshBundleState?: (options?: {
+    clearOnUnknown?: boolean
+  }) => Promise<boolean | null>
   initialTab?: SettingsTab
   chats?: Chat[]
 }
@@ -1274,6 +1278,12 @@ export function SettingsModal({
     setIsSigningOut(true)
     showSignoutProgress()
     try {
+      const backupVerified = await onRefreshBundleState?.({
+        clearOnUnknown: true,
+      })
+      if (backupVerified !== true) {
+        localStorage.removeItem(SECRET_PASSKEY_BACKED_UP)
+      }
       await signOut()
     } catch (error) {
       logError('Sign out failed', error, {
@@ -1284,7 +1294,21 @@ export function SettingsModal({
     } finally {
       setIsSigningOut(false)
     }
-  }, [signOut])
+  }, [onRefreshBundleState, signOut])
+
+  const requestSignOut = useCallback(async () => {
+    setIsSigningOut(true)
+    try {
+      if (await shouldWarnAboutLocalOnlyChats()) {
+        setShowSignOutConfirm(true)
+        return
+      }
+    } finally {
+      setIsSigningOut(false)
+    }
+
+    await handleSignOut()
+  }, [handleSignOut])
 
   // Import handlers
   const generateChatId = (createdAt?: Date) => {
@@ -4590,11 +4614,7 @@ ${encryptionKey.replace('key_', '')}
                           </div>
                           <button
                             onClick={() => {
-                              if (isLocalOnlyModeEnabled()) {
-                                setShowSignOutConfirm(true)
-                              } else {
-                                void handleSignOut()
-                              }
+                              void requestSignOut()
                             }}
                             disabled={isSigningOut}
                             className={cn(

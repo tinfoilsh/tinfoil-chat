@@ -2023,6 +2023,32 @@ export class IndexedDBStorage {
     )
   }
 
+  async getLocalOnlyChatCount(): Promise<number> {
+    await this.ensureChatSummaries()
+    await this.waitForSaveQueue()
+    const db = await this.ensureDB()
+
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHAT_SUMMARIES_STORE], 'readonly')
+        const store = transaction.objectStore(CHAT_SUMMARIES_STORE)
+        const request = store.openCursor()
+        let count = 0
+
+        request.onsuccess = (event) => {
+          const cursor = (event.target as IDBRequest).result
+          if (cursor) {
+            if (cursor.value.isLocalOnly) count++
+            cursor.continue()
+          } else {
+            resolve(count)
+          }
+        }
+        request.onerror = () => reject(new Error('Failed to count chats'))
+      }),
+    )
+  }
+
   async getProjectChatCount(projectId: string): Promise<number> {
     await this.ensureChatSummaries()
     await this.waitForSaveQueue()

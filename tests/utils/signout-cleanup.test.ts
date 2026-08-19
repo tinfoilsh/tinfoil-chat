@@ -2,7 +2,9 @@ import { resetRendererRegistry } from '@/components/chat/renderers'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
+  PENDING_ENCRYPTION_KEY_RECOVERY,
   SETTINGS_HAS_SEEN_ONBOARDING,
+  USER_ENCRYPTION_KEY,
 } from '@/constants/storage-keys'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { resetEditClockCache } from '@/services/cloud/edit-clock'
@@ -15,10 +17,12 @@ import { projectEvents } from '@/services/project/project-events'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { resetSyncEnclaveClient } from '@/services/sync-enclave'
+import { writePendingKeyRecovery } from '@/utils/pending-key-recovery'
 import {
   performSignoutCleanup,
   performUserSwitchCleanup,
   retryFailedStorageCleanup,
+  shouldWarnAboutLocalOnlyChats,
 } from '@/utils/signout-cleanup'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -64,12 +68,26 @@ vi.mock('@/services/storage/deleted-chats-tracker', () => ({
 
 vi.mock('@/services/storage/indexed-db', () => ({
   indexedDBStorage: {
+    getLocalOnlyChatCount: vi.fn().mockResolvedValue(0),
     resetForAccountChange: vi.fn().mockResolvedValue(undefined),
   },
 }))
 
 vi.mock('@/services/sync-enclave', () => ({
   resetSyncEnclaveClient: vi.fn(),
+}))
+
+vi.mock('@/utils/pending-key-recovery', () => ({
+  writePendingKeyRecovery: vi.fn(
+    (ownerUserId: string, encryptionKey: string) => {
+      const record = { version: 1, ownerUserId, encryptionKey }
+      localStorage.setItem(
+        PENDING_ENCRYPTION_KEY_RECOVERY,
+        JSON.stringify(record),
+      )
+      return record
+    },
+  ),
 }))
 
 vi.mock('@/utils/error-handling', () => ({
@@ -119,11 +137,36 @@ describe('performSignoutCleanup', () => {
     expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalled()
   })
 
-  it('keeps the encryption key when preserveEncryptionKey is set', async () => {
-    await performSignoutCleanup({ preserveEncryptionKey: true })
+  it('moves the primary key into recovery before clearing key storage', async () => {
+    localStorage.setItem(USER_ENCRYPTION_KEY, 'key_primary')
+
+    await performSignoutCleanup({ recoverEncryptionKeyForOwner: 'user_123' })
+
+    expect(writePendingKeyRecovery).toHaveBeenCalledWith(
+      'user_123',
+      'key_primary',
+    )
+    expect(encryptionService.clearKey).toHaveBeenCalledWith({ persist: true })
+    expect(
+      vi.mocked(writePendingKeyRecovery).mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      vi.mocked(encryptionService.clearKey).mock.invocationCallOrder[0],
+    )
+    expect(localStorage.getItem(PENDING_ENCRYPTION_KEY_RECOVERY)).not.toBeNull()
+    expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalled()
+  })
+
+  it('does not clear the active key when pending recovery cannot be verified', async () => {
+    localStorage.setItem(USER_ENCRYPTION_KEY, 'key_primary')
+    vi.mocked(writePendingKeyRecovery).mockImplementationOnce(() => {
+      throw new Error('verification failed')
+    })
+
+    await expect(
+      performSignoutCleanup({ recoverEncryptionKeyForOwner: 'user_123' }),
+    ).rejects.toThrow('verification failed')
 
     expect(encryptionService.clearKey).not.toHaveBeenCalled()
-    expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalled()
   })
 
   it('keeps the active-user marker until browser data is cleared', async () => {
@@ -180,5 +223,21 @@ describe('performSignoutCleanup', () => {
     expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalledWith(false)
     expect(deletedChatsTracker.clear).toHaveBeenCalledTimes(1)
     expect(sessionStorage.getItem(AUTH_ACCOUNT_RESET_FAILED)).toBeNull()
+  })
+
+  it('warns only when actual local-only rows exist', async () => {
+    vi.mocked(indexedDBStorage.getLocalOnlyChatCount).mockResolvedValueOnce(2)
+    await expect(shouldWarnAboutLocalOnlyChats()).resolves.toBe(true)
+
+    vi.mocked(indexedDBStorage.getLocalOnlyChatCount).mockResolvedValueOnce(0)
+    await expect(shouldWarnAboutLocalOnlyChats()).resolves.toBe(false)
+  })
+
+  it('warns conservatively when local-only rows cannot be queried', async () => {
+    vi.mocked(indexedDBStorage.getLocalOnlyChatCount).mockRejectedValueOnce(
+      new Error('read failed'),
+    )
+
+    await expect(shouldWarnAboutLocalOnlyChats()).resolves.toBe(true)
   })
 })
