@@ -50,19 +50,41 @@ export function AuthCleanupHandler() {
   const pendingUserSwitchCleanupRef = useRef<Promise<void> | null>(null)
   const pendingFreshSignInRef = useRef<{
     userId: string
+    authGeneration: number
     reloadAfterRestore: boolean
   } | null>(null)
   const cleanupErrorRef = useRef(cleanupError)
   cleanupErrorRef.current = cleanupError
+  const authGenerationRef = useRef(0)
+  const previousAuthStateRef = useRef({
+    isLoaded,
+    isSignedIn,
+    userId: user?.id,
+  })
+  const previousAuthState = previousAuthStateRef.current
+  if (
+    previousAuthState.isLoaded !== isLoaded ||
+    previousAuthState.isSignedIn !== isSignedIn ||
+    previousAuthState.userId !== user?.id
+  ) {
+    authGenerationRef.current += 1
+    previousAuthStateRef.current = {
+      isLoaded,
+      isSignedIn,
+      userId: user?.id,
+    }
+  }
   const latestAuthStateRef = useRef({
     isLoaded,
     isSignedIn,
     userId: user?.id,
+    authGeneration: authGenerationRef.current,
   })
   latestAuthStateRef.current = {
     isLoaded,
     isSignedIn,
     userId: user?.id,
+    authGeneration: authGenerationRef.current,
   }
 
   const refreshSignedOutRecovery = useCallback(() => {
@@ -87,15 +109,27 @@ export function AuthCleanupHandler() {
     setShowModal(false)
 
     const latestAuthState = latestAuthStateRef.current
-    const pendingSignIn = pendingFreshSignInRef.current
+    let pendingSignIn = pendingFreshSignInRef.current
     if (
       !latestAuthState.isLoaded ||
       !latestAuthState.isSignedIn ||
-      !latestAuthState.userId ||
-      !pendingSignIn ||
-      pendingSignIn.userId !== latestAuthState.userId
+      !latestAuthState.userId
     ) {
       return
+    }
+
+    if (
+      !pendingSignIn ||
+      pendingSignIn.userId !== latestAuthState.userId ||
+      pendingSignIn.authGeneration !== latestAuthState.authGeneration
+    ) {
+      pendingSignIn = {
+        userId: latestAuthState.userId,
+        authGeneration: latestAuthState.authGeneration,
+        reloadAfterRestore: pendingSignIn?.reloadAfterRestore ?? false,
+      }
+      pendingFreshSignInRef.current = pendingSignIn
+      setCleanupError((current) => (current?.recovery ? null : current))
     }
 
     if (localStorage.getItem(AUTH_ACTIVE_USER_ID) === pendingSignIn.userId) {
@@ -111,7 +145,8 @@ export function AuthCleanupHandler() {
       if (
         !currentAuthState.isLoaded ||
         !currentAuthState.isSignedIn ||
-        currentAuthState.userId !== pendingSignIn.userId
+        currentAuthState.userId !== pendingSignIn.userId ||
+        currentAuthState.authGeneration !== pendingSignIn.authGeneration
       ) {
         return
       }
@@ -132,7 +167,8 @@ export function AuthCleanupHandler() {
     if (
       !currentAuthState.isLoaded ||
       !currentAuthState.isSignedIn ||
-      currentAuthState.userId !== pendingSignIn.userId
+      currentAuthState.userId !== pendingSignIn.userId ||
+      currentAuthState.authGeneration !== pendingSignIn.authGeneration
     ) {
       return
     }
@@ -184,11 +220,12 @@ export function AuthCleanupHandler() {
   }, [])
 
   const runUserSwitchCleanup = useCallback(
-    (initialUserId: string) => {
+    (initialUserId: string, initialAuthGeneration: number) => {
       if (pendingUserSwitchCleanupRef.current) return
 
       const cleanup = (async () => {
         let targetUserId = initialUserId
+        let targetAuthGeneration = initialAuthGeneration
 
         while (true) {
           try {
@@ -199,9 +236,11 @@ export function AuthCleanupHandler() {
               latestAuthState.isLoaded &&
               latestAuthState.isSignedIn &&
               latestAuthState.userId &&
-              latestAuthState.userId !== targetUserId
+              (latestAuthState.userId !== targetUserId ||
+                latestAuthState.authGeneration !== targetAuthGeneration)
             ) {
               targetUserId = latestAuthState.userId
+              targetAuthGeneration = latestAuthState.authGeneration
               continue
             }
 
@@ -221,13 +260,18 @@ export function AuthCleanupHandler() {
           ) {
             return
           }
-          if (latestAuthState.userId !== targetUserId) {
+          if (
+            latestAuthState.userId !== targetUserId ||
+            latestAuthState.authGeneration !== targetAuthGeneration
+          ) {
             targetUserId = latestAuthState.userId
+            targetAuthGeneration = latestAuthState.authGeneration
             continue
           }
 
           pendingFreshSignInRef.current = {
             userId: targetUserId,
+            authGeneration: targetAuthGeneration,
             reloadAfterRestore: true,
           }
           await restorePendingRecoveryForFreshSignIn()
@@ -237,9 +281,11 @@ export function AuthCleanupHandler() {
             currentAuthState.isLoaded &&
             currentAuthState.isSignedIn &&
             currentAuthState.userId &&
-            currentAuthState.userId !== targetUserId
+            (currentAuthState.userId !== targetUserId ||
+              currentAuthState.authGeneration !== targetAuthGeneration)
           ) {
             targetUserId = currentAuthState.userId
+            targetAuthGeneration = currentAuthState.authGeneration
             continue
           }
           return
@@ -353,7 +399,13 @@ export function AuthCleanupHandler() {
 
       if (hasAnonymousRestore || (storedUserId && storedUserId !== user.id)) {
         // Different user signed in — clear all previous user data before recovery.
-        if (!cleanupError) runUserSwitchCleanup(user.id)
+        if (!cleanupError || cleanupError.recovery) {
+          setCleanupError((current) => (current?.recovery ? null : current))
+          runUserSwitchCleanup(
+            user.id,
+            latestAuthStateRef.current.authGeneration,
+          )
+        }
         return
       }
 
@@ -363,11 +415,21 @@ export function AuthCleanupHandler() {
         return
       }
 
-      if (!pendingFreshSignInRef.current) {
+      if (pendingUserSwitchCleanupRef.current) return
+
+      const pendingFreshSignIn = pendingFreshSignInRef.current
+      if (
+        !pendingFreshSignIn ||
+        pendingFreshSignIn.userId !== user.id ||
+        pendingFreshSignIn.authGeneration !==
+          latestAuthStateRef.current.authGeneration
+      ) {
         pendingFreshSignInRef.current = {
           userId: user.id,
+          authGeneration: latestAuthStateRef.current.authGeneration,
           reloadAfterRestore: false,
         }
+        setCleanupError((current) => (current?.recovery ? null : current))
         void restorePendingRecoveryForFreshSignIn()
       }
       return

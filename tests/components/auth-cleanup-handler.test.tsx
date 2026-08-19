@@ -701,6 +701,110 @@ describe('AuthCleanupHandler', () => {
     expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_c')
   })
 
+  it('cleans the latest auth generation when the user ID changes back', async () => {
+    const finishCleanup: Array<() => void> = []
+    let activeCleanups = 0
+    let maxActiveCleanups = 0
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_a')
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_b' } }
+    mockPerformUserSwitchCleanup.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          activeCleanups += 1
+          maxActiveCleanups = Math.max(maxActiveCleanups, activeCleanups)
+          finishCleanup.push(() => {
+            activeCleanups -= 1
+            localStorage.removeItem(AUTH_ACTIVE_USER_ID)
+            resolve()
+          })
+        }),
+    )
+
+    const { rerender } = render(createElement(AuthCleanupHandler))
+    userState = { user: { id: 'user_c' } }
+    rerender(createElement(AuthCleanupHandler))
+    userState = { user: { id: 'user_b' } }
+    rerender(createElement(AuthCleanupHandler))
+
+    await act(async () => {
+      finishCleanup[0]()
+      await Promise.resolve()
+    })
+
+    expect(mockPerformUserSwitchCleanup).toHaveBeenCalledTimes(2)
+    expect(mockPerformUserSwitchCleanup).toHaveBeenNthCalledWith(2, 'user_b')
+    expect(mockRestorePendingKeyForOwner).not.toHaveBeenCalled()
+
+    await act(async () => {
+      finishCleanup[1]()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(maxActiveCleanups).toBe(1)
+    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledTimes(1)
+    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_b')
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_b')
+  })
+
+  it('starts fresh recovery when auth changes after recovery failure', async () => {
+    let failUserBRecovery!: () => void
+    let failUserCRecovery!: () => void
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_b' } }
+    mockRestorePendingKeyForOwner
+      .mockImplementationOnce(
+        () =>
+          new Promise<boolean>((_, reject) => {
+            failUserBRecovery = () => reject(new Error('restore failed'))
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<boolean>((_, reject) => {
+            failUserCRecovery = () => reject(new Error('restore failed'))
+          }),
+      )
+      .mockResolvedValueOnce(false)
+
+    const { rerender } = render(createElement(AuthCleanupHandler))
+    await act(async () => {
+      failUserBRecovery()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(
+      screen.getByRole('alertdialog', {
+        name: 'Unable to restore encryption key',
+      }),
+    ).toBeTruthy()
+
+    userState = { user: { id: 'user_c' } }
+    rerender(createElement(AuthCleanupHandler))
+
+    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledTimes(2)
+    expect(mockRestorePendingKeyForOwner).toHaveBeenNthCalledWith(2, 'user_c')
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+
+    await act(async () => {
+      failUserCRecovery()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry key restore' }))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledTimes(3)
+    expect(mockRestorePendingKeyForOwner).toHaveBeenNthCalledWith(3, 'user_c')
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_c')
+  })
+
   it('retries cleanup for the latest user after stale cleanup fails', async () => {
     let failStaleCleanup!: () => void
     let finishLatestCleanup!: () => void
