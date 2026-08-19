@@ -27,6 +27,16 @@ let userState: { user: { id: string } | null } = {
   user: null,
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
+}
+
 vi.mock('@clerk/nextjs', () => ({
   useAuth: () => authState,
   useUser: () => userState,
@@ -746,6 +756,170 @@ describe('AuthCleanupHandler', () => {
     expect(mockRestorePendingKeyForOwner).toHaveBeenCalledTimes(1)
     expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_b')
     expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_b')
+  })
+
+  it('cleans a stale restored key before restoring the latest user', async () => {
+    const userBRestore = createDeferred<boolean>()
+    let activeKeyOwner: string | null = null
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_b' } }
+    mockRestorePendingKeyForOwner
+      .mockImplementationOnce(async () => {
+        const restored = await userBRestore.promise
+        activeKeyOwner = 'user_b'
+        return restored
+      })
+      .mockImplementationOnce(async () => {
+        activeKeyOwner = 'user_c'
+        return true
+      })
+    mockPerformUserSwitchCleanup.mockImplementation(async () => {
+      activeKeyOwner = null
+      localStorage.removeItem(AUTH_ACTIVE_USER_ID)
+    })
+
+    const { rerender } = render(createElement(AuthCleanupHandler))
+    userState = { user: { id: 'user_c' } }
+    rerender(createElement(AuthCleanupHandler))
+
+    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledTimes(1)
+    expect(mockPerformUserSwitchCleanup).not.toHaveBeenCalled()
+
+    await act(async () => {
+      userBRestore.resolve(true)
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockPerformUserSwitchCleanup).toHaveBeenCalledWith('user_c')
+    expect(mockRestorePendingKeyForOwner).toHaveBeenNthCalledWith(2, 'user_c')
+    expect(activeKeyOwner).toBe('user_c')
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_c')
+    expect(
+      mockPerformUserSwitchCleanup.mock.invocationCallOrder[0],
+    ).toBeGreaterThan(mockRestorePendingKeyForOwner.mock.invocationCallOrder[0])
+    expect(
+      mockPerformUserSwitchCleanup.mock.invocationCallOrder[0],
+    ).toBeLessThan(mockRestorePendingKeyForOwner.mock.invocationCallOrder[1])
+  })
+
+  it('continues latest-user cleanup after a stale restore fails', async () => {
+    const userBRestore = createDeferred<boolean>()
+    let activeKeyOwner: string | null = null
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_b' } }
+    mockRestorePendingKeyForOwner
+      .mockImplementationOnce(() => userBRestore.promise)
+      .mockImplementationOnce(async () => {
+        activeKeyOwner = 'user_c'
+        return true
+      })
+    mockPerformUserSwitchCleanup.mockImplementation(async () => {
+      activeKeyOwner = null
+      localStorage.removeItem(AUTH_ACTIVE_USER_ID)
+    })
+
+    const { rerender } = render(createElement(AuthCleanupHandler))
+    userState = { user: { id: 'user_c' } }
+    rerender(createElement(AuthCleanupHandler))
+
+    await act(async () => {
+      userBRestore.reject(new Error('restore failed'))
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockPerformUserSwitchCleanup).toHaveBeenCalledWith('user_c')
+    expect(mockRestorePendingKeyForOwner).toHaveBeenNthCalledWith(2, 'user_c')
+    expect(activeKeyOwner).toBe('user_c')
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_c')
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
+  it('does not restore the latest user when post-restore cleanup fails', async () => {
+    const userBRestore = createDeferred<boolean>()
+    const userCCleanup = createDeferred<void>()
+    let activeKeyOwner: string | null = null
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_b' } }
+    mockRestorePendingKeyForOwner.mockImplementationOnce(async () => {
+      const restored = await userBRestore.promise
+      activeKeyOwner = 'user_b'
+      return restored
+    })
+    mockPerformUserSwitchCleanup.mockImplementationOnce(async () => {
+      activeKeyOwner = null
+      localStorage.removeItem(AUTH_ACTIVE_USER_ID)
+      await userCCleanup.promise
+    })
+
+    const { rerender } = render(createElement(AuthCleanupHandler))
+    userState = { user: { id: 'user_c' } }
+    rerender(createElement(AuthCleanupHandler))
+
+    await act(async () => {
+      userBRestore.resolve(true)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      userCCleanup.reject(new Error('cleanup failed'))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(activeKeyOwner).toBeNull()
+    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBeNull()
+    expect(
+      screen.getByRole('alertdialog', {
+        name: 'Unable to clear local data',
+      }),
+    ).toBeTruthy()
+  })
+
+  it('does not activate the latest user when restore fails after cleanup', async () => {
+    const userBRestore = createDeferred<boolean>()
+    const userCRestore = createDeferred<boolean>()
+    let activeKeyOwner: string | null = null
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_b' } }
+    mockRestorePendingKeyForOwner
+      .mockImplementationOnce(async () => {
+        const restored = await userBRestore.promise
+        activeKeyOwner = 'user_b'
+        return restored
+      })
+      .mockImplementationOnce(() => userCRestore.promise)
+    mockPerformUserSwitchCleanup.mockImplementation(async () => {
+      activeKeyOwner = null
+      localStorage.removeItem(AUTH_ACTIVE_USER_ID)
+    })
+
+    const { rerender } = render(createElement(AuthCleanupHandler))
+    userState = { user: { id: 'user_c' } }
+    rerender(createElement(AuthCleanupHandler))
+
+    await act(async () => {
+      userBRestore.resolve(true)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      userCRestore.reject(new Error('restore failed'))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(activeKeyOwner).toBeNull()
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBeNull()
+    expect(
+      screen.getByRole('alertdialog', {
+        name: 'Unable to restore encryption key',
+      }),
+    ).toBeTruthy()
   })
 
   it('starts fresh recovery when auth changes after recovery failure', async () => {

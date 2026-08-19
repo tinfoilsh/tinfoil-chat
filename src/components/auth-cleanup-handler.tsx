@@ -48,6 +48,11 @@ export function AuthCleanupHandler() {
   const hasCheckedRef = useRef(false)
   const pendingSignoutCleanupRef = useRef<number | null>(null)
   const pendingUserSwitchCleanupRef = useRef<Promise<void> | null>(null)
+  const pendingKeyRestoreRef = useRef<{
+    promise: Promise<void>
+    userId: string
+    authGeneration: number
+  } | null>(null)
   const pendingFreshSignInRef = useRef<{
     userId: string
     authGeneration: number
@@ -105,6 +110,11 @@ export function AuthCleanupHandler() {
   }, [])
 
   const restorePendingRecoveryForFreshSignIn = useCallback(async () => {
+    if (pendingKeyRestoreRef.current) {
+      await pendingKeyRestoreRef.current.promise
+      return
+    }
+
     setRecoveryKey(null)
     setShowModal(false)
 
@@ -138,9 +148,32 @@ export function AuthCleanupHandler() {
       return
     }
 
-    try {
-      await restorePendingKeyForOwner(pendingSignIn.userId)
-    } catch (error) {
+    const restore = (async () => {
+      try {
+        await restorePendingKeyForOwner(pendingSignIn.userId)
+      } catch (error) {
+        const currentAuthState = latestAuthStateRef.current
+        if (
+          !currentAuthState.isLoaded ||
+          !currentAuthState.isSignedIn ||
+          currentAuthState.userId !== pendingSignIn.userId ||
+          currentAuthState.authGeneration !== pendingSignIn.authGeneration
+        ) {
+          return
+        }
+        logError('Failed to restore pending encryption key', error, {
+          component: 'AuthCleanupHandler',
+          action: 'restorePendingRecoveryForFreshSignIn',
+        })
+        setCleanupError({
+          message:
+            'Your encryption key could not be restored. Your recovery remains available.',
+          retryStorage: false,
+          recovery: true,
+        })
+        return
+      }
+
       const currentAuthState = latestAuthStateRef.current
       if (
         !currentAuthState.isLoaded ||
@@ -150,34 +183,27 @@ export function AuthCleanupHandler() {
       ) {
         return
       }
-      logError('Failed to restore pending encryption key', error, {
-        component: 'AuthCleanupHandler',
-        action: 'restorePendingRecoveryForFreshSignIn',
-      })
-      setCleanupError({
-        message:
-          'Your encryption key could not be restored. Your recovery remains available.',
-        retryStorage: false,
-        recovery: true,
-      })
-      return
-    }
 
-    const currentAuthState = latestAuthStateRef.current
-    if (
-      !currentAuthState.isLoaded ||
-      !currentAuthState.isSignedIn ||
-      currentAuthState.userId !== pendingSignIn.userId ||
-      currentAuthState.authGeneration !== pendingSignIn.authGeneration
-    ) {
-      return
-    }
+      localStorage.setItem(AUTH_ACTIVE_USER_ID, pendingSignIn.userId)
+      window.dispatchEvent(new Event(AUTH_ACTIVE_USER_CHANGED_EVENT))
+      pendingFreshSignInRef.current = null
+      setCleanupError((current) => (current?.recovery ? null : current))
+      if (pendingSignIn.reloadAfterRestore) window.location.reload()
+    })()
 
-    localStorage.setItem(AUTH_ACTIVE_USER_ID, pendingSignIn.userId)
-    window.dispatchEvent(new Event(AUTH_ACTIVE_USER_CHANGED_EVENT))
-    pendingFreshSignInRef.current = null
-    setCleanupError((current) => (current?.recovery ? null : current))
-    if (pendingSignIn.reloadAfterRestore) window.location.reload()
+    const pendingRestore = {
+      promise: restore,
+      userId: pendingSignIn.userId,
+      authGeneration: pendingSignIn.authGeneration,
+    }
+    pendingKeyRestoreRef.current = pendingRestore
+    try {
+      await restore
+    } finally {
+      if (pendingKeyRestoreRef.current === pendingRestore) {
+        pendingKeyRestoreRef.current = null
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -226,6 +252,20 @@ export function AuthCleanupHandler() {
       const cleanup = (async () => {
         let targetUserId = initialUserId
         let targetAuthGeneration = initialAuthGeneration
+
+        if (pendingKeyRestoreRef.current) {
+          await pendingKeyRestoreRef.current.promise
+          const latestAuthState = latestAuthStateRef.current
+          if (
+            !latestAuthState.isLoaded ||
+            !latestAuthState.isSignedIn ||
+            !latestAuthState.userId
+          ) {
+            return
+          }
+          targetUserId = latestAuthState.userId
+          targetAuthGeneration = latestAuthState.authGeneration
+        }
 
         while (true) {
           try {
@@ -396,8 +436,18 @@ export function AuthCleanupHandler() {
       const storedUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
       const hasAnonymousRestore =
         localStorage.getItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP) === 'true'
+      const pendingKeyRestore = pendingKeyRestoreRef.current
+      const hasStaleKeyRestore =
+        pendingKeyRestore !== null &&
+        (pendingKeyRestore.userId !== user.id ||
+          pendingKeyRestore.authGeneration !==
+            latestAuthStateRef.current.authGeneration)
 
-      if (hasAnonymousRestore || (storedUserId && storedUserId !== user.id)) {
+      if (
+        hasAnonymousRestore ||
+        (storedUserId && storedUserId !== user.id) ||
+        hasStaleKeyRestore
+      ) {
         // Different user signed in — clear all previous user data before recovery.
         if (!cleanupError || cleanupError.recovery) {
           setCleanupError((current) => (current?.recovery ? null : current))
