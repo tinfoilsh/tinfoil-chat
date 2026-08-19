@@ -203,6 +203,24 @@ describe('sync-api (enclave JSON-RPC)', () => {
     expect(body.idempotency_key).toBe('del-1')
   })
 
+  it('deleteAllProjects posts one atomic request', async () => {
+    const api = await import('@/services/sync-enclave/sync-api')
+    mockFetch.mockResolvedValueOnce(ok({ ok: true, deleted: 12 }))
+
+    await expect(
+      api.deleteAllProjects({
+        keyB64: 'project-key',
+        idempotencyKey: 'delete-projects-1',
+      }),
+    ).resolves.toEqual({ ok: true, deleted: 12 })
+    expect(mockFetch).toHaveBeenCalledOnce()
+    expect(lastRequest()[0]).toBe('/v1/sync/delete-all-projects')
+    expect(lastBody()).toEqual({
+      key: 'project-key',
+      idempotency_key: 'delete-projects-1',
+    })
+  })
+
   it('attachmentPut posts idempotency key', async () => {
     const api = await import('@/services/sync-enclave/sync-api')
     mockFetch.mockResolvedValueOnce(

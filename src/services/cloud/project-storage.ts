@@ -12,6 +12,7 @@ import type {
 import { logError } from '@/utils/error-handling'
 import { authTokenManager } from '../auth'
 import {
+  deleteAllProjects as enclaveDeleteAllProjects,
   deleteRow as enclaveDeleteRow,
   listStatus as enclaveListStatus,
   pull as enclavePull,
@@ -362,7 +363,6 @@ export class ProjectStorageService {
 
   async deleteAllProjects(): Promise<{
     deleted: number
-    notificationSent?: boolean
   }> {
     if (!(await canWriteToCloud())) {
       throw new Error(
@@ -370,33 +370,10 @@ export class ProjectStorageService {
       )
     }
 
-    let deleted = 0
-    let cursor: string | undefined
-    do {
-      const status = await enclaveListStatus({
-        scope: PROJECT_SCOPE,
-        cursor,
-        limit: 500,
-      })
-      for (const update of status.updates) {
-        // Bulk delete-all is unconditional: user intent is "drop
-        // everything", and the listed etag can become stale between
-        // the page fetch and the delete (concurrent write from another
-        // device). Passing ifMatch=null avoids spurious STALE_BLOB
-        // failures that would leave the batch partially completed.
-        // Mirrors the single-row deleteProject path.
-        await enclaveDeleteRow({
-          scope: PROJECT_SCOPE,
-          id: update.id,
-          ifMatch: null,
-          idempotencyKey: newIdempotencyKey(),
-          keyB64: requirePrimaryKeyB64(),
-        })
-        deleted++
-      }
-      cursor = status.next_cursor
-    } while (cursor)
-    return { deleted }
+    return enclaveDeleteAllProjects({
+      keyB64: requirePrimaryKeyB64(),
+      idempotencyKey: newIdempotencyKey(),
+    })
   }
 
   async listProjects(options?: {

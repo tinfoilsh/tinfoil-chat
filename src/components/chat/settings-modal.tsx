@@ -39,6 +39,7 @@ import {
   PrfNotSupportedError,
   type PasskeyCredentialEntry,
 } from '@/services/passkey'
+import { projectEvents } from '@/services/project/project-events'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { projectCache } from '@/services/storage/project-cache'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -1924,10 +1925,10 @@ export function SettingsModal({
       }
       toast({
         title: 'All projects deleted',
-        description: result.notificationSent
-          ? 'We will email you a confirmation.'
-          : 'Email confirmation could not be sent.',
+        description: `Deleted ${result.deleted} project${result.deleted === 1 ? '' : 's'}.`,
       })
+
+      projectEvents.emit({ type: 'projects-invalidated' })
 
       await refreshProjects()
 

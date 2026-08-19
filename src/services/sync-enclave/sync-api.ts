@@ -179,6 +179,17 @@ export interface DeleteRequest {
   keyB64: string
 }
 
+export interface DeleteAllProjectsRequest {
+  /** Base64 CEK used to authenticate the destructive operation. */
+  keyB64: string
+  idempotencyKey: string
+}
+
+export interface DeleteAllProjectsResponse {
+  ok: true
+  deleted: number
+}
+
 export interface OKResponse {
   ok: true
 }
@@ -645,6 +656,21 @@ export async function deleteRow(req: DeleteRequest): Promise<OKResponse> {
       if_match: req.ifMatch,
       idempotency_key: req.idempotencyKey,
       key: req.keyB64,
+    },
+    undefined,
+    { requestScope: 'cloud-sync' },
+  )
+}
+
+export async function deleteAllProjects(
+  req: DeleteAllProjectsRequest,
+): Promise<DeleteAllProjectsResponse> {
+  const client = await getSyncEnclaveClient()
+  return client.post<DeleteAllProjectsResponse>(
+    '/v1/sync/delete-all-projects',
+    {
+      key: req.keyB64,
+      idempotency_key: req.idempotencyKey,
     },
     undefined,
     { requestScope: 'cloud-sync' },

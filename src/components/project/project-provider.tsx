@@ -72,6 +72,14 @@ export function ProjectProvider({
     setLoadingProject(null)
   }, [])
 
+  useEffect(
+    () =>
+      projectEvents.on('projects-invalidated', () => {
+        resetProjectSessionState()
+      }),
+    [resetProjectSessionState],
+  )
+
   useEffect(() => {
     if (isSignedIn && !initializingRef.current) {
       initializingRef.current = true

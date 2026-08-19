@@ -7,15 +7,22 @@ type ProjectMemoryUpdateEvent = {
   messages: Message[]
 }
 
-type ProjectEvent = ProjectMemoryUpdateEvent
+type ProjectsInvalidatedEvent = {
+  type: 'projects-invalidated'
+}
 
-type EventHandler<T extends ProjectEvent> = (event: T) => void
+type ProjectEvent = ProjectMemoryUpdateEvent | ProjectsInvalidatedEvent
+
+type ProjectEventType = ProjectEvent['type']
+type EventHandler<T extends ProjectEventType> = (
+  event: Extract<ProjectEvent, { type: T }>,
+) => void
 
 class ProjectEventsEmitter {
   private handlers: Map<string, Set<EventHandler<any>>> = new Map()
 
-  on<T extends ProjectEvent>(
-    type: T['type'],
+  on<T extends ProjectEventType>(
+    type: T,
     handler: EventHandler<T>,
   ): () => void {
     if (!this.handlers.has(type)) {
@@ -28,7 +35,7 @@ class ProjectEventsEmitter {
     }
   }
 
-  emit<T extends ProjectEvent>(event: T): void {
+  emit(event: ProjectEvent): void {
     const handlers = this.handlers.get(event.type)
     if (handlers) {
       handlers.forEach((handler) => {
