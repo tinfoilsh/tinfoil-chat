@@ -42,6 +42,7 @@ export function AuthCleanupHandler() {
   const [cleanupError, setCleanupError] = useState<{
     message: string
     retryStorage: boolean
+    recovery?: boolean
   } | null>(null)
   const [cleanupRetrying, setCleanupRetrying] = useState(false)
   const hasCheckedRef = useRef(false)
@@ -73,7 +74,15 @@ export function AuthCleanupHandler() {
             component: 'AuthCleanupHandler',
             action: 'refreshPendingRecovery',
           })
+          setCleanupError({
+            message:
+              'Your encryption key could not be restored. Your recovery remains available.',
+            retryStorage: false,
+            recovery: true,
+          })
+          return
         }
+        setCleanupError((current) => (current?.recovery ? null : current))
       }
       return
     }
@@ -311,15 +320,26 @@ export function AuthCleanupHandler() {
             id="cleanup-error-title"
             className="text-lg font-semibold text-content-primary"
           >
-            Unable to clear local data
+            {cleanupError.recovery
+              ? 'Unable to restore encryption key'
+              : 'Unable to clear local data'}
           </h2>
           <p className="mt-3 text-sm text-content-secondary">
-            {cleanupError.message} Close any other Tinfoil tabs, then retry
-            before continuing.
+            {cleanupError.message}{' '}
+            {cleanupError.recovery
+              ? 'Retry before continuing.'
+              : 'Close any other Tinfoil tabs, then retry before continuing.'}
           </p>
           <button
             type="button"
             onClick={() => {
+              if (cleanupError.recovery) {
+                setCleanupRetrying(true)
+                void refreshPendingRecovery().finally(() =>
+                  setCleanupRetrying(false),
+                )
+                return
+              }
               if (!cleanupError.retryStorage) {
                 window.location.reload()
                 return
@@ -340,7 +360,13 @@ export function AuthCleanupHandler() {
             disabled={cleanupRetrying}
             className="mt-6 rounded-lg bg-brand-accent-dark px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-accent-dark/90"
           >
-            {cleanupRetrying ? 'Retrying cleanup...' : 'Retry cleanup'}
+            {cleanupRetrying
+              ? cleanupError.recovery
+                ? 'Retrying key restore...'
+                : 'Retrying cleanup...'
+              : cleanupError.recovery
+                ? 'Retry key restore'
+                : 'Retry cleanup'}
           </button>
         </div>
       </div>

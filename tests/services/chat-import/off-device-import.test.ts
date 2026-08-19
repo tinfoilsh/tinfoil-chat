@@ -64,7 +64,7 @@ describe('runOffDeviceImport', () => {
     ).rejects.toThrow('did not start')
   })
 
-  it('bounds polling when an import never reaches a terminal state', async () => {
+  it('returns a pending import when polling reaches its limit', async () => {
     vi.useFakeTimers()
     importStatus.mockResolvedValue({
       status: 'running',
@@ -78,10 +78,9 @@ describe('runOffDeviceImport', () => {
       failed: 0,
       total: 1,
     })
-    const rejection = expect(polling).rejects.toThrow('check its status later')
-
     await vi.runAllTimersAsync()
-    await rejection
+    await expect(polling).resolves.toMatchObject({ status: 'running' })
+    expect(importStatus).toHaveBeenCalledTimes(300)
     vi.useRealTimers()
   })
 

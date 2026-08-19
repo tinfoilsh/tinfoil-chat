@@ -214,15 +214,20 @@ describe('AuthCleanupHandler', () => {
     expect(mockPerformSignoutCleanup).not.toHaveBeenCalled()
   })
 
-  it('clears anonymous restored data before a user signs in', () => {
+  it('clears anonymous restored data before a user signs in', async () => {
     localStorage.setItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP, 'true')
     authState = { isSignedIn: true, isLoaded: true }
     userState = { user: { id: 'user_new' } }
 
     render(createElement(AuthCleanupHandler))
 
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
     expect(mockPerformUserSwitchCleanup).toHaveBeenCalledWith('user_new')
-    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBeNull()
+    expect(window.location.reload).toHaveBeenCalledTimes(1)
   })
 
   it('blocks the new account without reload-looping when cleanup fails', async () => {
@@ -372,6 +377,35 @@ describe('AuthCleanupHandler', () => {
     expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_123')
     expect(mockGetPendingKeyRecovery).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: 'Done' })).toBeNull()
+  })
+
+  it('blocks and retries when pending recovery cannot be restored', async () => {
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_123' } }
+    mockRestorePendingKeyForOwner
+      .mockRejectedValueOnce(new Error('restore failed'))
+      .mockResolvedValueOnce(true)
+
+    render(createElement(AuthCleanupHandler))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(
+      screen.getByRole('alertdialog', {
+        name: 'Unable to restore encryption key',
+      }),
+    ).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry key restore' }))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
   it('silently discards recovery when a different owner signs in', () => {

@@ -1440,14 +1440,16 @@ export function SettingsModal({
           : undefined,
       })
       toast({
-        title:
-          status.status === 'failed'
+        title: pending
+          ? 'Import continues securely'
+          : status.status === 'failed'
             ? 'Import failed'
             : partial
               ? 'Import partially complete'
               : 'Import complete',
-        description:
-          status.status === 'failed'
+        description: pending
+          ? `We'll email you when the ${sourceLabel} import is done.`
+          : status.status === 'failed'
             ? `Could not import the ${sourceLabel} export.`
             : partial
               ? `Imported ${status.imported} chats with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}.`
@@ -2179,6 +2181,7 @@ export function SettingsModal({
       let cloudDocumentsImported = 0
       let cloudErrors: string[] = []
       let cloudWarnings: ImportWarning[] = []
+      let cloudPending = false
       if (result.cloudArchive) {
         try {
           const cloudResult = await runOffDeviceImport(
@@ -2194,6 +2197,8 @@ export function SettingsModal({
           cloudDocumentsImported = cloudStatus.counts?.document?.imported ?? 0
           cloudErrors = cloudStatus.errors ?? []
           cloudWarnings = statusWarnings(cloudStatus.warnings)
+          cloudPending =
+            cloudStatus.status === 'staging' || cloudStatus.status === 'running'
           if (cloudStatus.status === 'completed') {
             restoredLocal = await result.finalizeLocal(
               cloudStatus.project_mappings ?? {},
@@ -2208,13 +2213,14 @@ export function SettingsModal({
             }
           } else {
             restoredLocal = await result.finalizeLocal()
-            if (cloudErrors.length === 0) {
+            if (!cloudPending && cloudErrors.length === 0) {
               cloudErrors = ['Cloud restore failed.']
             }
           }
         } catch (error) {
           try {
             restoredLocal = await result.finalizeLocal()
+            await onChatsUpdated?.()
           } catch (finalizeError) {
             logError('Failed to finalize local backup restore', finalizeError, {
               component: 'SettingsModal',
@@ -2247,17 +2253,22 @@ export function SettingsModal({
         documentsImported: cloudDocumentsImported,
         errors,
         warnings,
-        message: `Local chats: ${result.local.imported} imported, ${result.local.skipped} already restored. Cloud package: ${result.cloudCounts.cloud_chats} chats, ${result.cloudCounts.projects} projects, ${result.cloudCounts.project_documents} documents, ${result.cloudCounts.relationships} relationships, ${result.cloudCounts.images} images.`,
+        pending: cloudPending,
+        message: cloudPending
+          ? `Local chats: ${result.local.imported} imported, ${result.local.skipped} already restored. The cloud restore continues securely, and we'll email you when it's done.`
+          : `Local chats: ${result.local.imported} imported, ${result.local.skipped} already restored. Cloud package: ${result.cloudCounts.cloud_chats} chats, ${result.cloudCounts.projects} projects, ${result.cloudCounts.project_documents} documents, ${result.cloudCounts.relationships} relationships, ${result.cloudCounts.images} images.`,
       })
       onChatsUpdated?.()
       await refreshProjects()
       toast({
-        title:
-          errors.length > 0 || partial
+        title: cloudPending
+          ? 'Restore continues securely'
+          : errors.length > 0 || partial
             ? 'Restore partially complete'
             : 'Restore complete',
-        description:
-          errors.length > 0
+        description: cloudPending
+          ? "Local chats are restored. We'll email you when the cloud restore is done."
+          : errors.length > 0
             ? errors[0]
             : partial
               ? `${warnings.length} warning${warnings.length === 1 ? '' : 's'} require attention.`

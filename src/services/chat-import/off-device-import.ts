@@ -113,7 +113,7 @@ export async function waitForOffDeviceImport(
   while (status.status === 'staging' || status.status === 'running') {
     if (signal?.aborted) throw new Error('Import status polling was cancelled')
     if (polls >= IMPORT_STATUS_MAX_POLLS) {
-      throw new Error('Import is still running; check its status later')
+      return status
     }
     await new Promise((resolve) => setTimeout(resolve, IMPORT_STATUS_POLL_MS))
     if (signal?.aborted) throw new Error('Import status polling was cancelled')
