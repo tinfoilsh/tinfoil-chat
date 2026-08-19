@@ -39,11 +39,8 @@ export function AuthCleanupHandler() {
     isLoaded && isSignedIn && user?.id && restorePendingKeyForOwner(user.id),
   )
 
-  const initialPending = getPendingKeyRecovery()
-  const [recoveryKey, setRecoveryKey] = useState<string | null>(
-    initialPending?.encryptionKey ?? null,
-  )
-  const [showModal, setShowModal] = useState(initialPending !== null)
+  const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
+  const [showModal, setShowModal] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [cleanupError, setCleanupError] = useState<{
     message: string
@@ -58,6 +55,30 @@ export function AuthCleanupHandler() {
     isSignedIn,
     userId: user?.id,
   })
+  latestAuthStateRef.current = {
+    isLoaded,
+    isSignedIn,
+    userId: user?.id,
+  }
+
+  const refreshPendingRecovery = useCallback(() => {
+    setRecoveryKey(null)
+    setShowModal(false)
+
+    const latestAuthState = latestAuthStateRef.current
+    if (!latestAuthState.isLoaded) return
+    if (latestAuthState.isSignedIn) {
+      if (latestAuthState.userId) {
+        restorePendingKeyForOwner(latestAuthState.userId)
+      }
+      return
+    }
+    if (latestAuthState.isSignedIn !== false) return
+
+    const pending = getPendingKeyRecovery()
+    setRecoveryKey(pending?.encryptionKey ?? null)
+    setShowModal(pending !== null)
+  }, [])
 
   useEffect(() => {
     if (restoredPendingForSignedInUser) {
@@ -67,24 +88,18 @@ export function AuthCleanupHandler() {
   }, [restoredPendingForSignedInUser])
 
   useEffect(() => {
+    refreshPendingRecovery()
+  }, [isLoaded, isSignedIn, user?.id, refreshPendingRecovery])
+
+  useEffect(() => {
     const handlePendingRecoveryChange = (event: StorageEvent) => {
       if (event.key !== PENDING_ENCRYPTION_KEY_RECOVERY) return
-      const pending = getPendingKeyRecovery()
-      setRecoveryKey(pending?.encryptionKey ?? null)
-      setShowModal(pending !== null)
+      refreshPendingRecovery()
     }
     window.addEventListener('storage', handlePendingRecoveryChange)
     return () =>
       window.removeEventListener('storage', handlePendingRecoveryChange)
-  }, [])
-
-  useEffect(() => {
-    latestAuthStateRef.current = {
-      isLoaded,
-      isSignedIn,
-      userId: user?.id,
-    }
-  }, [isLoaded, isSignedIn, user?.id])
+  }, [refreshPendingRecovery])
 
   useEffect(() => {
     const handleCrossTabResetFailure = () => {
@@ -166,8 +181,7 @@ export function AuthCleanupHandler() {
         // Check theme from data-theme attribute (source of truth)
         const dataTheme = document.documentElement.getAttribute('data-theme')
         setIsDarkMode(dataTheme === 'dark')
-        setRecoveryKey(getPendingKeyRecovery()?.encryptionKey ?? null)
-        setShowModal(true)
+        refreshPendingRecovery()
       })
       .catch((error) => {
         logError('Failed to cleanup on signout (preserving key)', error, {
@@ -180,7 +194,7 @@ export function AuthCleanupHandler() {
           retryStorage: false,
         })
       })
-  }, [])
+  }, [refreshPendingRecovery])
 
   useEffect(() => {
     if (!isLoaded) return
@@ -324,7 +338,7 @@ export function AuthCleanupHandler() {
     )
   }
 
-  if (!showModal) {
+  if (!isLoaded || isSignedIn !== false || !showModal) {
     return null
   }
 

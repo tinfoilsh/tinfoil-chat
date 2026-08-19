@@ -287,7 +287,36 @@ describe('AuthCleanupHandler', () => {
     ).toBeTruthy()
   })
 
-  it('restores the save-key prompt after a reload', () => {
+  it('does not read or show pending recovery before auth loads', () => {
+    authState = { isSignedIn: false, isLoaded: false }
+    mockGetPendingKeyRecovery.mockReturnValue({
+      version: 1,
+      ownerUserId: 'user_123',
+      encryptionKey: 'key_recovery',
+    })
+
+    render(createElement(AuthCleanupHandler))
+
+    expect(mockGetPendingKeyRecovery).not.toHaveBeenCalled()
+    expect(screen.queryByText('key_recovery')).toBeNull()
+  })
+
+  it('hides pending recovery immediately when auth is no longer signed out', () => {
+    mockGetPendingKeyRecovery.mockReturnValue({
+      version: 1,
+      ownerUserId: 'user_123',
+      encryptionKey: 'key_recovery',
+    })
+    const { rerender } = render(createElement(AuthCleanupHandler))
+    expect(screen.getByText('key_recovery')).toBeTruthy()
+
+    authState = { isSignedIn: false, isLoaded: false }
+    rerender(createElement(AuthCleanupHandler))
+
+    expect(screen.queryByText('key_recovery')).toBeNull()
+  })
+
+  it('shows pending recovery after auth confirms the user is signed out', () => {
     mockGetPendingKeyRecovery.mockReturnValue({
       version: 1,
       ownerUserId: 'user_123',
@@ -302,10 +331,13 @@ describe('AuthCleanupHandler', () => {
   it('restores pending recovery before the same owner continues', () => {
     authState = { isSignedIn: true, isLoaded: true }
     userState = { user: { id: 'user_123' } }
+    mockRestorePendingKeyForOwner.mockReturnValue(true)
 
     render(createElement(AuthCleanupHandler))
 
     expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_123')
+    expect(mockGetPendingKeyRecovery).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull()
   })
 
   it('silently discards recovery when a different owner signs in', () => {
@@ -315,6 +347,8 @@ describe('AuthCleanupHandler', () => {
     render(createElement(AuthCleanupHandler))
 
     expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_other')
+    expect(mockGetPendingKeyRecovery).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull()
   })
 
   it('deletes pending recovery when Done is clicked', () => {
@@ -349,5 +383,85 @@ describe('AuthCleanupHandler', () => {
     })
 
     expect(screen.queryByRole('button', { name: 'Done' })).toBeNull()
+  })
+
+  it('ignores pending recovery storage events before auth loads', () => {
+    authState = { isSignedIn: false, isLoaded: false }
+    render(createElement(AuthCleanupHandler))
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: PENDING_ENCRYPTION_KEY_RECOVERY,
+          newValue: 'key_from_event',
+        }),
+      )
+    })
+
+    expect(mockGetPendingKeyRecovery).not.toHaveBeenCalled()
+    expect(screen.queryByText('key_from_event')).toBeNull()
+  })
+
+  it('restores pending recovery on storage events for the signed-in owner', () => {
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_123' } }
+    render(createElement(AuthCleanupHandler))
+    mockRestorePendingKeyForOwner.mockClear()
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: PENDING_ENCRYPTION_KEY_RECOVERY,
+          newValue: 'key_from_event',
+        }),
+      )
+    })
+
+    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_123')
+    expect(mockGetPendingKeyRecovery).not.toHaveBeenCalled()
+    expect(screen.queryByText('key_from_event')).toBeNull()
+  })
+
+  it('discards pending recovery on storage events for another owner', () => {
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_other' } }
+    render(createElement(AuthCleanupHandler))
+    mockRestorePendingKeyForOwner.mockClear()
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: PENDING_ENCRYPTION_KEY_RECOVERY,
+          newValue: 'key_from_event',
+        }),
+      )
+    })
+
+    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_other')
+    expect(mockGetPendingKeyRecovery).not.toHaveBeenCalled()
+    expect(screen.queryByText('key_from_event')).toBeNull()
+  })
+
+  it('rechecks storage instead of exposing event data when signed out', () => {
+    mockGetPendingKeyRecovery.mockReturnValue({
+      version: 1,
+      ownerUserId: 'user_123',
+      encryptionKey: 'validated_key',
+    })
+    render(createElement(AuthCleanupHandler))
+    mockGetPendingKeyRecovery.mockClear()
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: PENDING_ENCRYPTION_KEY_RECOVERY,
+          newValue: 'key_from_event',
+        }),
+      )
+    })
+
+    expect(mockGetPendingKeyRecovery).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('validated_key')).toBeTruthy()
+    expect(screen.queryByText('key_from_event')).toBeNull()
   })
 })
