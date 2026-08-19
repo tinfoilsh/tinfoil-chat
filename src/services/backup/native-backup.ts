@@ -1002,12 +1002,16 @@ async function enumerateProjects(): Promise<{
         project = (await projectStorage.getProjects([item.id])).get(item.id)
       }
     }
-    if (!project || project.decryptionFailed) {
+    if (
+      !project ||
+      project.decryptionFailed ||
+      project.syncVersion !== item.syncVersion
+    ) {
       warnings.push({
-        code: 'project_unreadable',
+        code: 'project_unreadable_or_changed',
         kind: 'projects',
         id: item.id,
-        message: 'A project could not be read and was omitted.',
+        message: 'A project could not be read consistently and was omitted.',
       })
       complete = false
       continue

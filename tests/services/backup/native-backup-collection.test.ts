@@ -160,6 +160,80 @@ describe('native backup collection', () => {
     expect(mocks.listChats).not.toHaveBeenCalled()
   })
 
+  it('omits a project that changes again during its retry', async () => {
+    mocks.listProjects.mockReset()
+    mocks.listProjects
+      .mockResolvedValueOnce({
+        projects: [
+          {
+            id: 'project-1',
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            syncVersion: 1,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        projects: [
+          {
+            id: 'project-1',
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            syncVersion: 2,
+          },
+        ],
+      })
+    mocks.getProjects.mockReset()
+    mocks.getProjects
+      .mockResolvedValueOnce(
+        new Map([
+          [
+            'project-1',
+            {
+              id: 'project-1',
+              name: 'Project',
+              description: '',
+              systemInstructions: '',
+              memory: [],
+              syncVersion: 2,
+            },
+          ],
+        ]),
+      )
+      .mockResolvedValueOnce(
+        new Map([
+          [
+            'project-1',
+            {
+              id: 'project-1',
+              name: 'Project',
+              description: '',
+              systemInstructions: '',
+              memory: [],
+              syncVersion: 3,
+            },
+          ],
+        ]),
+      )
+    mocks.listChats.mockReset()
+    mocks.listChats.mockResolvedValue({ conversations: [] })
+    mocks.getAllChats.mockReset()
+    mocks.getAllChats.mockResolvedValue([])
+
+    const archive = await createNativeBackup({ cloudDataExpected: true })
+    const validated = await validateNativeBackup(archive.data)
+
+    expect(mocks.getProjects).toHaveBeenCalledTimes(2)
+    expect(validated.projects).toEqual([])
+    expect(validated.manifest.complete).toBe(false)
+    expect(validated.manifest.warnings).toContainEqual({
+      code: 'project_unreadable_or_changed',
+      kind: 'projects',
+      id: 'project-1',
+      message: 'A project could not be read consistently and was omitted.',
+    })
+  })
+
   it('keeps anonymous local-only backups complete', async () => {
     mocks.isAuthenticated.mockResolvedValue(false)
     mocks.getAllChats.mockReset()
