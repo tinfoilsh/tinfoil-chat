@@ -48,6 +48,10 @@ export function AuthCleanupHandler() {
   const hasCheckedRef = useRef(false)
   const pendingSignoutCleanupRef = useRef<number | null>(null)
   const pendingUserSwitchCleanupRef = useRef<Promise<void> | null>(null)
+  const pendingFreshSignInRef = useRef<{
+    userId: string
+    reloadAfterRestore: boolean
+  } | null>(null)
   const cleanupErrorRef = useRef(cleanupError)
   cleanupErrorRef.current = cleanupError
   const latestAuthStateRef = useRef({
@@ -72,29 +76,40 @@ export function AuthCleanupHandler() {
     if (cleanupErrorRef.current?.recovery && !hasCheckedRef.current) return
     setCleanupError((current) => (current?.recovery ? null : current))
     const pending = getPendingKeyRecovery()
+    const departingUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
+    if (departingUserId && pending?.ownerUserId !== departingUserId) return
     setRecoveryKey(pending?.encryptionKey ?? null)
     setShowModal(pending !== null)
   }, [])
 
-  const restorePendingRecoveryForAuthOwner = useCallback(async () => {
+  const restorePendingRecoveryForFreshSignIn = useCallback(async () => {
     setRecoveryKey(null)
     setShowModal(false)
 
     const latestAuthState = latestAuthStateRef.current
+    const pendingSignIn = pendingFreshSignInRef.current
     if (
       !latestAuthState.isLoaded ||
       !latestAuthState.isSignedIn ||
-      !latestAuthState.userId
+      !latestAuthState.userId ||
+      !pendingSignIn ||
+      pendingSignIn.userId !== latestAuthState.userId
     ) {
       return
     }
 
+    if (localStorage.getItem(AUTH_ACTIVE_USER_ID) === pendingSignIn.userId) {
+      pendingFreshSignInRef.current = null
+      setCleanupError((current) => (current?.recovery ? null : current))
+      return
+    }
+
     try {
-      await restorePendingKeyForOwner(latestAuthState.userId)
+      await restorePendingKeyForOwner(pendingSignIn.userId)
     } catch (error) {
       logError('Failed to restore pending encryption key', error, {
         component: 'AuthCleanupHandler',
-        action: 'restorePendingRecoveryForAuthOwner',
+        action: 'restorePendingRecoveryForFreshSignIn',
       })
       setCleanupError({
         message:
@@ -104,22 +119,22 @@ export function AuthCleanupHandler() {
       })
       return
     }
-    setCleanupError((current) => (current?.recovery ? null : current))
-  }, [])
 
-  useEffect(() => {
-    if (isLoaded && isSignedIn && user?.id) {
-      void restorePendingRecoveryForAuthOwner()
+    const currentAuthState = latestAuthStateRef.current
+    if (
+      !currentAuthState.isLoaded ||
+      !currentAuthState.isSignedIn ||
+      currentAuthState.userId !== pendingSignIn.userId
+    ) {
       return
     }
-    refreshSignedOutRecovery()
-  }, [
-    isLoaded,
-    isSignedIn,
-    user?.id,
-    refreshSignedOutRecovery,
-    restorePendingRecoveryForAuthOwner,
-  ])
+
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, pendingSignIn.userId)
+    window.dispatchEvent(new Event(AUTH_ACTIVE_USER_CHANGED_EVENT))
+    pendingFreshSignInRef.current = null
+    setCleanupError((current) => (current?.recovery ? null : current))
+    if (pendingSignIn.reloadAfterRestore) window.location.reload()
+  }, [])
 
   useEffect(() => {
     const handlePendingRecoveryChange = (event: StorageEvent) => {
@@ -162,8 +177,9 @@ export function AuthCleanupHandler() {
 
   const runSignoutCleanup = useCallback(() => {
     completeSignoutStep(SIGNOUT_STEPS.SIGN_OUT)
+    const ownerUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
     const pendingRecovery = getPendingKeyRecovery()
-    if (pendingRecovery) {
+    if (pendingRecovery?.ownerUserId === ownerUserId) {
       logInfo('Preserving pending encryption key recovery after signout', {
         component: 'AuthCleanupHandler',
         action: 'resumePendingRecovery',
@@ -173,7 +189,6 @@ export function AuthCleanupHandler() {
       return
     }
     const encryptionKey = getEncryptionKey()
-    const ownerUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
 
     if (hasPasskeyBackup() || !encryptionKey) {
       const action = hasPasskeyBackup()
@@ -237,7 +252,10 @@ export function AuthCleanupHandler() {
   }, [refreshSignedOutRecovery])
 
   useEffect(() => {
-    if (!isLoaded) return
+    if (!isLoaded) {
+      refreshSignedOutRecovery()
+      return
+    }
     if (cleanupError && !cleanupError.recovery) {
       clearPendingSignoutCleanup()
       return
@@ -245,18 +263,25 @@ export function AuthCleanupHandler() {
 
     if (isSignedIn && user?.id) {
       clearPendingSignoutCleanup()
+      setRecoveryKey(null)
+      setShowModal(false)
+      hasCheckedRef.current = false
       const storedUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
       const hasAnonymousRestore =
         localStorage.getItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP) === 'true'
 
       if (hasAnonymousRestore || (storedUserId && storedUserId !== user.id)) {
-        // Different user signed in — clear all previous user data + reload
+        // Different user signed in — clear all previous user data before recovery.
         if (!pendingUserSwitchCleanupRef.current && !cleanupError) {
           const cleanup = performUserSwitchCleanup(user.id)
           pendingUserSwitchCleanupRef.current = cleanup
           void cleanup
-            .then(() => {
-              window.location.reload()
+            .then(async () => {
+              pendingFreshSignInRef.current = {
+                userId: user.id,
+                reloadAfterRestore: true,
+              }
+              await restorePendingRecoveryForFreshSignIn()
             })
             .catch(() => {
               setCleanupError({
@@ -274,10 +299,23 @@ export function AuthCleanupHandler() {
         return
       }
 
-      // Same user or fresh sign-in — persist the active user ID
-      localStorage.setItem(AUTH_ACTIVE_USER_ID, user.id)
-      window.dispatchEvent(new Event(AUTH_ACTIVE_USER_CHANGED_EVENT))
+      if (storedUserId === user.id) {
+        pendingFreshSignInRef.current = null
+        setCleanupError((current) => (current?.recovery ? null : current))
+        return
+      }
+
+      if (!pendingFreshSignInRef.current) {
+        pendingFreshSignInRef.current = {
+          userId: user.id,
+          reloadAfterRestore: false,
+        }
+        void restorePendingRecoveryForFreshSignIn()
+      }
+      return
     }
+
+    refreshSignedOutRecovery()
 
     // Check if user just signed out (stored user ID exists but no longer signed in)
     const storedUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
@@ -308,17 +346,14 @@ export function AuthCleanupHandler() {
     if (!storedUserId) {
       clearPendingSignoutCleanup()
     }
-
-    // Reset the check flag when user signs in
-    if (isSignedIn) {
-      hasCheckedRef.current = false
-    }
   }, [
     isSignedIn,
     isLoaded,
     user?.id,
     clearPendingSignoutCleanup,
     cleanupError,
+    refreshSignedOutRecovery,
+    restorePendingRecoveryForFreshSignIn,
     runSignoutCleanup,
   ])
 
@@ -359,7 +394,7 @@ export function AuthCleanupHandler() {
             onClick={() => {
               if (cleanupError.recovery) {
                 setCleanupRetrying(true)
-                void restorePendingRecoveryForAuthOwner().finally(() =>
+                void restorePendingRecoveryForFreshSignIn().finally(() =>
                   setCleanupRetrying(false),
                 )
                 return

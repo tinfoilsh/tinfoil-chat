@@ -23,7 +23,10 @@ import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { projectCache } from '@/services/storage/project-cache'
 import { resetSyncEnclaveClient } from '@/services/sync-enclave'
 import { logError, logInfo } from '@/utils/error-handling'
-import { writePendingKeyRecovery } from '@/utils/pending-key-recovery'
+import {
+  getPendingKeyRecovery,
+  writePendingKeyRecovery,
+} from '@/utils/pending-key-recovery'
 import {
   completeSignoutStep,
   reportSignoutStep,
@@ -31,10 +34,10 @@ import {
 } from '@/utils/signout-progress'
 
 interface ClearUserDataOptions {
-  /** If set, preserve this user ID in localStorage after clearing */
-  preserveUserId?: string
   /** Move the primary key into recovery storage owned by this user. */
   recoverEncryptionKeyForOwner?: string
+  /** Preserve pending recovery only when it belongs to this user. */
+  preservePendingRecoveryForOwner?: string
   /**
    * If true, don't surface progress in the signout overlay. Used for
    * user-switch cleanup, which is not a signout.
@@ -47,8 +50,8 @@ interface ClearUserDataOptions {
 async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   const {
     context,
-    preserveUserId,
     recoverEncryptionKeyForOwner,
+    preservePendingRecoveryForOwner,
     skipProgressReporting = false,
   } = options
 
@@ -112,12 +115,15 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   // Clear localStorage, preserving only non-user-specific keys
   reportStep(SIGNOUT_STEPS.CLEAR_STORAGE)
   try {
+    const pendingRecovery = getPendingKeyRecovery()
+    const preservePendingRecovery =
+      recoverEncryptionKeyForOwner !== undefined ||
+      (preservePendingRecoveryForOwner !== undefined &&
+        pendingRecovery?.ownerUserId === preservePendingRecoveryForOwner)
     const preservedKeys = new Set([
       AUTH_ACTIVE_USER_ID,
       SETTINGS_HAS_SEEN_ONBOARDING,
-      ...(recoverEncryptionKeyForOwner
-        ? [PENDING_ENCRYPTION_KEY_RECOVERY]
-        : []),
+      ...(preservePendingRecovery ? [PENDING_ENCRYPTION_KEY_RECOVERY] : []),
     ])
     const keys = Array.from({ length: localStorage.length }, (_, index) =>
       localStorage.key(index),
@@ -163,11 +169,7 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   }
   completeStep(SIGNOUT_STEPS.CLEAR_BROWSING_DATA)
 
-  if (preserveUserId) {
-    localStorage.setItem(AUTH_ACTIVE_USER_ID, preserveUserId)
-  } else {
-    localStorage.removeItem(AUTH_ACTIVE_USER_ID)
-  }
+  localStorage.removeItem(AUTH_ACTIVE_USER_ID)
 }
 
 export async function performSignoutCleanup(opts?: {
@@ -228,7 +230,7 @@ export async function performUserSwitchCleanup(
   try {
     await clearAllUserData({
       context: 'AuthCleanupHandler',
-      preserveUserId: newUserId,
+      preservePendingRecoveryForOwner: newUserId,
       skipProgressReporting: true,
     })
   } catch (error) {

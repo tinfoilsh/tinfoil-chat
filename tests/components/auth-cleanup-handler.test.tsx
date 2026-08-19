@@ -74,6 +74,7 @@ vi.mock('@/utils/signout-cleanup', () => ({
 describe('AuthCleanupHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockRestorePendingKeyForOwner.mockReset()
     vi.useFakeTimers()
     localStorage.clear()
     sessionStorage.clear()
@@ -103,6 +104,11 @@ describe('AuthCleanupHandler', () => {
 
   it('does not clear data for a transient signed-out state', async () => {
     localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
+    mockGetPendingKeyRecovery.mockReturnValue({
+      version: 1,
+      ownerUserId: 'user_123',
+      encryptionKey: 'key_recovery',
+    })
 
     const { rerender } = render(createElement(AuthCleanupHandler))
 
@@ -127,6 +133,7 @@ describe('AuthCleanupHandler', () => {
 
     expect(mockPerformSignoutCleanup).not.toHaveBeenCalled()
     expect(mockPerformUserSwitchCleanup).not.toHaveBeenCalled()
+    expect(mockRestorePendingKeyForOwner).not.toHaveBeenCalled()
   })
 
   it('clears data after the grace period when still signed out', async () => {
@@ -367,15 +374,24 @@ describe('AuthCleanupHandler', () => {
     expect(screen.getByText('key_recovery')).toBeTruthy()
   })
 
-  it('restores pending recovery before the same owner continues', () => {
+  it('restores pending recovery before the same owner continues', async () => {
     authState = { isSignedIn: true, isLoaded: true }
     userState = { user: { id: 'user_123' } }
-    mockRestorePendingKeyForOwner.mockResolvedValue(true)
+    localStorage.setItem(PENDING_ENCRYPTION_KEY_RECOVERY, 'pending_recovery')
+    mockRestorePendingKeyForOwner.mockImplementationOnce(async () => {
+      localStorage.removeItem(PENDING_ENCRYPTION_KEY_RECOVERY)
+      return true
+    })
 
     render(createElement(AuthCleanupHandler))
+    await act(async () => {
+      await Promise.resolve()
+    })
 
     expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_123')
     expect(mockGetPendingKeyRecovery).not.toHaveBeenCalled()
+    expect(localStorage.getItem(PENDING_ENCRYPTION_KEY_RECOVERY)).toBeNull()
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_123')
     expect(screen.queryByRole('button', { name: 'Done' })).toBeNull()
   })
 
@@ -445,7 +461,6 @@ describe('AuthCleanupHandler', () => {
   })
 
   it('preserves pending recovery after a restore failure and confirmed sign-out', async () => {
-    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
     authState = { isSignedIn: true, isLoaded: true }
     userState = { user: { id: 'user_123' } }
     mockRestorePendingKeyForOwner.mockRejectedValueOnce(
@@ -458,6 +473,7 @@ describe('AuthCleanupHandler', () => {
       await Promise.resolve()
     })
 
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
     mockGetPendingKeyRecovery.mockReturnValue({
       version: 1,
       ownerUserId: 'user_123',
@@ -480,14 +496,23 @@ describe('AuthCleanupHandler', () => {
     expect(window.location.reload).not.toHaveBeenCalled()
   })
 
-  it('silently discards recovery when a different owner signs in', () => {
+  it('silently discards recovery when a different owner signs in', async () => {
     authState = { isSignedIn: true, isLoaded: true }
     userState = { user: { id: 'user_other' } }
+    localStorage.setItem(PENDING_ENCRYPTION_KEY_RECOVERY, 'other_recovery')
+    mockRestorePendingKeyForOwner.mockImplementationOnce(async () => {
+      localStorage.removeItem(PENDING_ENCRYPTION_KEY_RECOVERY)
+      return false
+    })
 
     render(createElement(AuthCleanupHandler))
+    await act(async () => {
+      await Promise.resolve()
+    })
 
     expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_other')
     expect(mockGetPendingKeyRecovery).not.toHaveBeenCalled()
+    expect(localStorage.getItem(PENDING_ENCRYPTION_KEY_RECOVERY)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Done' })).toBeNull()
   })
 
@@ -543,6 +568,7 @@ describe('AuthCleanupHandler', () => {
   })
 
   it('does not consume a departing account key created by another tab', () => {
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
     authState = { isSignedIn: true, isLoaded: true }
     userState = { user: { id: 'user_123' } }
     render(createElement(AuthCleanupHandler))
@@ -576,6 +602,77 @@ describe('AuthCleanupHandler', () => {
       pendingRecovery,
     )
     expect(screen.queryByText('key_from_departing_tab')).toBeNull()
+  })
+
+  it('does not let mismatched recovery short-circuit sign-out cleanup', async () => {
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_departing')
+    mockGetPendingKeyRecovery.mockReturnValue({
+      version: 1,
+      ownerUserId: 'user_other',
+      encryptionKey: 'key_other',
+    })
+
+    render(createElement(AuthCleanupHandler))
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockPerformSignoutCleanup).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('key_other')).toBeNull()
+    expect(window.location.reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('cleans the previous user before restoring incoming-owner recovery', async () => {
+    let finishCleanup!: () => void
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_old')
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_new' } }
+    mockPerformUserSwitchCleanup.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishCleanup = () => {
+          localStorage.removeItem(AUTH_ACTIVE_USER_ID)
+          resolve()
+        }
+      }),
+    )
+    mockRestorePendingKeyForOwner.mockResolvedValueOnce(true)
+
+    render(createElement(AuthCleanupHandler))
+    expect(mockRestorePendingKeyForOwner).not.toHaveBeenCalled()
+
+    await act(async () => {
+      finishCleanup()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_new')
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_new')
+    expect(window.location.reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('discards different-owner recovery only after user-switch cleanup', async () => {
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_old')
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_new' } }
+    mockPerformUserSwitchCleanup.mockImplementationOnce(async () => {
+      localStorage.removeItem(AUTH_ACTIVE_USER_ID)
+      mockDeletePendingKeyRecovery()
+    })
+
+    render(createElement(AuthCleanupHandler))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockDeletePendingKeyRecovery).toHaveBeenCalledTimes(1)
+    expect(mockRestorePendingKeyForOwner).toHaveBeenCalledWith('user_new')
+    expect(
+      mockPerformUserSwitchCleanup.mock.invocationCallOrder[0],
+    ).toBeLessThan(mockRestorePendingKeyForOwner.mock.invocationCallOrder[0])
   })
 
   it('does not discard another owner recovery on signed-in storage events', () => {

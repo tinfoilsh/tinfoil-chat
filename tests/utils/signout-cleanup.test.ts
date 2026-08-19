@@ -79,6 +79,10 @@ vi.mock('@/services/sync-enclave', () => ({
 }))
 
 vi.mock('@/utils/pending-key-recovery', () => ({
+  getPendingKeyRecovery: vi.fn(() => {
+    const raw = localStorage.getItem(PENDING_ENCRYPTION_KEY_RECOVERY)
+    return raw ? JSON.parse(raw) : null
+  }),
   writePendingKeyRecovery: vi.fn(
     (ownerUserId: string, encryptionKey: string) => {
       const record = { version: 1, ownerUserId, encryptionKey }
@@ -223,6 +227,42 @@ describe('performSignoutCleanup', () => {
     )
 
     expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_old')
+  })
+
+  it('preserves incoming-owner recovery through user-switch cleanup', async () => {
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_old')
+    localStorage.setItem(
+      PENDING_ENCRYPTION_KEY_RECOVERY,
+      JSON.stringify({
+        version: 1,
+        ownerUserId: 'user_new',
+        encryptionKey: 'key_new',
+      }),
+    )
+
+    await performUserSwitchCleanup('user_new')
+
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBeNull()
+    expect(
+      JSON.parse(
+        localStorage.getItem(PENDING_ENCRYPTION_KEY_RECOVERY) as string,
+      ),
+    ).toMatchObject({ ownerUserId: 'user_new', encryptionKey: 'key_new' })
+  })
+
+  it('discards different-owner recovery during user-switch cleanup', async () => {
+    localStorage.setItem(
+      PENDING_ENCRYPTION_KEY_RECOVERY,
+      JSON.stringify({
+        version: 1,
+        ownerUserId: 'user_other',
+        encryptionKey: 'key_other',
+      }),
+    )
+
+    await performUserSwitchCleanup('user_new')
+
+    expect(localStorage.getItem(PENDING_ENCRYPTION_KEY_RECOVERY)).toBeNull()
   })
 
   it('retries a failed cross-tab reset without notifying other tabs', async () => {
