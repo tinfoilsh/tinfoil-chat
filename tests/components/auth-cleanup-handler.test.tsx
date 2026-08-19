@@ -408,7 +408,44 @@ describe('AuthCleanupHandler', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
-  it('shows pending recovery after a restore failure is followed by sign-out', async () => {
+  it('keeps restore failure blocking during a transient signed-out state', async () => {
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_123' } }
+    mockRestorePendingKeyForOwner.mockRejectedValueOnce(
+      new Error('restore failed'),
+    )
+
+    const { rerender } = render(createElement(AuthCleanupHandler))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    mockGetPendingKeyRecovery.mockReturnValue({
+      version: 1,
+      ownerUserId: 'user_123',
+      encryptionKey: 'key_recovery',
+    })
+    authState = { isSignedIn: false, isLoaded: true }
+    userState = { user: null }
+    rerender(createElement(AuthCleanupHandler))
+    await act(async () => {
+      vi.advanceTimersByTime(1000)
+      await Promise.resolve()
+    })
+
+    expect(
+      screen.getByRole('alertdialog', {
+        name: 'Unable to restore encryption key',
+      }),
+    ).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull()
+    expect(mockGetPendingKeyRecovery).not.toHaveBeenCalled()
+    expect(mockPerformSignoutCleanup).not.toHaveBeenCalled()
+  })
+
+  it('preserves pending recovery after a restore failure and confirmed sign-out', async () => {
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
     authState = { isSignedIn: true, isLoaded: true }
     userState = { user: { id: 'user_123' } }
     mockRestorePendingKeyForOwner.mockRejectedValueOnce(
@@ -431,38 +468,16 @@ describe('AuthCleanupHandler', () => {
     rerender(createElement(AuthCleanupHandler))
     await act(async () => {
       await Promise.resolve()
-    })
-
-    expect(screen.queryByRole('alertdialog')).toBeNull()
-    expect(screen.getByText('key_recovery')).toBeTruthy()
-  })
-
-  it('resumes sign-out cleanup after a pending restore failure', async () => {
-    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
-    authState = { isSignedIn: true, isLoaded: true }
-    userState = { user: { id: 'user_123' } }
-    mockRestorePendingKeyForOwner.mockRejectedValueOnce(
-      new Error('restore failed'),
-    )
-
-    const { rerender } = render(createElement(AuthCleanupHandler))
-    await act(async () => {
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    authState = { isSignedIn: false, isLoaded: true }
-    userState = { user: null }
-    rerender(createElement(AuthCleanupHandler))
-    await act(async () => {
-      await Promise.resolve()
       vi.advanceTimersByTime(2000)
       await Promise.resolve()
       await Promise.resolve()
     })
 
-    expect(mockPerformSignoutCleanup).toHaveBeenCalledTimes(1)
-    expect(window.location.reload).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(screen.getByText('key_recovery')).toBeTruthy()
+    expect(mockPerformSignoutCleanup).not.toHaveBeenCalled()
+    expect(mockDeletePendingKeyRecovery).not.toHaveBeenCalled()
+    expect(window.location.reload).not.toHaveBeenCalled()
   })
 
   it('silently discards recovery when a different owner signs in', () => {

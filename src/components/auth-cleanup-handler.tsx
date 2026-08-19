@@ -48,6 +48,8 @@ export function AuthCleanupHandler() {
   const hasCheckedRef = useRef(false)
   const pendingSignoutCleanupRef = useRef<number | null>(null)
   const pendingUserSwitchCleanupRef = useRef<Promise<void> | null>(null)
+  const cleanupErrorRef = useRef(cleanupError)
+  cleanupErrorRef.current = cleanupError
   const latestAuthStateRef = useRef({
     isLoaded,
     isSignedIn,
@@ -88,6 +90,7 @@ export function AuthCleanupHandler() {
     }
     if (latestAuthState.isSignedIn !== false) return
 
+    if (cleanupErrorRef.current?.recovery && !hasCheckedRef.current) return
     setCleanupError((current) => (current?.recovery ? null : current))
     const pending = getPendingKeyRecovery()
     setRecoveryKey(pending?.encryptionKey ?? null)
@@ -215,7 +218,7 @@ export function AuthCleanupHandler() {
 
   useEffect(() => {
     if (!isLoaded) return
-    if (cleanupError) {
+    if (cleanupError && !cleanupError.recovery) {
       clearPendingSignoutCleanup()
       return
     }
