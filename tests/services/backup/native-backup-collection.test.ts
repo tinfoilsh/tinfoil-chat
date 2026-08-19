@@ -5,6 +5,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  hasPrimaryKey: vi.fn(),
   isAuthenticated: vi.fn(),
   listChats: vi.fn(),
   downloadChats: vi.fn(),
@@ -16,7 +17,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/services/cloud/cek-encoding', () => ({
-  hasPrimaryKey: () => true,
+  hasPrimaryKey: mocks.hasPrimaryKey,
 }))
 vi.mock('@/services/cloud/cloud-storage', () => ({
   cloudStorage: {
@@ -52,6 +53,7 @@ const cloudContent = (id: string) =>
 describe('native backup collection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.hasPrimaryKey.mockReturnValue(true)
     mocks.isAuthenticated.mockResolvedValue(true)
     mocks.listProjects
       .mockResolvedValueOnce({
@@ -128,7 +130,7 @@ describe('native backup collection', () => {
   })
 
   it('freshly paginates scopes, retries changed rows, and marks instability', async () => {
-    const archive = await createNativeBackup()
+    const archive = await createNativeBackup({ cloudDataExpected: true })
     const validated = await validateNativeBackup(archive.data)
 
     expect(mocks.listProjects).toHaveBeenCalledTimes(2)
@@ -146,5 +148,27 @@ describe('native backup collection', () => {
         'local_chats_changed',
       ]),
     )
+  })
+
+  it('blocks cloud backups when cloud data cannot be enumerated', async () => {
+    mocks.isAuthenticated.mockResolvedValue(false)
+
+    await expect(
+      createNativeBackup({ cloudDataExpected: true }),
+    ).rejects.toThrow('unlock your encryption key')
+    expect(mocks.listProjects).not.toHaveBeenCalled()
+    expect(mocks.listChats).not.toHaveBeenCalled()
+  })
+
+  it('keeps anonymous local-only backups complete', async () => {
+    mocks.isAuthenticated.mockResolvedValue(false)
+    mocks.getAllChats.mockReset()
+    mocks.getAllChats.mockResolvedValue([])
+
+    const archive = await createNativeBackup({ cloudDataExpected: false })
+
+    expect(archive.manifest.complete).toBe(true)
+    expect(archive.manifest.counts.cloud_chats).toBe(0)
+    expect(archive.manifest.counts.projects).toBe(0)
   })
 })

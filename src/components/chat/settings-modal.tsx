@@ -29,6 +29,7 @@ import {
   createNativeBackup,
   restoreNativeBackup,
   validateNativeBackup,
+  type BackupWarning,
 } from '@/services/backup/native-backup'
 import { buildChatExport } from '@/services/chat-export/export-archive'
 import { parseLocalTinfoilExport } from '@/services/chat-import/local-tinfoil-import'
@@ -86,6 +87,7 @@ import {
   ChevronDownIcon,
   ComputerDesktopIcon,
   CreditCardIcon,
+  ExclamationTriangleIcon,
   EyeIcon,
   EyeSlashIcon,
   MoonIcon,
@@ -128,6 +130,26 @@ const DASHBOARD_URL = 'https://dash.tinfoil.sh'
 
 const DELETE_ALL_CHATS_CONFIRM_PHRASE = 'delete all chats'
 const DELETE_ALL_PROJECTS_CONFIRM_PHRASE = 'delete all projects'
+
+interface ImportWarning {
+  code: string
+  message: string
+  kind?: string
+  id?: string
+}
+
+function statusWarnings(warnings: string[] = []): ImportWarning[] {
+  return warnings.map((message) => ({ code: 'import_warning', message }))
+}
+
+function backupWarnings(warnings: BackupWarning[]): ImportWarning[] {
+  return warnings.map(({ code, kind, id, message }) => ({
+    code,
+    kind,
+    id,
+    message,
+  }))
+}
 
 const ScrambleText = ({
   text,
@@ -527,6 +549,8 @@ export function SettingsModal({
     projectsImported: number
     documentsImported?: number
     errors: string[]
+    warnings?: ImportWarning[]
+    partial?: boolean
     pending?: boolean
     message?: string
   } | null>(null)
@@ -1396,22 +1420,40 @@ export function SettingsModal({
     setIsImporting(true)
     setImportResult(null)
     try {
-      const { status } = await runOffDeviceImport(source, file)
+      const started = await runOffDeviceImport(source, file)
+      const status = await waitForOffDeviceImport(started.jobId, started.status)
       const errors = status.errors ?? []
+      const warnings = statusWarnings(status.warnings)
       const pending = status.status === 'staging' || status.status === 'running'
+      const partial = status.status !== 'failed' && warnings.length > 0
       setImportResult({
-        success: status.status !== 'failed',
+        success: status.status !== 'failed' && errors.length === 0,
+        partial,
         chatsImported: status.imported,
         projectsImported: 0,
         errors,
+        warnings,
         pending,
         message: pending
           ? `Your ${sourceLabel} export is being imported securely. We'll email you when it's done.`
           : undefined,
       })
       toast({
-        title: 'Import started',
-        description: `Your ${sourceLabel} export is being imported securely. We'll email you when it's done.`,
+        title:
+          status.status === 'failed'
+            ? 'Import failed'
+            : partial
+              ? 'Import partially complete'
+              : 'Import complete',
+        description:
+          status.status === 'failed'
+            ? `Could not import the ${sourceLabel} export.`
+            : partial
+              ? `Imported ${status.imported} chats with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}.`
+              : `Imported ${status.imported} chats from ${sourceLabel}.`,
+        ...(status.status === 'failed'
+          ? { variant: 'destructive' as const }
+          : {}),
       })
       if (!pending && onChatsUpdated) {
         onChatsUpdated()
@@ -2035,7 +2077,9 @@ export function SettingsModal({
     setIsExporting(true)
     setExportType('backup')
     try {
-      const archive = await createNativeBackup()
+      const archive = await createNativeBackup({
+        cloudDataExpected: Boolean(isSignedIn),
+      })
       const blob = new Blob([new Uint8Array(archive.data)], {
         type: 'application/zip',
       })
@@ -2070,7 +2114,10 @@ export function SettingsModal({
       })
       toast({
         title: 'Backup failed',
-        description: 'Could not create the Tinfoil backup.',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Could not create the Tinfoil backup.',
         variant: 'destructive',
       })
     } finally {
@@ -2131,6 +2178,7 @@ export function SettingsModal({
       let cloudDocumentsImported = 0
       let cloudPending = false
       let cloudErrors: string[] = []
+      let cloudWarnings: ImportWarning[] = []
       if (result.cloudArchive) {
         const cloudResult = await runOffDeviceImport(
           'tinfoil_backup',
@@ -2145,6 +2193,7 @@ export function SettingsModal({
         cloudDocumentsImported = cloudStatus.counts?.document?.imported ?? 0
         cloudPending = false
         cloudErrors = cloudStatus.errors ?? []
+        cloudWarnings = statusWarnings(cloudStatus.warnings)
         if (cloudStatus.status === 'completed') {
           restoredLocal = await result.finalizeLocal(
             cloudStatus.project_mappings ?? {},
@@ -2167,20 +2216,35 @@ export function SettingsModal({
             ]
           : []),
       ]
+      const warnings = [...backupWarnings(result.warnings), ...cloudWarnings]
+      const partial = warnings.length > 0
+      if (partial) {
+        setNativeBackupWarning(
+          `Restore completed with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}. Review the attachment and item details below.`,
+        )
+      }
       setImportResult({
         success: errors.length === 0,
+        partial,
         chatsImported: result.local.imported + cloudChatsImported,
         projectsImported: cloudProjectsImported,
         documentsImported: cloudDocumentsImported,
         errors,
+        warnings,
         pending: cloudPending,
         message: `Local chats: ${result.local.imported} imported, ${result.local.skipped} already restored. Cloud package: ${result.cloudCounts.cloud_chats} chats, ${result.cloudCounts.projects} projects, ${result.cloudCounts.project_documents} documents, ${result.cloudCounts.relationships} relationships, ${result.cloudCounts.images} images${cloudPending ? '; import is running off-device.' : '.'}`,
       })
       onChatsUpdated?.()
       await refreshProjects()
       toast({
-        title: cloudPending ? 'Restore started' : 'Restore complete',
-        description: `${result.local.imported} local chat${result.local.imported === 1 ? '' : 's'} restored${cloudPending ? '; cloud data is importing securely.' : '.'}`,
+        title: cloudPending
+          ? 'Restore started'
+          : partial
+            ? 'Restore partially complete'
+            : 'Restore complete',
+        description: partial
+          ? `${warnings.length} warning${warnings.length === 1 ? '' : 's'} require attention.`
+          : `${result.local.imported} local chat${result.local.imported === 1 ? '' : 's'} restored${cloudPending ? '; cloud data is importing securely.' : '.'}`,
       })
     } catch (error) {
       const message =
@@ -4042,13 +4106,17 @@ ${encryptionKey.replace('key_', '')}
                       <div
                         className={cn(
                           'rounded-lg border p-4',
-                          importResult.success
-                            ? 'border-brand-accent-dark/30 bg-brand-accent-dark/10 dark:border-brand-accent-light/30 dark:bg-brand-accent-light/10'
-                            : 'border-red-500/30 bg-red-500/10',
+                          importResult.partial
+                            ? 'border-amber-500/30 bg-amber-500/10'
+                            : importResult.success
+                              ? 'border-brand-accent-dark/30 bg-brand-accent-dark/10 dark:border-brand-accent-light/30 dark:bg-brand-accent-light/10'
+                              : 'border-red-500/30 bg-red-500/10',
                         )}
                       >
                         <div className="flex items-start gap-3">
-                          {importResult.success ? (
+                          {importResult.partial ? (
+                            <ExclamationTriangleIcon className="h-5 w-5 text-amber-500" />
+                          ) : importResult.success ? (
                             <CheckCircleIcon className="h-5 w-5 text-brand-accent-dark dark:text-brand-accent-light" />
                           ) : (
                             <XMarkIcon className="h-5 w-5 text-red-500" />
@@ -4057,16 +4125,20 @@ ${encryptionKey.replace('key_', '')}
                             <div
                               className={cn(
                                 'font-aeonik text-sm font-medium',
-                                importResult.success
-                                  ? 'text-brand-accent-dark dark:text-brand-accent-light'
-                                  : 'text-red-500',
+                                importResult.partial
+                                  ? 'text-amber-500'
+                                  : importResult.success
+                                    ? 'text-brand-accent-dark dark:text-brand-accent-light'
+                                    : 'text-red-500',
                               )}
                             >
                               {importResult.pending
                                 ? 'Import in progress'
-                                : importResult.success
-                                  ? 'Import complete'
-                                  : 'Import completed with errors'}
+                                : importResult.partial
+                                  ? 'Import partially complete'
+                                  : importResult.success
+                                    ? 'Import complete'
+                                    : 'Import completed with errors'}
                             </div>
                             {importResult.message && (
                               <div className="font-aeonik-fono text-xs text-content-muted">
@@ -4099,6 +4171,34 @@ ${encryptionKey.replace('key_', '')}
                                   <div>
                                     +{importResult.errors.length - 3} more
                                     errors
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {(importResult.warnings?.length ?? 0) > 0 && (
+                              <div className="mt-2 text-xs text-amber-500">
+                                <div>
+                                  {importResult.warnings!.length} warning
+                                  {importResult.warnings!.length === 1
+                                    ? ''
+                                    : 's'}
+                                </div>
+                                {importResult
+                                  .warnings!.slice(0, 3)
+                                  .map((warning, i) => (
+                                    <div
+                                      key={`${warning.code}-${warning.id ?? i}`}
+                                    >
+                                      {warning.code}
+                                      {warning.id
+                                        ? ` (${warning.id})`
+                                        : ''}: {warning.message}
+                                    </div>
+                                  ))}
+                                {importResult.warnings!.length > 3 && (
+                                  <div>
+                                    +{importResult.warnings!.length - 3} more
+                                    warnings
                                   </div>
                                 )}
                               </div>

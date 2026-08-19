@@ -209,6 +209,10 @@ export interface NativeBackupData {
   complete?: boolean
 }
 
+export interface NativeBackupContext {
+  cloudDataExpected: boolean
+}
+
 export interface NativeBackupArchive {
   data: Uint8Array
   filename: string
@@ -1157,8 +1161,15 @@ async function listAllCloudChats() {
   return listed
 }
 
-export async function createNativeBackup(): Promise<NativeBackupArchive> {
+export async function createNativeBackup(
+  context: NativeBackupContext,
+): Promise<NativeBackupArchive> {
   const canReadCloud = (await cloudStorage.isAuthenticated()) && hasPrimaryKey()
+  if (context.cloudDataExpected && !canReadCloud) {
+    throw new Error(
+      'Sign in and unlock your encryption key before backing up cloud data',
+    )
+  }
   const emptyProjects = {
     projects: [],
     documents: [],
