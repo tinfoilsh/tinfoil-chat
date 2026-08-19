@@ -107,6 +107,14 @@ export function AuthCleanupHandler() {
     try {
       await restorePendingKeyForOwner(pendingSignIn.userId)
     } catch (error) {
+      const currentAuthState = latestAuthStateRef.current
+      if (
+        !currentAuthState.isLoaded ||
+        !currentAuthState.isSignedIn ||
+        currentAuthState.userId !== pendingSignIn.userId
+      ) {
+        return
+      }
       logError('Failed to restore pending encryption key', error, {
         component: 'AuthCleanupHandler',
         action: 'restorePendingRecoveryForFreshSignIn',
@@ -174,6 +182,79 @@ export function AuthCleanupHandler() {
       pendingSignoutCleanupRef.current = null
     }
   }, [])
+
+  const runUserSwitchCleanup = useCallback(
+    (initialUserId: string) => {
+      if (pendingUserSwitchCleanupRef.current) return
+
+      const cleanup = (async () => {
+        let targetUserId = initialUserId
+
+        while (true) {
+          try {
+            await performUserSwitchCleanup(targetUserId)
+          } catch {
+            const latestAuthState = latestAuthStateRef.current
+            if (
+              latestAuthState.isLoaded &&
+              latestAuthState.isSignedIn &&
+              latestAuthState.userId &&
+              latestAuthState.userId !== targetUserId
+            ) {
+              targetUserId = latestAuthState.userId
+              continue
+            }
+
+            setCleanupError({
+              message:
+                'Local data from the previous account could not be cleared.',
+              retryStorage: false,
+            })
+            return
+          }
+
+          const latestAuthState = latestAuthStateRef.current
+          if (
+            !latestAuthState.isLoaded ||
+            !latestAuthState.isSignedIn ||
+            !latestAuthState.userId
+          ) {
+            return
+          }
+          if (latestAuthState.userId !== targetUserId) {
+            targetUserId = latestAuthState.userId
+            continue
+          }
+
+          pendingFreshSignInRef.current = {
+            userId: targetUserId,
+            reloadAfterRestore: true,
+          }
+          await restorePendingRecoveryForFreshSignIn()
+
+          const currentAuthState = latestAuthStateRef.current
+          if (
+            currentAuthState.isLoaded &&
+            currentAuthState.isSignedIn &&
+            currentAuthState.userId &&
+            currentAuthState.userId !== targetUserId
+          ) {
+            targetUserId = currentAuthState.userId
+            continue
+          }
+          return
+        }
+      })()
+
+      pendingUserSwitchCleanupRef.current = cleanup
+      void cleanup.finally(() => {
+        if (pendingUserSwitchCleanupRef.current === cleanup) {
+          pendingUserSwitchCleanupRef.current = null
+        }
+      })
+    },
+    [restorePendingRecoveryForFreshSignIn],
+  )
 
   const runSignoutCleanup = useCallback(() => {
     completeSignoutStep(SIGNOUT_STEPS.SIGN_OUT)
@@ -272,30 +353,7 @@ export function AuthCleanupHandler() {
 
       if (hasAnonymousRestore || (storedUserId && storedUserId !== user.id)) {
         // Different user signed in — clear all previous user data before recovery.
-        if (!pendingUserSwitchCleanupRef.current && !cleanupError) {
-          const cleanup = performUserSwitchCleanup(user.id)
-          pendingUserSwitchCleanupRef.current = cleanup
-          void cleanup
-            .then(async () => {
-              pendingFreshSignInRef.current = {
-                userId: user.id,
-                reloadAfterRestore: true,
-              }
-              await restorePendingRecoveryForFreshSignIn()
-            })
-            .catch(() => {
-              setCleanupError({
-                message:
-                  'Local data from the previous account could not be cleared.',
-                retryStorage: false,
-              })
-            })
-            .finally(() => {
-              if (pendingUserSwitchCleanupRef.current === cleanup) {
-                pendingUserSwitchCleanupRef.current = null
-              }
-            })
-        }
+        if (!cleanupError) runUserSwitchCleanup(user.id)
         return
       }
 
@@ -354,6 +412,7 @@ export function AuthCleanupHandler() {
     cleanupError,
     refreshSignedOutRecovery,
     restorePendingRecoveryForFreshSignIn,
+    runUserSwitchCleanup,
     runSignoutCleanup,
   ])
 
