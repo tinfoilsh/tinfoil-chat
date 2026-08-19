@@ -32,7 +32,10 @@ import {
 } from '@/services/backup/native-backup'
 import { buildChatExport } from '@/services/chat-export/export-archive'
 import { parseLocalTinfoilExport } from '@/services/chat-import/local-tinfoil-import'
-import { runOffDeviceImport } from '@/services/chat-import/off-device-import'
+import {
+  runOffDeviceImport,
+  waitForOffDeviceImport,
+} from '@/services/chat-import/off-device-import'
 import { hasPrimaryKey } from '@/services/cloud/cek-encoding'
 import { validateCurrentPrimaryKey } from '@/services/cloud/cloud-key-preflight'
 import { cloudStorage } from '@/services/cloud/cloud-storage'
@@ -2090,7 +2093,7 @@ export function SettingsModal({
     } | null = null
     try {
       const bytes = new Uint8Array(await file.arrayBuffer())
-      const validated = validateNativeBackup(bytes)
+      const validated = await validateNativeBackup(bytes)
       if (!validated.manifest.complete) {
         setNativeBackupWarning(
           `This backup is marked incomplete and contains ${validated.manifest.warnings.length} warning${validated.manifest.warnings.length === 1 ? '' : 's'}. Restore will continue with the available data.`,
@@ -2130,11 +2133,26 @@ export function SettingsModal({
           'tinfoil_backup',
           result.cloudArchive,
         )
-        cloudImported = cloudResult.status.imported
-        cloudPending =
-          cloudResult.status.status === 'staging' ||
-          cloudResult.status.status === 'running'
-        cloudErrors = cloudResult.status.errors ?? []
+        const cloudStatus = await waitForOffDeviceImport(
+          cloudResult.jobId,
+          cloudResult.status,
+        )
+        cloudImported = cloudStatus.imported
+        cloudPending = false
+        cloudErrors = cloudStatus.errors ?? []
+        if (cloudStatus.status === 'completed') {
+          restoredLocal = await result.finalizeLocal(
+            cloudStatus.project_mappings ?? {},
+          )
+          const detachedLocalChats = result.warnings.filter(
+            (warning) => warning.code === 'local_chat_project_not_restored',
+          ).length
+          if (detachedLocalChats > 0) {
+            setNativeBackupWarning(
+              `${detachedLocalChats} local chat${detachedLocalChats === 1 ? ' was' : 's were'} restored without a project because the project could not be restored.`,
+            )
+          }
+        }
       }
       const errors = [
         ...cloudErrors,

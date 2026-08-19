@@ -1,6 +1,7 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
-import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
+import { Uint8ArrayReader, ZipReader } from '@zip.js/zip.js'
+import { strFromU8, strToU8, zipSync } from 'fflate'
 import { z } from 'zod'
 
 import type { Attachment, Chat, Message } from '@/components/chat/types'
@@ -27,6 +28,11 @@ const CLOUD_CHATS_PATH = 'cloud_chats.json'
 const LOCAL_CHATS_PATH = 'local_chats.json'
 const RELATIONSHIPS_PATH = 'relationships.json'
 const PAGE_SIZE = 100
+const MAX_BACKUP_ARCHIVE_BYTES = 512 * 1024 * 1024
+const MAX_BACKUP_ENTRIES = 50_000
+const MAX_BACKUP_ENTRY_BYTES = 256 * 1024 * 1024
+const MAX_BACKUP_UNCOMPRESSED_BYTES = 1024 * 1024 * 1024
+const MAX_BACKUP_MANIFEST_BYTES = 32 * 1024 * 1024
 
 const ProjectSchema = z
   .object({
@@ -132,7 +138,7 @@ export interface NativeBackupCounts {
 }
 
 export interface NativeBackupManifest {
-  format: typeof NATIVE_BACKUP_FORMAT | typeof NATIVE_CLOUD_IMPORT_FORMAT
+  format: typeof NATIVE_BACKUP_FORMAT
   version: 1
   backup_id: string
   created_at: string
@@ -141,6 +147,35 @@ export interface NativeBackupManifest {
   counts: NativeBackupCounts
   files: BackupFileEntry[]
   warnings: BackupWarning[]
+}
+
+interface NativeCloudEntityManifest {
+  kind: 'project' | 'document' | 'chat'
+  source_id: string
+  project_source_id?: string
+  path: string
+  sha256: string
+  size_bytes: number
+}
+
+interface NativeCloudBlobManifest {
+  path: string
+  sha256: string
+  size_bytes: number
+}
+
+export interface NativeCloudImportManifest {
+  format: typeof NATIVE_CLOUD_IMPORT_FORMAT
+  version: 1
+  source_backup_id: string
+  counts: {
+    projects: number
+    documents: number
+    chats: number
+    blobs: number
+  }
+  entities: NativeCloudEntityManifest[]
+  blobs: NativeCloudBlobManifest[]
 }
 
 interface BackupAttachment extends Omit<
@@ -195,6 +230,9 @@ export interface NativeRestoreResult {
   cloudCounts: Omit<NativeBackupCounts, 'local_chats'>
   cloudArchive: File | null
   warnings: BackupWarning[]
+  finalizeLocal: (
+    projectMappings?: Record<string, string>,
+  ) => Promise<{ imported: number; skipped: number; conflicts: number }>
 }
 
 export interface LocalRestoreStore {
@@ -393,13 +431,96 @@ function isManifest(value: unknown): value is NativeBackupManifest {
   )
 }
 
-export function validateNativeBackup(bytes: Uint8Array): ValidatedNativeBackup {
-  let files: Record<string, Uint8Array>
-  try {
-    files = unzipSync(bytes)
-  } catch {
-    throw new Error('The selected file is not a valid ZIP archive')
+async function readBoundedZip(
+  bytes: Uint8Array,
+): Promise<Record<string, Uint8Array>> {
+  if (bytes.byteLength > MAX_BACKUP_ARCHIVE_BYTES) {
+    throw new Error('The selected backup archive is too large')
   }
+  const reader = new ZipReader(new Uint8ArrayReader(bytes))
+  try {
+    const entries = await reader.getEntries()
+    if (entries.length > MAX_BACKUP_ENTRIES) {
+      throw new Error('Backup contains too many files')
+    }
+    const names = new Set<string>()
+    let totalSize = 0
+    for (const entry of entries) {
+      const path = entry.filename
+      if (
+        entry.directory ||
+        !path ||
+        path.startsWith('/') ||
+        path.includes('\\') ||
+        path.includes('\0') ||
+        path.split('/').includes('..') ||
+        names.has(path)
+      ) {
+        throw new Error('Backup contains an invalid or duplicate file path')
+      }
+      if (entry.uncompressedSize > MAX_BACKUP_ENTRY_BYTES) {
+        throw new Error(`Backup file is too large: ${path}`)
+      }
+      if (
+        path === MANIFEST_PATH &&
+        entry.uncompressedSize > MAX_BACKUP_MANIFEST_BYTES
+      ) {
+        throw new Error('Backup manifest is too large')
+      }
+      totalSize += entry.uncompressedSize
+      if (totalSize > MAX_BACKUP_UNCOMPRESSED_BYTES) {
+        throw new Error('Backup uncompressed size exceeds the limit')
+      }
+      names.add(path)
+    }
+    const files: Record<string, Uint8Array> = {}
+    let extractedSize = 0
+    for (const entry of entries) {
+      if (!('getData' in entry)) {
+        throw new Error(`Backup extraction failed for ${entry.filename}`)
+      }
+      const chunks: Uint8Array[] = []
+      let entrySize = 0
+      await entry.getData({
+        writable: new WritableStream<Uint8Array>({
+          write(chunk) {
+            entrySize += chunk.byteLength
+            extractedSize += chunk.byteLength
+            if (
+              entrySize > MAX_BACKUP_ENTRY_BYTES ||
+              extractedSize > MAX_BACKUP_UNCOMPRESSED_BYTES
+            ) {
+              throw new Error('Backup extraction exceeded its size limit')
+            }
+            chunks.push(chunk)
+          },
+        }),
+      })
+      const data = new Uint8Array(entrySize)
+      let offset = 0
+      for (const chunk of chunks) {
+        data.set(chunk, offset)
+        offset += chunk.byteLength
+      }
+      if (data.byteLength !== entry.uncompressedSize) {
+        throw new Error(`Backup extraction failed for ${entry.filename}`)
+      }
+      files[entry.filename] = data
+    }
+    return files
+  } catch {
+    throw new Error(
+      'The selected file is not a valid ZIP archive or exceeds safety limits',
+    )
+  } finally {
+    await reader.close()
+  }
+}
+
+export async function validateNativeBackup(
+  bytes: Uint8Array,
+): Promise<ValidatedNativeBackup> {
+  const files = await readBoundedZip(bytes)
   const manifestValue = parseJson<unknown>(files, MANIFEST_PATH)
   if (!isManifest(manifestValue)) {
     throw new Error('Unsupported Tinfoil backup manifest')
@@ -575,10 +696,12 @@ function hydrateLocalChat(
   chat: BackupChat,
   id: string,
   files: Record<string, Uint8Array>,
+  projectId: string | undefined,
 ): Chat {
   return {
     ...chat,
     id,
+    projectId,
     createdAt: new Date(chat.createdAt),
     isLocalOnly: true,
     messages: chat.messages.map((message) => ({
@@ -597,46 +720,140 @@ function hydrateLocalChat(
   }
 }
 
+function cloudEntity(
+  files: Record<string, Uint8Array>,
+  entities: NativeCloudEntityManifest[],
+  kind: NativeCloudEntityManifest['kind'],
+  sourceId: string,
+  projectSourceId: string | undefined,
+  payload: unknown,
+): void {
+  const path = `entities/${kind}/${entities.length}.json`
+  const data = jsonBytes(payload)
+  files[path] = data
+  entities.push({
+    kind,
+    source_id: sourceId,
+    ...(projectSourceId ? { project_source_id: projectSourceId } : {}),
+    path,
+    sha256: hash(data),
+    size_bytes: data.byteLength,
+  })
+}
+
 function buildCloudImport(validated: ValidatedNativeBackup): File | null {
   const cloudFiles: Record<string, Uint8Array> = {}
-  for (const entry of validated.manifest.files) {
-    if (entry.kind === 'local_chats') continue
-    if (entry.kind === 'images' && entry.path.startsWith('images/local/'))
-      continue
-    cloudFiles[entry.path] = validated.files[entry.path]
-  }
-  const cloudRelationships = validated.relationships.filter(
-    (relationship) => relationship.location === 'cloud',
+  const entities: NativeCloudEntityManifest[] = []
+  const blobs: NativeCloudBlobManifest[] = []
+  const projectForChat = new Map(
+    validated.relationships
+      .filter((relationship) => relationship.location === 'cloud')
+      .map((relationship) => [relationship.chat_id, relationship.project_id]),
   )
-  cloudFiles[RELATIONSHIPS_PATH] = jsonBytes(cloudRelationships)
-  const entries = Object.entries(cloudFiles).map(([path, data]) => ({
-    path,
-    kind:
-      path === RELATIONSHIPS_PATH
-        ? ('relationships' as const)
-        : validated.manifest.files.find((entry) => entry.path === path)!.kind,
-    size: data.byteLength,
-    sha256: hash(data),
-  }))
-  const counts = {
-    ...validated.manifest.counts,
-    local_chats: 0,
-    relationships: cloudRelationships.length,
-    images: entries.filter((entry) => entry.kind === 'images').length,
+  const blobPathForSource = new Map<string, string>()
+
+  for (const project of validated.projects) {
+    cloudEntity(cloudFiles, entities, 'project', project.id, undefined, {
+      name: project.name,
+      description: project.description,
+      systemInstructions: project.systemInstructions,
+      ...(project.color ? { color: project.color } : {}),
+      memory: project.memory,
+    })
   }
-  const hasCloudEntities =
-    counts.projects +
-      counts.project_documents +
-      counts.cloud_chats +
-      counts.relationships +
-      counts.images >
-    0
-  if (!hasCloudEntities) return null
-  const manifest: NativeBackupManifest = {
-    ...validated.manifest,
+  for (const document of validated.projectDocuments) {
+    cloudEntity(
+      cloudFiles,
+      entities,
+      'document',
+      document.id,
+      document.projectId,
+      {
+        filename: document.filename,
+        contentType: document.contentType,
+        sourceSizeBytes: document.sizeBytes,
+        sizeBytes: document.sizeBytes,
+        content: document.content ?? '',
+      },
+    )
+  }
+  for (const chat of validated.cloudChats) {
+    const messages = chat.messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+      timestamp: message.timestamp,
+      ...(message.thoughts ? { thoughts: message.thoughts } : {}),
+      ...(message.thinkingDuration
+        ? { thinkingDuration: message.thinkingDuration }
+        : {}),
+      ...(message.attachments
+        ? {
+            attachments: message.attachments.map((attachment) => {
+              const sourcePath = attachment.backup_path
+              let archivePath: string | undefined
+              if (sourcePath) {
+                archivePath = blobPathForSource.get(sourcePath)
+                if (!archivePath) {
+                  archivePath = `blobs/${blobs.length}`
+                  const data = validated.files[sourcePath]
+                  cloudFiles[archivePath] = data
+                  blobs.push({
+                    path: archivePath,
+                    sha256: hash(data),
+                    size_bytes: data.byteLength,
+                  })
+                  blobPathForSource.set(sourcePath, archivePath)
+                }
+              }
+              return {
+                ...(attachment.id ? { id: attachment.id } : {}),
+                type: attachment.type,
+                fileName: attachment.fileName,
+                ...(attachment.mimeType
+                  ? { mimeType: attachment.mimeType }
+                  : {}),
+                ...(attachment.textContent
+                  ? { textContent: attachment.textContent }
+                  : {}),
+                ...(attachment.description
+                  ? { description: attachment.description }
+                  : {}),
+                ...(attachment.fileSize !== undefined
+                  ? { fileSize: attachment.fileSize }
+                  : {}),
+                ...(archivePath ? { archivePath } : {}),
+              }
+            }),
+          }
+        : {}),
+    }))
+    cloudEntity(
+      cloudFiles,
+      entities,
+      'chat',
+      chat.id,
+      projectForChat.get(chat.id),
+      {
+        title: chat.title,
+        messages,
+        createdAt: chat.createdAt,
+        isLocalOnly: false,
+      },
+    )
+  }
+  if (entities.length === 0) return null
+  const manifest: NativeCloudImportManifest = {
     format: NATIVE_CLOUD_IMPORT_FORMAT,
-    counts,
-    files: entries,
+    version: NATIVE_BACKUP_VERSION,
+    source_backup_id: validated.manifest.backup_id,
+    counts: {
+      projects: validated.projects.length,
+      documents: validated.projectDocuments.length,
+      chats: validated.cloudChats.length,
+      blobs: blobs.length,
+    },
+    entities,
+    blobs,
   }
   cloudFiles[MANIFEST_PATH] = jsonBytes(manifest)
   return new File(
@@ -656,28 +873,66 @@ export async function restoreNativeBackup(
     saveChat: (chat) => chatStorage.saveChat(chat, true),
   },
 ): Promise<NativeRestoreResult> {
-  const validated = validateNativeBackup(bytes)
-  let imported = 0
-  let skipped = 0
-  const conflicts = 0
-  for (const sourceChat of validated.localChats) {
-    const id = await mappedLocalChatId(
-      destinationUserId,
-      validated.manifest.backup_id,
-      sourceChat.id,
-    )
-    const restored = hydrateLocalChat(sourceChat, id, validated.files)
-    const existing = await store.getChat(id)
-    if (existing) {
-      skipped++
-      continue
-    }
-    await store.saveChat(restored)
-    imported++
-  }
+  const validated = await validateNativeBackup(bytes)
   const cloudArchive = buildCloudImport(validated)
+  const localRelationship = new Map(
+    validated.relationships
+      .filter((relationship) => relationship.location === 'local')
+      .map((relationship) => [relationship.chat_id, relationship.project_id]),
+  )
+  let local = { imported: 0, skipped: 0, conflicts: 0 }
+  let finalized = false
+  const warnings = [...validated.manifest.warnings]
+  const finalizeLocal = async (
+    projectMappings: Record<string, string> = {},
+  ) => {
+    if (finalized) return local
+    let imported = 0
+    let skipped = 0
+    for (const sourceChat of validated.localChats) {
+      const sourceProjectId = localRelationship.get(sourceChat.id)
+      const projectId = sourceProjectId
+        ? projectMappings[sourceProjectId]
+        : undefined
+      if (sourceProjectId && !projectId) {
+        warnings.push({
+          code: 'local_chat_project_not_restored',
+          kind: 'local_chats',
+          id: sourceChat.id,
+          message:
+            'A local chat was restored without its project because the project was not imported.',
+        })
+      }
+      const id = await mappedLocalChatId(
+        destinationUserId,
+        validated.manifest.backup_id,
+        sourceChat.id,
+      )
+      const restored = hydrateLocalChat(
+        sourceChat,
+        id,
+        validated.files,
+        projectId,
+      )
+      const existing = await store.getChat(id)
+      if (existing) {
+        skipped++
+        continue
+      }
+      await store.saveChat(restored)
+      imported++
+    }
+    local = { imported, skipped, conflicts: 0 }
+    finalized = true
+    return local
+  }
+  if (!cloudArchive) {
+    await finalizeLocal()
+  }
   return {
-    local: { imported, skipped, conflicts },
+    get local() {
+      return local
+    },
     cloudCounts: {
       projects: validated.manifest.counts.projects,
       project_documents: validated.manifest.counts.project_documents,
@@ -691,7 +946,8 @@ export async function restoreNativeBackup(
       ).length,
     },
     cloudArchive,
-    warnings: validated.manifest.warnings,
+    warnings,
+    finalizeLocal,
   }
 }
 

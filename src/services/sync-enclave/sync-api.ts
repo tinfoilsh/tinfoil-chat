@@ -442,10 +442,17 @@ export interface ImportStartRequest {
 
 export interface ImportStatusResponse {
   status: ImportJobStatus
+  phase?: string
   imported: number
   failed: number
   total: number
+  counts?: Record<
+    string,
+    { imported: number; skipped: number; failed: number; blocked: number }
+  >
+  warnings?: string[]
   errors?: string[]
+  project_mappings?: Record<string, string>
   job_id?: string
 }
 

@@ -8,6 +8,7 @@ import {
 } from '@/services/backup/native-backup'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { describe, expect, it, vi } from 'vitest'
+import contractFixture from '../../fixtures/native-cloud-import-v1.json'
 
 const createdAt = '2026-08-18T12:00:00.000Z'
 
@@ -41,8 +42,8 @@ function chat(id: string, isLocalOnly: boolean, image = false): Chat {
   }
 }
 
-async function archive(complete = true) {
-  return buildNativeBackup({
+async function archive(complete = true, backupId?: string) {
+  const built = await buildNativeBackup({
     projects: [
       {
         id: 'project-1',
@@ -90,12 +91,18 @@ async function archive(complete = true) {
           },
         ],
   })
+  if (!backupId) return built
+  const files = unzipSync(built.data)
+  const manifest = JSON.parse(strFromU8(files['manifest.json']))
+  manifest.backup_id = backupId
+  files['manifest.json'] = strToU8(JSON.stringify(manifest))
+  return { ...built, data: zipSync(files), manifest }
 }
 
 describe('native Tinfoil backup', () => {
   it('preserves projects, memory, color, documents, relationships and images', async () => {
     const built = await archive()
-    const validated = validateNativeBackup(built.data)
+    const validated = await validateNativeBackup(built.data)
 
     expect(built.filename).toBe(
       `tinfoil-backup-${validated.manifest.created_at.slice(0, 10)}.zip`,
@@ -129,7 +136,7 @@ describe('native Tinfoil backup', () => {
 
   it('keeps an incomplete archive downloadable with structured warnings', async () => {
     const built = await archive(false)
-    const validated = validateNativeBackup(built.data)
+    const validated = await validateNativeBackup(built.data)
     expect(validated.manifest.complete).toBe(false)
     expect(validated.manifest.warnings).toEqual([
       expect.objectContaining({ code: 'changed', kind: 'cloud_chats' }),
@@ -137,14 +144,14 @@ describe('native Tinfoil backup', () => {
   })
 
   it('rejects malformed archives, hash changes, counts and schemas', async () => {
-    expect(() => validateNativeBackup(strToU8('not a zip'))).toThrow(
+    await expect(validateNativeBackup(strToU8('not a zip'))).rejects.toThrow(
       'valid ZIP',
     )
 
     const built = await archive()
     const changed = unzipSync(built.data)
     changed['projects.json'] = strToU8('[]')
-    expect(() => validateNativeBackup(zipSync(changed))).toThrow(
+    await expect(validateNativeBackup(zipSync(changed))).rejects.toThrow(
       'integrity check',
     )
 
@@ -162,13 +169,13 @@ describe('native Tinfoil backup', () => {
       (entry: { path: string }) => entry.path === 'projects.json',
     ).size = bytes.byteLength
     invalidSchema['manifest.json'] = strToU8(JSON.stringify(manifest))
-    expect(() => validateNativeBackup(zipSync(invalidSchema))).toThrow(
+    await expect(validateNativeBackup(zipSync(invalidSchema))).rejects.toThrow(
       'version 1 schema',
     )
   })
 
   it('restores local chats idempotently and partitions the cloud package', async () => {
-    const built = await archive()
+    const built = await archive(true, contractFixture.source_backup_id)
     const stored = new Map<string, Chat>()
     const store = {
       getChat: vi.fn(async (id: string) => stored.get(id) ?? null),
@@ -182,27 +189,87 @@ describe('native Tinfoil backup', () => {
       'destination-user',
       store,
     )
+    expect(first.local.imported).toBe(0)
+    await first.finalizeLocal({ 'project-1': 'destination-project-1' })
     const second = await restoreNativeBackup(
       built.data,
       'destination-user',
       store,
     )
+    await second.finalizeLocal({ 'project-1': 'destination-project-1' })
 
     expect(first.local).toEqual({ imported: 1, skipped: 0, conflicts: 0 })
     expect(second.local).toEqual({ imported: 0, skipped: 1, conflicts: 0 })
     expect([...stored.values()][0]).toMatchObject({
       isLocalOnly: true,
-      projectId: 'project-1',
+      projectId: 'destination-project-1',
     })
     const cloudFiles = unzipSync(
       new Uint8Array(await first.cloudArchive!.arrayBuffer()),
     )
     const cloudManifest = JSON.parse(strFromU8(cloudFiles['manifest.json']))
     expect(cloudManifest.format).toBe(NATIVE_CLOUD_IMPORT_FORMAT)
-    expect(cloudManifest.counts.local_chats).toBe(0)
+    expect(cloudManifest).toMatchObject({
+      version: 1,
+      counts: { projects: 1, documents: 1, chats: 1, blobs: 1 },
+    })
+    expect(cloudManifest.source_backup_id).toBe(built.manifest.backup_id)
+    expect(cloudManifest.source_backup_id).toBe(
+      contractFixture.source_backup_id,
+    )
+    expect(
+      cloudManifest.entities.map((entity: { kind: string }) => entity.kind),
+    ).toEqual(['project', 'document', 'chat'])
+    expect(
+      cloudManifest.entities.map(
+        (entity: {
+          kind: string
+          source_id: string
+          project_source_id?: string
+          path: string
+        }) => ({
+          kind: entity.kind,
+          source_id: entity.source_id,
+          ...(entity.project_source_id
+            ? { project_source_id: entity.project_source_id }
+            : {}),
+          payload: JSON.parse(strFromU8(cloudFiles[entity.path])),
+        }),
+      ),
+    ).toEqual(contractFixture.entities)
+    expect(
+      cloudManifest.blobs.map((blob: { path: string }) => blob.path),
+    ).toEqual(contractFixture.blobs.map((blob) => blob.path))
+    expect(
+      cloudManifest.blobs.map((blob: { path: string }) =>
+        btoa(strFromU8(cloudFiles[blob.path])),
+      ),
+    ).toEqual(contractFixture.blobs.map((blob) => blob.base64))
     expect(cloudFiles['local_chats.json']).toBeUndefined()
     expect(
       Object.keys(cloudFiles).some((path) => path.startsWith('images/local/')),
     ).toBe(false)
+  })
+
+  it('detaches local chats when their project was not restored', async () => {
+    const built = await archive()
+    const stored: Chat[] = []
+    const result = await restoreNativeBackup(built.data, 'destination-user', {
+      getChat: async () => null,
+      saveChat: async (value) => stored.push(value),
+    })
+
+    await result.finalizeLocal({})
+
+    expect(stored[0].projectId).toBeUndefined()
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({ code: 'local_chat_project_not_restored' }),
+    )
+  })
+
+  it('rejects unsafe ZIP paths before extracting entries', async () => {
+    await expect(
+      validateNativeBackup(zipSync({ '../manifest.json': strToU8('{}') })),
+    ).rejects.toThrow('safety limits')
   })
 })

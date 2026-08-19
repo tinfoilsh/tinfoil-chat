@@ -2,6 +2,7 @@ import { requirePrimaryKeyB64 } from '@/services/cloud/cek-encoding'
 import {
   importCreate,
   importStart,
+  importStatus,
   importUploadChunk,
   type ImportSource,
   type ImportStatusResponse,
@@ -21,6 +22,7 @@ import { sha256 } from '@noble/hashes/sha2.js'
 // the fixed chunk size so chunk offsets line up during reassembly.
 export const IMPORT_CHUNK_BYTES = 8 * 1024 * 1024
 export const IMPORT_MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
+const IMPORT_STATUS_POLL_MS = 1000
 
 export interface OffDeviceImportResult {
   jobId: string
@@ -98,4 +100,16 @@ export async function runOffDeviceImport(
   })
 
   return { jobId: job_id, status }
+}
+
+export async function waitForOffDeviceImport(
+  jobId: string,
+  initialStatus: ImportStatusResponse,
+): Promise<ImportStatusResponse> {
+  let status = initialStatus
+  while (status.status === 'staging' || status.status === 'running') {
+    await new Promise((resolve) => setTimeout(resolve, IMPORT_STATUS_POLL_MS))
+    status = await importStatus(jobId)
+  }
+  return status
 }

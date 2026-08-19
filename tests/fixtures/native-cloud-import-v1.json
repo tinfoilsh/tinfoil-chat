@@ -1,0 +1,69 @@
+{
+  "source_backup_id": "fixture-backup-1",
+  "entities": [
+    {
+      "kind": "project",
+      "source_id": "project-1",
+      "payload": {
+        "name": "Research",
+        "description": "Description",
+        "systemInstructions": "Be exact",
+        "color": "#123456",
+        "memory": [
+          {
+            "id": "fact-1",
+            "fact": "Prefers concise answers",
+            "date": "2026-08-18T12:00:00.000Z",
+            "category": "preference",
+            "confidence": 1
+          }
+        ]
+      }
+    },
+    {
+      "kind": "document",
+      "source_id": "doc-1",
+      "project_source_id": "project-1",
+      "payload": {
+        "filename": "paper.pdf",
+        "contentType": "application/pdf",
+        "sourceSizeBytes": 9000,
+        "sizeBytes": 9000,
+        "content": "Extracted text"
+      }
+    },
+    {
+      "kind": "chat",
+      "source_id": "cloud-1",
+      "project_source_id": "project-1",
+      "payload": {
+        "title": "cloud-1 title",
+        "messages": [
+          {
+            "role": "user",
+            "content": "hello",
+            "timestamp": "2026-08-18T12:00:00.000Z",
+            "attachments": [
+              {
+                "id": "cloud-1-image",
+                "type": "image",
+                "fileName": "photo.png",
+                "mimeType": "image/png",
+                "fileSize": 11,
+                "archivePath": "blobs/0"
+              }
+            ]
+          }
+        ],
+        "createdAt": "2026-08-18T12:00:00.000Z",
+        "isLocalOnly": false
+      }
+    }
+  ],
+  "blobs": [
+    {
+      "path": "blobs/0",
+      "base64": "aW1hZ2UgYnl0ZXM="
+    }
+  ]
+}

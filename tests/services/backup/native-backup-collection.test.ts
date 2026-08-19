@@ -129,7 +129,7 @@ describe('native backup collection', () => {
 
   it('freshly paginates scopes, retries changed rows, and marks instability', async () => {
     const archive = await createNativeBackup()
-    const validated = validateNativeBackup(archive.data)
+    const validated = await validateNativeBackup(archive.data)
 
     expect(mocks.listProjects).toHaveBeenCalledTimes(2)
     expect(mocks.listChats).toHaveBeenCalledTimes(4)
