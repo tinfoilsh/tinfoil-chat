@@ -6,6 +6,7 @@ import {
 import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
+  AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP,
   PENDING_ENCRYPTION_KEY_RECOVERY,
 } from '@/constants/storage-keys'
 import { logError, logInfo } from '@/utils/error-handling'
@@ -35,10 +36,6 @@ const SIGNOUT_CLEANUP_GRACE_MS = 2000
 export function AuthCleanupHandler() {
   const { isSignedIn, isLoaded } = useAuth()
   const { user } = useUser()
-  const restoredPendingForSignedInUser = Boolean(
-    isLoaded && isSignedIn && user?.id && restorePendingKeyForOwner(user.id),
-  )
-
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
@@ -61,7 +58,7 @@ export function AuthCleanupHandler() {
     userId: user?.id,
   }
 
-  const refreshPendingRecovery = useCallback(() => {
+  const refreshPendingRecovery = useCallback(async () => {
     setRecoveryKey(null)
     setShowModal(false)
 
@@ -69,7 +66,14 @@ export function AuthCleanupHandler() {
     if (!latestAuthState.isLoaded) return
     if (latestAuthState.isSignedIn) {
       if (latestAuthState.userId) {
-        restorePendingKeyForOwner(latestAuthState.userId)
+        try {
+          await restorePendingKeyForOwner(latestAuthState.userId)
+        } catch (error) {
+          logError('Failed to restore pending encryption key', error, {
+            component: 'AuthCleanupHandler',
+            action: 'refreshPendingRecovery',
+          })
+        }
       }
       return
     }
@@ -81,20 +85,13 @@ export function AuthCleanupHandler() {
   }, [])
 
   useEffect(() => {
-    if (restoredPendingForSignedInUser) {
-      setRecoveryKey(null)
-      setShowModal(false)
-    }
-  }, [restoredPendingForSignedInUser])
-
-  useEffect(() => {
-    refreshPendingRecovery()
+    void refreshPendingRecovery()
   }, [isLoaded, isSignedIn, user?.id, refreshPendingRecovery])
 
   useEffect(() => {
     const handlePendingRecoveryChange = (event: StorageEvent) => {
       if (event.key !== PENDING_ENCRYPTION_KEY_RECOVERY) return
-      refreshPendingRecovery()
+      void refreshPendingRecovery()
     }
     window.addEventListener('storage', handlePendingRecoveryChange)
     return () =>
@@ -139,7 +136,7 @@ export function AuthCleanupHandler() {
         action: 'resumePendingRecovery',
       })
       hideSignoutProgress()
-      refreshPendingRecovery()
+      void refreshPendingRecovery()
       return
     }
     const encryptionKey = getEncryptionKey()
@@ -191,7 +188,7 @@ export function AuthCleanupHandler() {
         // Check theme from data-theme attribute (source of truth)
         const dataTheme = document.documentElement.getAttribute('data-theme')
         setIsDarkMode(dataTheme === 'dark')
-        refreshPendingRecovery()
+        void refreshPendingRecovery()
       })
       .catch((error) => {
         logError('Failed to cleanup on signout (preserving key)', error, {
@@ -216,8 +213,10 @@ export function AuthCleanupHandler() {
     if (isSignedIn && user?.id) {
       clearPendingSignoutCleanup()
       const storedUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
+      const hasAnonymousRestore =
+        localStorage.getItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP) === 'true'
 
-      if (storedUserId && storedUserId !== user.id) {
+      if (hasAnonymousRestore || (storedUserId && storedUserId !== user.id)) {
         // Different user signed in — clear all previous user data + reload
         if (!pendingUserSwitchCleanupRef.current && !cleanupError) {
           const cleanup = performUserSwitchCleanup(user.id)

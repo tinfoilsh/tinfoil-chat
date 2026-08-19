@@ -26,6 +26,7 @@ import { useToast } from '@/hooks/use-toast'
 import { authTokenManager } from '@/services/auth'
 import { buildClaudeProjectExport } from '@/services/backup/claude-project-export'
 import {
+  ANONYMOUS_BACKUP_RESTORE_USER_ID,
   createNativeBackup,
   restoreNativeBackup,
   validateNativeBackup,
@@ -2170,42 +2171,57 @@ export function SettingsModal({
       }
       const result = await restoreNativeBackup(
         bytes,
-        user?.id ?? 'anonymous-browser',
+        user?.id ?? ANONYMOUS_BACKUP_RESTORE_USER_ID,
       )
       restoredLocal = result.local
       let cloudChatsImported = 0
       let cloudProjectsImported = 0
       let cloudDocumentsImported = 0
-      let cloudPending = false
       let cloudErrors: string[] = []
       let cloudWarnings: ImportWarning[] = []
       if (result.cloudArchive) {
-        const cloudResult = await runOffDeviceImport(
-          'tinfoil_backup',
-          result.cloudArchive,
-        )
-        const cloudStatus = await waitForOffDeviceImport(
-          cloudResult.jobId,
-          cloudResult.status,
-        )
-        cloudChatsImported = cloudStatus.counts?.chat?.imported ?? 0
-        cloudProjectsImported = cloudStatus.counts?.project?.imported ?? 0
-        cloudDocumentsImported = cloudStatus.counts?.document?.imported ?? 0
-        cloudPending = false
-        cloudErrors = cloudStatus.errors ?? []
-        cloudWarnings = statusWarnings(cloudStatus.warnings)
-        if (cloudStatus.status === 'completed') {
-          restoredLocal = await result.finalizeLocal(
-            cloudStatus.project_mappings ?? {},
+        try {
+          const cloudResult = await runOffDeviceImport(
+            'tinfoil_backup',
+            result.cloudArchive,
           )
-          const detachedLocalChats = result.warnings.filter(
-            (warning) => warning.code === 'local_chat_project_not_restored',
-          ).length
-          if (detachedLocalChats > 0) {
-            setNativeBackupWarning(
-              `${detachedLocalChats} local chat${detachedLocalChats === 1 ? ' was' : 's were'} restored without a project because the project could not be restored.`,
+          const cloudStatus = await waitForOffDeviceImport(
+            cloudResult.jobId,
+            cloudResult.status,
+          )
+          cloudChatsImported = cloudStatus.counts?.chat?.imported ?? 0
+          cloudProjectsImported = cloudStatus.counts?.project?.imported ?? 0
+          cloudDocumentsImported = cloudStatus.counts?.document?.imported ?? 0
+          cloudErrors = cloudStatus.errors ?? []
+          cloudWarnings = statusWarnings(cloudStatus.warnings)
+          if (cloudStatus.status === 'completed') {
+            restoredLocal = await result.finalizeLocal(
+              cloudStatus.project_mappings ?? {},
             )
+            const detachedLocalChats = result.warnings.filter(
+              (warning) => warning.code === 'local_chat_project_not_restored',
+            ).length
+            if (detachedLocalChats > 0) {
+              setNativeBackupWarning(
+                `${detachedLocalChats} local chat${detachedLocalChats === 1 ? ' was' : 's were'} restored without a project because the project could not be restored.`,
+              )
+            }
+          } else {
+            restoredLocal = await result.finalizeLocal()
+            if (cloudErrors.length === 0) {
+              cloudErrors = ['Cloud restore failed.']
+            }
           }
+        } catch (error) {
+          try {
+            restoredLocal = await result.finalizeLocal()
+          } catch (finalizeError) {
+            logError('Failed to finalize local backup restore', finalizeError, {
+              component: 'SettingsModal',
+              action: 'handleRestoreNativeBackup',
+            })
+          }
+          throw error
         }
       }
       const errors = [
@@ -2231,20 +2247,21 @@ export function SettingsModal({
         documentsImported: cloudDocumentsImported,
         errors,
         warnings,
-        pending: cloudPending,
-        message: `Local chats: ${result.local.imported} imported, ${result.local.skipped} already restored. Cloud package: ${result.cloudCounts.cloud_chats} chats, ${result.cloudCounts.projects} projects, ${result.cloudCounts.project_documents} documents, ${result.cloudCounts.relationships} relationships, ${result.cloudCounts.images} images${cloudPending ? '; import is running off-device.' : '.'}`,
+        message: `Local chats: ${result.local.imported} imported, ${result.local.skipped} already restored. Cloud package: ${result.cloudCounts.cloud_chats} chats, ${result.cloudCounts.projects} projects, ${result.cloudCounts.project_documents} documents, ${result.cloudCounts.relationships} relationships, ${result.cloudCounts.images} images.`,
       })
       onChatsUpdated?.()
       await refreshProjects()
       toast({
-        title: cloudPending
-          ? 'Restore started'
-          : partial
+        title:
+          errors.length > 0 || partial
             ? 'Restore partially complete'
             : 'Restore complete',
-        description: partial
-          ? `${warnings.length} warning${warnings.length === 1 ? '' : 's'} require attention.`
-          : `${result.local.imported} local chat${result.local.imported === 1 ? '' : 's'} restored${cloudPending ? '; cloud data is importing securely.' : '.'}`,
+        description:
+          errors.length > 0
+            ? errors[0]
+            : partial
+              ? `${warnings.length} warning${warnings.length === 1 ? '' : 's'} require attention.`
+              : `${result.local.imported} local chat${result.local.imported === 1 ? '' : 's'} restored.`,
       })
     } catch (error) {
       const message =
@@ -2255,7 +2272,7 @@ export function SettingsModal({
         projectsImported: 0,
         errors: [message],
         message: restoredLocal
-          ? `Local chats: ${restoredLocal.imported} imported, ${restoredLocal.skipped} already restored. Cloud restore did not start.`
+          ? `Local chats: ${restoredLocal.imported} imported, ${restoredLocal.skipped} already restored. Cloud restore did not complete.`
           : undefined,
       })
       toast({
@@ -3963,8 +3980,7 @@ ${encryptionKey.replace('key_', '')}
                           )}
 
                         {/* Add Passkey on This Device Prompt */}
-                        {!passkeyActive &&
-                          passkeyAddDeviceAvailable &&
+                        {passkeyAddDeviceAvailable &&
                           onAddPasskeyToThisDevice && (
                             <button
                               onClick={async () => {

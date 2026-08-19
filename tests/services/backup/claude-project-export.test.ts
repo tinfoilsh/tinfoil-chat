@@ -51,6 +51,7 @@ describe('Claude project compatibility export', () => {
             systemInstructions: '',
             color: '#fff',
             memory: [{ fact: 'not represented by Claude' }],
+            syncVersion: 1,
           },
         ],
       ]),
@@ -86,6 +87,10 @@ describe('Claude project compatibility export', () => {
     const result = await buildClaudeProjectExport()
 
     expect(mocks.listProjects).toHaveBeenCalledTimes(2)
+    expect(mocks.listProjects).toHaveBeenNthCalledWith(2, {
+      limit: 100,
+      continuationToken: 'page-2',
+    })
     expect(result.projects).toEqual([
       expect.objectContaining({
         uuid: 'p1',
@@ -102,6 +107,52 @@ describe('Claude project compatibility export', () => {
     ])
     expect(result.skippedProjects).toBe(1)
     expect(result.skippedDocuments).toBe(1)
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        {
+          projectId: 'p2',
+          message: 'Project could not be read consistently.',
+        },
+        {
+          projectId: 'p1',
+          documentId: 'd2',
+          message: 'Project document could not be decrypted.',
+        },
+      ]),
+    )
     expect(JSON.stringify(result.projects)).not.toContain('Encrypted')
+  })
+
+  it('omits a project whose metadata changed during export', async () => {
+    mocks.listProjects.mockResolvedValue({
+      projects: [
+        {
+          id: 'p1',
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          syncVersion: 1,
+        },
+      ],
+    })
+    mocks.getProjects.mockResolvedValue(
+      new Map([
+        [
+          'p1',
+          {
+            id: 'p1',
+            name: 'Changed',
+            description: '',
+            systemInstructions: '',
+            syncVersion: 2,
+          },
+        ],
+      ]),
+    )
+
+    const result = await buildClaudeProjectExport()
+
+    expect(result.projects).toEqual([])
+    expect(result.skippedProjects).toBe(1)
+    expect(mocks.listDocuments).not.toHaveBeenCalled()
   })
 })

@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const importCreate = vi.fn()
 const importUploadChunk = vi.fn()
 const importStart = vi.fn()
+const importStatus = vi.fn()
 
 vi.mock('@/services/sync-enclave/sync-api', () => ({
   importCreate: (...args: unknown[]) => importCreate(...args),
   importUploadChunk: (...args: unknown[]) => importUploadChunk(...args),
   importStart: (...args: unknown[]) => importStart(...args),
+  importStatus: (...args: unknown[]) => importStatus(...args),
 }))
 
 vi.mock('@/services/cloud/cek-encoding', () => ({
@@ -17,6 +19,7 @@ vi.mock('@/services/cloud/cek-encoding', () => ({
 import {
   IMPORT_CHUNK_BYTES,
   runOffDeviceImport,
+  waitForOffDeviceImport,
 } from '@/services/chat-import/off-device-import'
 
 function fileOf(bytes: Uint8Array): File {
@@ -28,6 +31,7 @@ describe('runOffDeviceImport', () => {
     importCreate.mockReset()
     importUploadChunk.mockReset()
     importStart.mockReset()
+    importStatus.mockReset()
     importCreate.mockResolvedValue({ job_id: 'job-1', upload_id: 'up-1' })
     importUploadChunk.mockResolvedValue({ ok: true })
     importStart.mockResolvedValue({
@@ -37,6 +41,48 @@ describe('runOffDeviceImport', () => {
       total: 0,
       errors: [],
     })
+  })
+
+  it('rejects cancelled and non-started status polling', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      waitForOffDeviceImport(
+        'job-1',
+        { status: 'running', imported: 0, failed: 0, total: 1 },
+        controller.signal,
+      ),
+    ).rejects.toThrow('cancelled')
+    await expect(
+      waitForOffDeviceImport('job-1', {
+        status: 'idle',
+        imported: 0,
+        failed: 0,
+        total: 1,
+      }),
+    ).rejects.toThrow('did not start')
+  })
+
+  it('bounds polling when an import never reaches a terminal state', async () => {
+    vi.useFakeTimers()
+    importStatus.mockResolvedValue({
+      status: 'running',
+      imported: 0,
+      failed: 0,
+      total: 1,
+    })
+    const polling = waitForOffDeviceImport('job-1', {
+      status: 'running',
+      imported: 0,
+      failed: 0,
+      total: 1,
+    })
+    const rejection = expect(polling).rejects.toThrow('check its status later')
+
+    await vi.runAllTimersAsync()
+    await rejection
+    vi.useRealTimers()
   })
 
   it('rejects an empty file before any upload', async () => {

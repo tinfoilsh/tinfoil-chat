@@ -17,6 +17,7 @@ import { projectEvents } from '@/services/project/project-events'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { resetSyncEnclaveClient } from '@/services/sync-enclave'
+import { logError } from '@/utils/error-handling'
 import { writePendingKeyRecovery } from '@/utils/pending-key-recovery'
 import {
   performSignoutCleanup,
@@ -169,6 +170,15 @@ describe('performSignoutCleanup', () => {
     expect(encryptionService.clearKey).not.toHaveBeenCalled()
   })
 
+  it('does not reset services when a requested recovery key is missing', async () => {
+    await expect(
+      performSignoutCleanup({ recoverEncryptionKeyForOwner: 'user_123' }),
+    ).rejects.toThrow('No encryption key available')
+
+    expect(cloudSync.resetForAccountChange).not.toHaveBeenCalled()
+    expect(indexedDBStorage.resetForAccountChange).not.toHaveBeenCalled()
+  })
+
   it('keeps the active-user marker until browser data is cleared', async () => {
     let finishReset!: () => void
     vi.mocked(indexedDBStorage.resetForAccountChange).mockReturnValueOnce(
@@ -239,5 +249,10 @@ describe('performSignoutCleanup', () => {
     )
 
     await expect(shouldWarnAboutLocalOnlyChats()).resolves.toBe(true)
+    expect(logError).toHaveBeenCalledWith(
+      'Failed to count local-only chats',
+      expect.any(Error),
+      expect.objectContaining({ action: 'shouldWarnAboutLocalOnlyChats' }),
+    )
   })
 })

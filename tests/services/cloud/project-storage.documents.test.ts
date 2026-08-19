@@ -2,6 +2,12 @@ import { ProjectStorageService } from '@/services/cloud/project-storage'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  accountGuard: {
+    assertCurrent: vi.fn(),
+    isCurrent: vi.fn(() => true),
+    userId: 'user-1',
+  },
+  canWriteToCloud: vi.fn().mockResolvedValue(true),
   enclaveDeleteAllProjects: vi.fn(),
   enclavePull: vi.fn(),
   enclavePush: vi.fn(),
@@ -14,7 +20,11 @@ vi.mock('@/services/auth', () => ({
 }))
 
 vi.mock('@/services/cloud/cloud-key-authorization', () => ({
-  canWriteToCloud: vi.fn().mockResolvedValue(true),
+  canWriteToCloud: mocks.canWriteToCloud,
+}))
+
+vi.mock('@/services/cloud/cloud-sync', () => ({
+  cloudSync: { createAccountOperationGuard: () => mocks.accountGuard },
 }))
 
 vi.mock('@/services/cloud/cek-encoding', () => ({
@@ -80,11 +90,25 @@ describe('ProjectStorageService documents', () => {
       deleted: 7,
     })
     expect(mocks.enclaveDeleteAllProjects).toHaveBeenCalledOnce()
+    expect(mocks.accountGuard.assertCurrent).toHaveBeenCalledTimes(2)
     expect(mocks.enclaveDeleteAllProjects).toHaveBeenCalledWith({
       keyB64: 'primary-key',
       idempotencyKey: 'idempotency-key',
     })
     expect(mocks.enclaveListStatus).not.toHaveBeenCalled()
+  })
+
+  it('does not delete projects after the active account changes', async () => {
+    const storage = new ProjectStorageService()
+    mocks.accountGuard.assertCurrent.mockImplementationOnce(() => {
+      throw new Error('Cloud account changed during synchronization')
+    })
+
+    await expect(storage.deleteAllProjects()).rejects.toThrow(
+      'Cloud account changed',
+    )
+
+    expect(mocks.enclaveDeleteAllProjects).not.toHaveBeenCalled()
   })
 
   it('derives a size when reading legacy document payloads', async () => {

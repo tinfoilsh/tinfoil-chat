@@ -1,11 +1,10 @@
-import {
-  PENDING_ENCRYPTION_KEY_RECOVERY,
-  USER_ENCRYPTION_KEY,
-} from '@/constants/storage-keys'
+import { PENDING_ENCRYPTION_KEY_RECOVERY } from '@/constants/storage-keys'
 import { encryptionService } from '@/services/encryption/encryption-service'
 
+const PENDING_KEY_RECOVERY_VERSION = 1
+
 export interface PendingKeyRecovery {
-  version: 1
+  version: typeof PENDING_KEY_RECOVERY_VERSION
   ownerUserId: string
   encryptionKey: string
 }
@@ -23,7 +22,7 @@ function parsePendingKeyRecovery(
   try {
     const record = JSON.parse(raw) as Partial<PendingKeyRecovery>
     if (
-      record.version !== 1 ||
+      record.version !== PENDING_KEY_RECOVERY_VERSION ||
       typeof record.ownerUserId !== 'string' ||
       record.ownerUserId.length === 0 ||
       typeof record.encryptionKey !== 'string' ||
@@ -39,9 +38,13 @@ function parsePendingKeyRecovery(
 
 export function getPendingKeyRecovery(): PendingKeyRecovery | null {
   if (typeof window === 'undefined') return null
-  return parsePendingKeyRecovery(
-    localStorage.getItem(PENDING_ENCRYPTION_KEY_RECOVERY),
-  )
+  try {
+    return parsePendingKeyRecovery(
+      localStorage.getItem(PENDING_ENCRYPTION_KEY_RECOVERY),
+    )
+  } catch {
+    return null
+  }
 }
 
 export function writePendingKeyRecovery(
@@ -53,9 +56,12 @@ export function writePendingKeyRecovery(
   }
 
   const record: PendingKeyRecovery = {
-    version: 1,
+    version: PENDING_KEY_RECOVERY_VERSION,
     ownerUserId,
     encryptionKey,
+  }
+  if (typeof window === 'undefined') {
+    throw new Error('Pending encryption key recovery storage is unavailable')
   }
   localStorage.setItem(PENDING_ENCRYPTION_KEY_RECOVERY, JSON.stringify(record))
 
@@ -71,10 +77,17 @@ export function writePendingKeyRecovery(
 }
 
 export function deletePendingKeyRecovery(): void {
-  localStorage.removeItem(PENDING_ENCRYPTION_KEY_RECOVERY)
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.removeItem(PENDING_ENCRYPTION_KEY_RECOVERY)
+  } catch {
+    // Best-effort cleanup when browser storage is unavailable.
+  }
 }
 
-export function restorePendingKeyForOwner(ownerUserId: string): boolean {
+export async function restorePendingKeyForOwner(
+  ownerUserId: string,
+): Promise<boolean> {
   const pending = getPendingKeyRecovery()
   if (!pending) {
     deletePendingKeyRecovery()
@@ -85,7 +98,7 @@ export function restorePendingKeyForOwner(ownerUserId: string): boolean {
     return false
   }
 
-  localStorage.setItem(USER_ENCRYPTION_KEY, pending.encryptionKey)
+  await encryptionService.replaceKeyBundle(pending.encryptionKey, [])
   deletePendingKeyRecovery()
   return true
 }

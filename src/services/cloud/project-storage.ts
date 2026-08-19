@@ -22,6 +22,7 @@ import {
 } from '../sync-enclave/sync-api'
 import { pullKey, requirePrimaryKeyB64 } from './cek-encoding'
 import { canWriteToCloud } from './cloud-key-authorization'
+import { cloudSync } from './cloud-sync'
 import { ProjectDataSchema, ProjectDocumentPlaintextSchema } from './schemas'
 
 const API_BASE_URL =
@@ -364,16 +365,20 @@ export class ProjectStorageService {
   async deleteAllProjects(): Promise<{
     deleted: number
   }> {
+    const guard = cloudSync.createAccountOperationGuard()
     if (!(await canWriteToCloud())) {
       throw new Error(
         'Cloud writes are blocked until your encryption key is verified',
       )
     }
 
-    return enclaveDeleteAllProjects({
+    guard.assertCurrent()
+    const result = await enclaveDeleteAllProjects({
       keyB64: requirePrimaryKeyB64(),
       idempotencyKey: newIdempotencyKey(),
     })
+    guard.assertCurrent()
+    return result
   }
 
   async listProjects(options?: {

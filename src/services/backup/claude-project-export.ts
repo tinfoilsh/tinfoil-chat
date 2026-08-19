@@ -50,11 +50,15 @@ export async function buildClaudeProjectExport(): Promise<ClaudeProjectExportRes
 
   for (const item of listed) {
     const project = fullById.get(item.id)
-    if (!project || project.decryptionFailed) {
+    if (
+      !project ||
+      project.decryptionFailed ||
+      project.syncVersion !== item.syncVersion
+    ) {
       skippedProjects++
       warnings.push({
         projectId: item.id,
-        message: 'Project could not be decrypted.',
+        message: 'Project could not be read consistently.',
       })
       continue
     }

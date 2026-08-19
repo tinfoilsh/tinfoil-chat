@@ -59,6 +59,13 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
     if (!skipProgressReporting) completeSignoutStep(step)
   }
 
+  if (recoverEncryptionKeyForOwner) {
+    const encryptionKey = getEncryptionKey()
+    if (!encryptionKey)
+      throw new Error('No encryption key available for recovery')
+    writePendingKeyRecovery(recoverEncryptionKeyForOwner, encryptionKey)
+  }
+
   invalidateProfileSyncGeneration(true)
   projectCache.invalidate()
   cloudSync.resetForAccountChange()
@@ -68,12 +75,6 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   // Clear encryption key immediately (in-memory + localStorage) before any
   // async work, so concurrent code cannot re-persist a stale key.
   reportStep(SIGNOUT_STEPS.CLEAR_KEY)
-  if (recoverEncryptionKeyForOwner) {
-    const encryptionKey = getEncryptionKey()
-    if (!encryptionKey)
-      throw new Error('No encryption key available for recovery')
-    writePendingKeyRecovery(recoverEncryptionKeyForOwner, encryptionKey)
-  }
   encryptionService.clearKey({ persist: true })
   completeStep(SIGNOUT_STEPS.CLEAR_KEY)
 
@@ -252,7 +253,11 @@ export function hasPasskeyBackup(): boolean {
 export async function shouldWarnAboutLocalOnlyChats(): Promise<boolean> {
   try {
     return (await indexedDBStorage.getLocalOnlyChatCount()) > 0
-  } catch {
+  } catch (error) {
+    logError('Failed to count local-only chats', error, {
+      component: 'signoutCleanup',
+      action: 'shouldWarnAboutLocalOnlyChats',
+    })
     return true
   }
 }

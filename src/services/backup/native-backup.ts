@@ -5,6 +5,7 @@ import { strFromU8, strToU8, zipSync } from 'fflate'
 import { z } from 'zod'
 
 import type { Attachment, Chat, Message } from '@/components/chat/types'
+import { AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP } from '@/constants/storage-keys'
 import { hasPrimaryKey } from '@/services/cloud/cek-encoding'
 import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { projectStorage } from '@/services/cloud/project-storage'
@@ -20,6 +21,7 @@ import { base64ToUint8Array, uint8ArrayToBase64 } from '@/utils/binary-codec'
 export const NATIVE_BACKUP_FORMAT = 'tinfoil-native-backup'
 export const NATIVE_CLOUD_IMPORT_FORMAT = 'tinfoil-native-cloud-import'
 export const NATIVE_BACKUP_VERSION = 1
+export const ANONYMOUS_BACKUP_RESTORE_USER_ID = 'anonymous-browser'
 
 const MANIFEST_PATH = 'manifest.json'
 const PROJECTS_PATH = 'projects.json'
@@ -87,7 +89,7 @@ const BackupMessageSchema = z
   .object({
     role: z.enum(['user', 'assistant']),
     content: z.string(),
-    timestamp: z.union([z.string(), z.date()]),
+    timestamp: z.union([z.string().datetime(), z.date()]),
     attachments: z.array(BackupAttachmentSchema).optional(),
   })
   .passthrough()
@@ -355,16 +357,28 @@ export async function buildNativeBackup(
   const warnings = [...(data.warnings ?? [])]
   const cloud = await serializeChats(data.cloudChats, 'cloud', files, warnings)
   const local = await serializeChats(data.localChats, 'local', files, warnings)
+  const projectIds = new Set(data.projects.map((project) => project.id))
+  for (const chat of [...data.cloudChats, ...data.localChats]) {
+    if (chat.projectId && !projectIds.has(chat.projectId)) {
+      warnings.push({
+        code: 'chat_project_not_exported',
+        kind: chat.isLocalOnly ? 'local_chats' : 'cloud_chats',
+        id: chat.id,
+        message:
+          'A chat was backed up without its project because the project was not exported.',
+      })
+    }
+  }
   const relationships: BackupRelationship[] = [
     ...data.cloudChats
-      .filter((chat) => chat.projectId)
+      .filter((chat) => chat.projectId && projectIds.has(chat.projectId))
       .map((chat) => ({
         chat_id: chat.id,
         project_id: chat.projectId!,
         location: 'cloud' as const,
       })),
     ...data.localChats
-      .filter((chat) => chat.projectId)
+      .filter((chat) => chat.projectId && projectIds.has(chat.projectId))
       .map((chat) => ({
         chat_id: chat.id,
         project_id: chat.projectId!,
@@ -891,6 +905,12 @@ export async function restoreNativeBackup(
     projectMappings: Record<string, string> = {},
   ) => {
     if (finalized) return local
+    if (
+      destinationUserId === ANONYMOUS_BACKUP_RESTORE_USER_ID &&
+      validated.localChats.length > 0
+    ) {
+      localStorage.setItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP, 'true')
+    }
     let imported = 0
     let skipped = 0
     for (const sourceChat of validated.localChats) {
@@ -1120,15 +1140,11 @@ async function enumerateCloudChats(): Promise<{
       continue
     }
     try {
-      const parsed = JSON.parse(content.content) as Omit<Chat, 'createdAt'> & {
-        createdAt: string
-      }
-      if (parsed.decryptionFailed || !Array.isArray(parsed.messages))
-        throw new Error()
+      const parsed = BackupChatSchema.parse(JSON.parse(content.content))
       chats.push({
         ...parsed,
         id: item.id,
-        projectId: item.projectId ?? parsed.projectId,
+        projectId: item.projectId,
         updatedAt: item.updatedAt,
         createdAt: new Date(parsed.createdAt),
         messages: parsed.messages.map((message) => ({

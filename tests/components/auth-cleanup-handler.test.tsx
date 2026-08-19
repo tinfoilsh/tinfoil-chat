@@ -3,6 +3,7 @@ import { ACCOUNT_RESET_FAILED_EVENT } from '@/constants/auth-events'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
+  AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP,
   PENDING_ENCRYPTION_KEY_RECOVERY,
 } from '@/constants/storage-keys'
 import { act, fireEvent, render, screen } from '@testing-library/react'
@@ -91,7 +92,7 @@ describe('AuthCleanupHandler', () => {
     mockGetEncryptionKey.mockReturnValue(null)
     mockHasPasskeyBackup.mockReturnValue(true)
     mockGetPendingKeyRecovery.mockReturnValue(null)
-    mockRestorePendingKeyForOwner.mockReturnValue(false)
+    mockRestorePendingKeyForOwner.mockResolvedValue(false)
     vi.spyOn(window.location, 'reload').mockImplementation(() => {})
   })
 
@@ -211,6 +212,17 @@ describe('AuthCleanupHandler', () => {
 
     expect(mockPerformUserSwitchCleanup).toHaveBeenCalledWith('user_new')
     expect(mockPerformSignoutCleanup).not.toHaveBeenCalled()
+  })
+
+  it('clears anonymous restored data before a user signs in', () => {
+    localStorage.setItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP, 'true')
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_new' } }
+
+    render(createElement(AuthCleanupHandler))
+
+    expect(mockPerformUserSwitchCleanup).toHaveBeenCalledWith('user_new')
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBeNull()
   })
 
   it('blocks the new account without reload-looping when cleanup fails', async () => {
@@ -353,7 +365,7 @@ describe('AuthCleanupHandler', () => {
   it('restores pending recovery before the same owner continues', () => {
     authState = { isSignedIn: true, isLoaded: true }
     userState = { user: { id: 'user_123' } }
-    mockRestorePendingKeyForOwner.mockReturnValue(true)
+    mockRestorePendingKeyForOwner.mockResolvedValue(true)
 
     render(createElement(AuthCleanupHandler))
 

@@ -234,6 +234,77 @@ describe('native backup collection', () => {
     })
   })
 
+  it('uses authoritative null project metadata from the cloud listing', async () => {
+    mocks.listProjects.mockReset()
+    mocks.listProjects.mockResolvedValue({ projects: [] })
+    mocks.listChats.mockReset()
+    mocks.listChats.mockResolvedValue({
+      conversations: [
+        {
+          id: 'detached',
+          projectId: undefined,
+          syncVersion: 1,
+          updatedAt: timestamp,
+        },
+      ],
+    })
+    mocks.downloadChats.mockReset()
+    mocks.downloadChats.mockResolvedValue([
+      {
+        id: 'detached',
+        syncVersion: 1,
+        content: JSON.stringify({
+          id: 'detached',
+          title: 'Detached',
+          projectId: 'stale-project',
+          createdAt: timestamp,
+          messages: [{ role: 'user', content: 'hello', timestamp }],
+        }),
+      },
+    ])
+    mocks.getAllChats.mockReset()
+    mocks.getAllChats.mockResolvedValue([])
+
+    const archive = await createNativeBackup({ cloudDataExpected: true })
+    const validated = await validateNativeBackup(archive.data)
+
+    expect(validated.cloudChats[0].projectId).toBeUndefined()
+    expect(validated.relationships).toEqual([])
+  })
+
+  it('omits malformed cloud chats with an incomplete-backup warning', async () => {
+    mocks.listProjects.mockReset()
+    mocks.listProjects.mockResolvedValue({ projects: [] })
+    mocks.listChats.mockReset()
+    mocks.listChats.mockResolvedValue({
+      conversations: [{ id: 'invalid', syncVersion: 1, updatedAt: timestamp }],
+    })
+    mocks.downloadChats.mockReset()
+    mocks.downloadChats.mockResolvedValue([
+      {
+        id: 'invalid',
+        syncVersion: 1,
+        content: JSON.stringify({
+          id: 'invalid',
+          title: 'Invalid',
+          createdAt: timestamp,
+          messages: [
+            { role: 'user', content: 'hello', timestamp: 'not-a-date' },
+          ],
+        }),
+      },
+    ])
+    mocks.getAllChats.mockReset()
+    mocks.getAllChats.mockResolvedValue([])
+
+    const archive = await createNativeBackup({ cloudDataExpected: true })
+
+    expect(archive.manifest.complete).toBe(false)
+    expect(archive.manifest.warnings).toContainEqual(
+      expect.objectContaining({ code: 'cloud_chat_invalid', id: 'invalid' }),
+    )
+  })
+
   it('keeps anonymous local-only backups complete', async () => {
     mocks.isAuthenticated.mockResolvedValue(false)
     mocks.getAllChats.mockReset()

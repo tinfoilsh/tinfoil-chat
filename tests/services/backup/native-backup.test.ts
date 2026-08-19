@@ -1,5 +1,7 @@
 import type { Chat } from '@/components/chat/types'
+import { AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP } from '@/constants/storage-keys'
 import {
+  ANONYMOUS_BACKUP_RESTORE_USER_ID,
   buildNativeBackup,
   NATIVE_BACKUP_FORMAT,
   NATIVE_CLOUD_IMPORT_FORMAT,
@@ -143,6 +145,23 @@ describe('native Tinfoil backup', () => {
     ])
   })
 
+  it('keeps chats restorable when their project was not exported', async () => {
+    const built = await buildNativeBackup({
+      projects: [],
+      projectDocuments: [],
+      cloudChats: [],
+      localChats: [chat('local-1', true)],
+    })
+
+    const validated = await validateNativeBackup(built.data)
+
+    expect(validated.relationships).toEqual([])
+    expect(validated.manifest.complete).toBe(false)
+    expect(validated.manifest.warnings).toContainEqual(
+      expect.objectContaining({ code: 'chat_project_not_exported' }),
+    )
+  })
+
   it('rejects malformed archives, hash changes, counts and schemas', async () => {
     await expect(validateNativeBackup(strToU8('not a zip'))).rejects.toThrow(
       'valid ZIP',
@@ -171,6 +190,14 @@ describe('native Tinfoil backup', () => {
     invalidSchema['manifest.json'] = strToU8(JSON.stringify(manifest))
     await expect(validateNativeBackup(zipSync(invalidSchema))).rejects.toThrow(
       'version 1 schema',
+    )
+
+    const invalidCounts = unzipSync(built.data)
+    const countManifest = JSON.parse(strFromU8(invalidCounts['manifest.json']))
+    countManifest.counts.projects = 2
+    invalidCounts['manifest.json'] = strToU8(JSON.stringify(countManifest))
+    await expect(validateNativeBackup(zipSync(invalidCounts))).rejects.toThrow(
+      'count mismatch',
     )
   })
 
@@ -264,6 +291,22 @@ describe('native Tinfoil backup', () => {
     expect(stored[0].projectId).toBeUndefined()
     expect(result.warnings).toContainEqual(
       expect.objectContaining({ code: 'local_chat_project_not_restored' }),
+    )
+  })
+
+  it('marks anonymous local restores for cleanup before sign-in', async () => {
+    localStorage.removeItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP)
+    const built = await archive()
+    const result = await restoreNativeBackup(
+      built.data,
+      ANONYMOUS_BACKUP_RESTORE_USER_ID,
+      { getChat: async () => null, saveChat: async () => undefined },
+    )
+
+    await result.finalizeLocal()
+
+    expect(localStorage.getItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP)).toBe(
+      'true',
     )
   })
 

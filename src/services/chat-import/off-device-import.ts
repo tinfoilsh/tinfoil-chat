@@ -23,6 +23,7 @@ import { sha256 } from '@noble/hashes/sha2.js'
 export const IMPORT_CHUNK_BYTES = 8 * 1024 * 1024
 export const IMPORT_MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 const IMPORT_STATUS_POLL_MS = 1000
+const IMPORT_STATUS_MAX_POLLS = 300
 
 export interface OffDeviceImportResult {
   jobId: string
@@ -105,11 +106,20 @@ export async function runOffDeviceImport(
 export async function waitForOffDeviceImport(
   jobId: string,
   initialStatus: ImportStatusResponse,
+  signal?: AbortSignal,
 ): Promise<ImportStatusResponse> {
   let status = initialStatus
+  let polls = 0
   while (status.status === 'staging' || status.status === 'running') {
+    if (signal?.aborted) throw new Error('Import status polling was cancelled')
+    if (polls >= IMPORT_STATUS_MAX_POLLS) {
+      throw new Error('Import is still running; check its status later')
+    }
     await new Promise((resolve) => setTimeout(resolve, IMPORT_STATUS_POLL_MS))
+    if (signal?.aborted) throw new Error('Import status polling was cancelled')
     status = await importStatus(jobId)
+    polls++
   }
+  if (status.status === 'idle') throw new Error('Import did not start')
   return status
 }

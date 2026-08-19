@@ -43,18 +43,21 @@ describe('pending key recovery', () => {
     expect(() => writePendingKeyRecovery('user_1', 'not-a-key')).toThrow()
   })
 
-  it('restores only for the same owner and consumes the pending record', () => {
+  it('restores only for the same owner and consumes the pending record', async () => {
     writePendingKeyRecovery('user_1', encryptionKey)
+    await encryptionService.setKey(await encryptionService.generateKey())
 
-    expect(restorePendingKeyForOwner('user_1')).toBe(true)
+    await expect(restorePendingKeyForOwner('user_1')).resolves.toBe(true)
     expect(localStorage.getItem(USER_ENCRYPTION_KEY)).toBe(encryptionKey)
+    expect(encryptionService.getCurrentKeyBytes()).not.toBeNull()
+    expect(encryptionService.getAllKeys().alternatives).toEqual([])
     expect(getPendingKeyRecovery()).toBeNull()
   })
 
-  it('discards a different owner record without loading its key', () => {
+  it('discards a different owner record without loading its key', async () => {
     writePendingKeyRecovery('user_1', encryptionKey)
 
-    expect(restorePendingKeyForOwner('user_2')).toBe(false)
+    await expect(restorePendingKeyForOwner('user_2')).resolves.toBe(false)
     expect(localStorage.getItem(USER_ENCRYPTION_KEY)).toBeNull()
     expect(getPendingKeyRecovery()).toBeNull()
   })
