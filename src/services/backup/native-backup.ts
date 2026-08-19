@@ -22,6 +22,7 @@ export const NATIVE_BACKUP_FORMAT = 'tinfoil-native-backup'
 export const NATIVE_CLOUD_IMPORT_FORMAT = 'tinfoil-native-cloud-import'
 export const NATIVE_BACKUP_VERSION = 1
 export const ANONYMOUS_BACKUP_RESTORE_USER_ID = 'anonymous-browser'
+export const NATIVE_BACKUP_MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 
 const MANIFEST_PATH = 'manifest.json'
 const PROJECTS_PATH = 'projects.json'
@@ -30,11 +31,44 @@ const CLOUD_CHATS_PATH = 'cloud_chats.json'
 const LOCAL_CHATS_PATH = 'local_chats.json'
 const RELATIONSHIPS_PATH = 'relationships.json'
 const PAGE_SIZE = 100
-const MAX_BACKUP_ARCHIVE_BYTES = 512 * 1024 * 1024
+const MAX_BACKUP_ARCHIVE_BYTES = NATIVE_BACKUP_MAX_ARCHIVE_BYTES
 const MAX_BACKUP_ENTRIES = 50_000
 const MAX_BACKUP_ENTRY_BYTES = 256 * 1024 * 1024
 const MAX_BACKUP_UNCOMPRESSED_BYTES = 1024 * 1024 * 1024
 const MAX_BACKUP_MANIFEST_BYTES = 32 * 1024 * 1024
+const MAX_CLOUD_BLOB_BYTES = 32 * 1024 * 1024
+const MAX_CLOUD_ENTITY_BYTES = 256 * 1024 * 1024
+const MAX_CLOUD_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
+const MAX_CLOUD_MESSAGES = 2_000_000
+const MAX_CLOUD_ATTACHMENTS = 100_000
+
+class BackupLimitError extends Error {}
+
+const CHAT_TRANSIENT_FIELDS = [
+  'clock',
+  'clockVersion',
+  'codeExecutionAccessToken',
+  'dataCorrupted',
+  'decryptionFailed',
+  'formatVersion',
+  'isBlankChat',
+  'isMetadataOnly',
+  'isTemporary',
+  'lastAccessedAt',
+  'loadedAt',
+  'locallyModified',
+  'messageCount',
+  'pendingRecoveries',
+  'pendingSave',
+  'pendingUpload',
+  'projectLocallyModified',
+  'syncPending',
+  'syncUserId',
+  'syncedAt',
+  'syncVersion',
+  'version',
+  'writer',
+] as const
 
 const ProjectSchema = z
   .object({
@@ -182,7 +216,7 @@ export interface NativeCloudImportManifest {
 
 interface BackupAttachment extends Omit<
   Attachment,
-  'base64' | 'thumbnailBase64'
+  'base64' | 'thumbnailBase64' | 'encryptionKey'
 > {
   backup_path?: string
 }
@@ -277,6 +311,21 @@ function asDateString(value: Date | string): string {
   return new Date(value).toISOString()
 }
 
+function portableChatFields(chat: Chat): Omit<Chat, 'messages' | 'createdAt'> {
+  const portable = { ...chat } as Record<string, unknown>
+  for (const field of CHAT_TRANSIENT_FIELDS) delete portable[field]
+  delete portable.messages
+  delete portable.createdAt
+  return portable as Omit<Chat, 'messages' | 'createdAt'>
+}
+
+function portableCloudChatFields(chat: Chat): Record<string, unknown> {
+  const portable = portableChatFields(chat) as Record<string, unknown>
+  delete portable.id
+  delete portable.projectId
+  return portable
+}
+
 async function imageBytes(attachment: Attachment): Promise<Uint8Array | null> {
   if (attachment.base64) return base64ToUint8Array(attachment.base64)
   if (!attachment.encryptionKey) return null
@@ -311,6 +360,14 @@ async function serializeChats(
           try {
             const bytes = await imageBytes(attachment)
             if (bytes) {
+              if (
+                location === 'cloud' &&
+                bytes.byteLength > MAX_CLOUD_BLOB_BYTES
+              ) {
+                throw new BackupLimitError(
+                  `Image ${attachment.fileName} exceeds the cloud restore limit`,
+                )
+              }
               const path = `images/${location}/${safeSegment(chat.id)}/${safeSegment(attachment.id)}/${safeSegment(attachment.fileName)}`
               files[path] = bytes
               exported.backup_path = path
@@ -324,7 +381,8 @@ async function serializeChats(
                 message: 'An image could not be read and was omitted.',
               })
             }
-          } catch {
+          } catch (error) {
+            if (error instanceof BackupLimitError) throw error
             warnings.push({
               code: 'image_unreadable',
               kind: 'images',
@@ -342,7 +400,7 @@ async function serializeChats(
       })
     }
     output.push({
-      ...chat,
+      ...portableChatFields(chat),
       createdAt: asDateString(chat.createdAt),
       messages,
     })
@@ -427,11 +485,37 @@ export async function buildNativeBackup(
     warnings,
   }
   files[MANIFEST_PATH] = jsonBytes(manifest)
+  assertRestorableArchive(files)
+  const archiveData = zipSync(files)
+  if (archiveData.byteLength > MAX_BACKUP_ARCHIVE_BYTES) {
+    throw new Error('Backup exceeds the 512 MiB compressed archive limit')
+  }
   const date = manifest.created_at.slice(0, 10)
   return {
-    data: zipSync(files),
+    data: archiveData,
     filename: `tinfoil-backup-${date}.zip`,
     manifest,
+  }
+}
+
+function assertRestorableArchive(files: Record<string, Uint8Array>): void {
+  const entries = Object.entries(files)
+  if (entries.length > MAX_BACKUP_ENTRIES) {
+    throw new Error('Backup contains too many files to restore')
+  }
+  let totalSize = 0
+  for (const [path, bytes] of entries) {
+    const limit =
+      path === MANIFEST_PATH
+        ? MAX_BACKUP_MANIFEST_BYTES
+        : MAX_BACKUP_ENTRY_BYTES
+    if (bytes.byteLength > limit) {
+      throw new Error(`Backup file exceeds the restore limit: ${path}`)
+    }
+    totalSize += bytes.byteLength
+    if (totalSize > MAX_BACKUP_UNCOMPRESSED_BYTES) {
+      throw new Error('Backup exceeds the uncompressed restore limit')
+    }
   }
 }
 
@@ -715,6 +799,7 @@ function hydrateLocalChat(
   id: string,
   files: Record<string, Uint8Array>,
   projectId: string | undefined,
+  destinationUserId: string,
 ): Chat {
   return {
     ...chat,
@@ -722,6 +807,7 @@ function hydrateLocalChat(
     projectId,
     createdAt: new Date(chat.createdAt),
     isLocalOnly: true,
+    syncUserId: destinationUserId,
     messages: chat.messages.map((message) => ({
       ...message,
       timestamp: new Date(message.timestamp),
@@ -735,7 +821,7 @@ function hydrateLocalChat(
         }
       }),
     })),
-  }
+  } as Chat
 }
 
 function cloudEntity(
@@ -769,6 +855,21 @@ function buildCloudImport(validated: ValidatedNativeBackup): File | null {
       .map((relationship) => [relationship.chat_id, relationship.project_id]),
   )
   const blobPathForSource = new Map<string, string>()
+  let messageCount = 0
+  let attachmentCount = 0
+
+  for (const chat of validated.cloudChats) {
+    messageCount += chat.messages.length
+    for (const message of chat.messages) {
+      attachmentCount += message.attachments?.length ?? 0
+    }
+  }
+  if (messageCount > MAX_CLOUD_MESSAGES) {
+    throw new Error('Cloud restore package contains too many messages')
+  }
+  if (attachmentCount > MAX_CLOUD_ATTACHMENTS) {
+    throw new Error('Cloud restore package contains too many attachments')
+  }
 
   for (const project of validated.projects) {
     cloudEntity(cloudFiles, entities, 'project', project.id, undefined, {
@@ -797,13 +898,7 @@ function buildCloudImport(validated: ValidatedNativeBackup): File | null {
   }
   for (const chat of validated.cloudChats) {
     const messages = chat.messages.map((message) => ({
-      role: message.role,
-      content: message.content,
-      timestamp: message.timestamp,
-      ...(message.thoughts ? { thoughts: message.thoughts } : {}),
-      ...(message.thinkingDuration
-        ? { thinkingDuration: message.thinkingDuration }
-        : {}),
+      ...message,
       ...(message.attachments
         ? {
             attachments: message.attachments.map((attachment) => {
@@ -823,22 +918,10 @@ function buildCloudImport(validated: ValidatedNativeBackup): File | null {
                   blobPathForSource.set(sourcePath, archivePath)
                 }
               }
+              const { backup_path: _backupPath, ...portableAttachment } =
+                attachment
               return {
-                ...(attachment.id ? { id: attachment.id } : {}),
-                type: attachment.type,
-                fileName: attachment.fileName,
-                ...(attachment.mimeType
-                  ? { mimeType: attachment.mimeType }
-                  : {}),
-                ...(attachment.textContent
-                  ? { textContent: attachment.textContent }
-                  : {}),
-                ...(attachment.description
-                  ? { description: attachment.description }
-                  : {}),
-                ...(attachment.fileSize !== undefined
-                  ? { fileSize: attachment.fileSize }
-                  : {}),
+                ...portableAttachment,
                 ...(archivePath ? { archivePath } : {}),
               }
             }),
@@ -852,7 +935,7 @@ function buildCloudImport(validated: ValidatedNativeBackup): File | null {
       chat.id,
       projectForChat.get(chat.id),
       {
-        title: chat.title,
+        ...portableCloudChatFields(chat as unknown as Chat),
         messages,
         createdAt: chat.createdAt,
         isLocalOnly: false,
@@ -874,13 +957,36 @@ function buildCloudImport(validated: ValidatedNativeBackup): File | null {
     blobs,
   }
   cloudFiles[MANIFEST_PATH] = jsonBytes(manifest)
-  return new File(
-    [new Uint8Array(zipSync(cloudFiles))],
-    'tinfoil-cloud-import.zip',
-    {
-      type: 'application/zip',
-    },
-  )
+  const entries = Object.entries(cloudFiles)
+  if (entries.length > MAX_BACKUP_ENTRIES) {
+    throw new Error('Cloud restore package contains too many files')
+  }
+  let totalSize = 0
+  let entitySize = 0
+  for (const [path, bytes] of entries) {
+    const isBlob = path.startsWith('blobs/')
+    const limit = isBlob ? MAX_CLOUD_BLOB_BYTES : MAX_CLOUD_ENTITY_BYTES
+    if (bytes.byteLength > limit) {
+      throw new Error(`Cloud restore file exceeds its size limit: ${path}`)
+    }
+    totalSize += bytes.byteLength
+    if (path.startsWith('entities/')) {
+      entitySize += bytes.byteLength
+      if (entitySize > MAX_CLOUD_ENTITY_BYTES) {
+        throw new Error('Cloud restore entity data exceeds its aggregate limit')
+      }
+    }
+    if (totalSize > MAX_CLOUD_UNCOMPRESSED_BYTES) {
+      throw new Error('Cloud restore package exceeds its uncompressed limit')
+    }
+  }
+  const archiveData = zipSync(cloudFiles)
+  if (archiveData.byteLength > MAX_BACKUP_ARCHIVE_BYTES) {
+    throw new Error('Cloud restore package exceeds the 512 MiB upload limit')
+  }
+  return new File([new Uint8Array(archiveData)], 'tinfoil-cloud-import.zip', {
+    type: 'application/zip',
+  })
 }
 
 export async function restoreNativeBackup(
@@ -901,10 +1007,16 @@ export async function restoreNativeBackup(
   let local = { imported: 0, skipped: 0, conflicts: 0 }
   let finalized = false
   const warnings = [...validated.manifest.warnings]
-  const finalizeLocal = async (
-    projectMappings: Record<string, string> = {},
-  ) => {
+  const finalizeLocal = async (projectMappings?: Record<string, string>) => {
     if (finalized) return local
+    if (
+      cloudArchive &&
+      projectMappings === undefined &&
+      validated.localChats.some((chat) => localRelationship.has(chat.id))
+    ) {
+      return local
+    }
+    const resolvedProjectMappings = projectMappings ?? {}
     if (
       destinationUserId === ANONYMOUS_BACKUP_RESTORE_USER_ID &&
       validated.localChats.length > 0
@@ -916,7 +1028,7 @@ export async function restoreNativeBackup(
     for (const sourceChat of validated.localChats) {
       const sourceProjectId = localRelationship.get(sourceChat.id)
       const projectId = sourceProjectId
-        ? projectMappings[sourceProjectId]
+        ? resolvedProjectMappings[sourceProjectId]
         : undefined
       if (sourceProjectId && !projectId) {
         warnings.push({
@@ -937,6 +1049,7 @@ export async function restoreNativeBackup(
         id,
         validated.files,
         projectId,
+        destinationUserId,
       )
       const existing = await store.getChat(id)
       if (existing) {

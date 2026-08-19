@@ -8,6 +8,7 @@ import {
   restoreNativeBackup,
   validateNativeBackup,
 } from '@/services/backup/native-backup'
+import { uint8ArrayToBase64 } from '@/utils/binary-codec'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { describe, expect, it, vi } from 'vitest'
 import contractFixture from '../../fixtures/native-cloud-import-v1.json'
@@ -18,30 +19,136 @@ function chat(id: string, isLocalOnly: boolean, image = false): Chat {
   return {
     id,
     title: `${id} title`,
+    titleState: 'manual',
     createdAt: new Date(createdAt),
     updatedAt: createdAt,
     isLocalOnly,
     projectId: 'project-1',
+    presetId: 'preset-1',
+    model: 'gpt-oss-120b',
+    webSearchEnabled: true,
+    codeExecutionAccessToken: 'must-not-be-exported',
+    syncUserId: 'source-user',
+    reasoningEffort: 'high',
+    thinkingEnabled: true,
+    toolsEnabled: ['web_search', 'code_execution'],
     messages: [
       {
         role: 'user',
         content: 'hello',
+        turnId: 'turn-1',
+        modelDisplayName: 'GPT OSS 120B',
         timestamp: new Date(createdAt),
-        attachments: image
-          ? [
+        thoughts: 'Reasoning text',
+        isThinking: false,
+        thinkingDuration: 4,
+        urlFetches: [
+          {
+            id: 'fetch-1',
+            url: 'https://example.com/article',
+            status: 'completed',
+          },
+        ],
+        webSearch: {
+          query: 'portable backups',
+          status: 'completed',
+          sources: [
+            { title: 'Backup source', url: 'https://example.com/source' },
+          ],
+        },
+        webSearchBeforeThinking: true,
+        annotations: [
+          {
+            type: 'url_citation',
+            url_citation: {
+              title: 'Citation',
+              url: 'https://example.com/citation',
+              start_index: 0,
+              end_index: 5,
+            },
+          },
+        ],
+        searchReasoning: 'Search rationale',
+        quote: 'Quoted text',
+        timeline: [
+          {
+            type: 'thinking',
+            id: 'thinking-1',
+            content: 'Reasoning text',
+            isThinking: false,
+            duration: 4,
+          },
+          {
+            type: 'tool_call',
+            id: 'tool-1',
+            toolCallId: 'call-1',
+            name: 'lookup',
+            arguments: '{"topic":"backup"}',
+            resolvedAt: 1,
+            resolution: { text: 'Approved', data: { keep: true } },
+          },
+          {
+            type: 'code_exec',
+            id: 'code-1',
+            calls: [
               {
-                id: `${id}-image`,
-                type: 'image',
-                fileName: 'photo.png',
-                mimeType: 'image/png',
-                base64: btoa('image bytes'),
-                encryptionKey: 'must-not-be-exported',
+                id: 'exec-1',
+                toolName: 'python',
+                arguments: { code: 'print(1)' },
+                status: 'completed',
+                output: '1',
               },
-            ]
-          : undefined,
+            ],
+          },
+        ],
+        toolCalls: [
+          { id: 'call-1', name: 'lookup', arguments: '{"topic":"backup"}' },
+        ],
+        codeExecCalls: [
+          {
+            id: 'exec-1',
+            toolName: 'python',
+            arguments: { code: 'print(1)' },
+            status: 'completed',
+            output: '1',
+          },
+        ],
+        attachments: [
+          ...(image
+            ? [
+                {
+                  id: `${id}-image`,
+                  type: 'image' as const,
+                  fileName: 'photo.png',
+                  mimeType: 'image/png',
+                  base64: btoa(
+                    `\x89PNG\r\n\x1a\n${String.fromCharCode(0x42).repeat(64)}`,
+                  ),
+                  encryptionKey: 'must-not-be-exported',
+                },
+              ]
+            : []),
+          {
+            id: `${id}-document`,
+            type: 'document',
+            fileName: 'notes.pdf',
+            mimeType: 'application/pdf',
+            textContent: 'Document text',
+            description: 'Document description',
+            fileSize: 123,
+            pages: [
+              {
+                page: 1,
+                text: 'Page text',
+                image: 'page-preview',
+                is_scanned: true,
+              },
+            ],
+          },
+        ],
       },
     ],
-  }
+  } as Chat
 }
 
 async function archive(complete = true, backupId?: string) {
@@ -134,6 +241,36 @@ describe('native Tinfoil backup', () => {
     ).toBe(true)
     expect(JSON.stringify(validated.cloudChats)).not.toContain('encryptionKey')
     expect(JSON.stringify(validated.cloudChats)).not.toContain('base64')
+    expect(JSON.stringify(validated.cloudChats)).not.toContain('source-user')
+    expect(JSON.stringify(validated.cloudChats)).not.toContain(
+      'must-not-be-exported',
+    )
+    expect(validated.cloudChats[0]).toMatchObject({
+      titleState: 'manual',
+      model: 'gpt-oss-120b',
+      reasoningEffort: 'high',
+      thinkingEnabled: true,
+    })
+    const portableMessage = validated.cloudChats[0].messages[0]
+    expect(portableMessage).toMatchObject({
+      thoughts: 'Reasoning text',
+      quote: 'Quoted text',
+      annotations: [{ url_citation: { title: 'Citation' } }],
+    })
+    expect(portableMessage.timeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'tool_call', name: 'lookup' }),
+        expect.objectContaining({ type: 'code_exec' }),
+      ]),
+    )
+    expect(
+      portableMessage.attachments?.find(
+        (attachment) => attachment.type === 'document',
+      ),
+    ).toMatchObject({
+      textContent: 'Document text',
+      pages: [expect.objectContaining({ page: 1, text: 'Page text' })],
+    })
   })
 
   it('keeps an incomplete archive downloadable with structured warnings', async () => {
@@ -217,6 +354,9 @@ describe('native Tinfoil backup', () => {
       store,
     )
     expect(first.local.imported).toBe(0)
+    await first.finalizeLocal()
+    expect(first.local.imported).toBe(0)
+    expect(stored.size).toBe(0)
     await first.finalizeLocal({ 'project-1': 'destination-project-1' })
     const second = await restoreNativeBackup(
       built.data,
@@ -227,9 +367,35 @@ describe('native Tinfoil backup', () => {
 
     expect(first.local).toEqual({ imported: 1, skipped: 0, conflicts: 0 })
     expect(second.local).toEqual({ imported: 0, skipped: 1, conflicts: 0 })
-    expect([...stored.values()][0]).toMatchObject({
+    const restored = [...stored.values()][0] as Chat & {
+      syncUserId?: string
+      reasoningEffort?: string
+    }
+    expect(restored).toMatchObject({
       isLocalOnly: true,
       projectId: 'destination-project-1',
+      syncUserId: 'destination-user',
+      titleState: 'manual',
+      model: 'gpt-oss-120b',
+      reasoningEffort: 'high',
+    })
+    expect(restored.messages[0]).toMatchObject({
+      thoughts: 'Reasoning text',
+      quote: 'Quoted text',
+    })
+    expect(restored.messages[0].timeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'tool_call' }),
+        expect.objectContaining({ type: 'code_exec' }),
+      ]),
+    )
+    expect(
+      restored.messages[0].attachments?.find(
+        (attachment) => attachment.type === 'document',
+      ),
+    ).toMatchObject({
+      textContent: 'Document text',
+      pages: [expect.objectContaining({ page: 1, text: 'Page text' })],
     })
     const cloudFiles = unzipSync(
       new Uint8Array(await first.cloudArchive!.arrayBuffer()),
@@ -269,7 +435,7 @@ describe('native Tinfoil backup', () => {
     ).toEqual(contractFixture.blobs.map((blob) => blob.path))
     expect(
       cloudManifest.blobs.map((blob: { path: string }) =>
-        btoa(strFromU8(cloudFiles[blob.path])),
+        uint8ArrayToBase64(cloudFiles[blob.path]),
       ),
     ).toEqual(contractFixture.blobs.map((blob) => blob.base64))
     expect(cloudFiles['local_chats.json']).toBeUndefined()
@@ -303,7 +469,7 @@ describe('native Tinfoil backup', () => {
       { getChat: async () => null, saveChat: async () => undefined },
     )
 
-    await result.finalizeLocal()
+    await result.finalizeLocal({})
 
     expect(localStorage.getItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP)).toBe(
       'true',

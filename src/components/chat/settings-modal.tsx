@@ -28,6 +28,7 @@ import { buildClaudeProjectExport } from '@/services/backup/claude-project-expor
 import {
   ANONYMOUS_BACKUP_RESTORE_USER_ID,
   createNativeBackup,
+  NATIVE_BACKUP_MAX_ARCHIVE_BYTES,
   restoreNativeBackup,
   validateNativeBackup,
   type BackupWarning,
@@ -2143,6 +2144,9 @@ export function SettingsModal({
       conflicts: number
     } | null = null
     try {
+      if (file.size > NATIVE_BACKUP_MAX_ARCHIVE_BYTES) {
+        throw new Error('The selected backup archive is too large')
+      }
       const bytes = new Uint8Array(await file.arrayBuffer())
       const validated = await validateNativeBackup(bytes)
       if (!validated.manifest.complete) {
@@ -2175,7 +2179,7 @@ export function SettingsModal({
         bytes,
         user?.id ?? ANONYMOUS_BACKUP_RESTORE_USER_ID,
       )
-      restoredLocal = result.local
+      restoredLocal = result.cloudArchive ? null : result.local
       let cloudChatsImported = 0
       let cloudProjectsImported = 0
       let cloudDocumentsImported = 0
@@ -2211,22 +2215,13 @@ export function SettingsModal({
                 `${detachedLocalChats} local chat${detachedLocalChats === 1 ? ' was' : 's were'} restored without a project because the project could not be restored.`,
               )
             }
-          } else {
-            restoredLocal = await result.finalizeLocal()
-            if (!cloudPending && cloudErrors.length === 0) {
+          } else if (cloudStatus.status === 'failed') {
+            restoredLocal = await result.finalizeLocal({})
+            if (cloudErrors.length === 0) {
               cloudErrors = ['Cloud restore failed.']
             }
           }
         } catch (error) {
-          try {
-            restoredLocal = await result.finalizeLocal()
-            await onChatsUpdated?.()
-          } catch (finalizeError) {
-            logError('Failed to finalize local backup restore', finalizeError, {
-              component: 'SettingsModal',
-              action: 'handleRestoreNativeBackup',
-            })
-          }
           throw error
         }
       }
@@ -2255,7 +2250,7 @@ export function SettingsModal({
         warnings,
         pending: cloudPending,
         message: cloudPending
-          ? `Local chats: ${result.local.imported} imported, ${result.local.skipped} already restored. The cloud restore continues securely, and we'll email you when it's done.`
+          ? `Local chats are waiting for cloud project mappings and have not been restored yet. The cloud restore continues securely, and we'll email you when it's done. Re-import this backup later to finish restoring them.`
           : `Local chats: ${result.local.imported} imported, ${result.local.skipped} already restored. Cloud package: ${result.cloudCounts.cloud_chats} chats, ${result.cloudCounts.projects} projects, ${result.cloudCounts.project_documents} documents, ${result.cloudCounts.relationships} relationships, ${result.cloudCounts.images} images.`,
       })
       onChatsUpdated?.()
@@ -2267,7 +2262,7 @@ export function SettingsModal({
             ? 'Restore partially complete'
             : 'Restore complete',
         description: cloudPending
-          ? "Local chats are restored. We'll email you when the cloud restore is done."
+          ? "Local chats are still pending. We'll email you when the cloud restore is done."
           : errors.length > 0
             ? errors[0]
             : partial

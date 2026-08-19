@@ -38,32 +38,140 @@
       "project_source_id": "project-1",
       "payload": {
         "title": "cloud-1 title",
+        "titleState": "manual",
+        "updatedAt": "2026-08-18T12:00:00.000Z",
+        "isLocalOnly": false,
+        "presetId": "preset-1",
+        "model": "gpt-oss-120b",
+        "webSearchEnabled": true,
+        "reasoningEffort": "high",
+        "thinkingEnabled": true,
+        "toolsEnabled": ["web_search", "code_execution"],
         "messages": [
           {
             "role": "user",
             "content": "hello",
+            "turnId": "turn-1",
+            "modelDisplayName": "GPT OSS 120B",
             "timestamp": "2026-08-18T12:00:00.000Z",
+            "thoughts": "Reasoning text",
+            "isThinking": false,
+            "thinkingDuration": 4,
+            "urlFetches": [
+              {
+                "id": "fetch-1",
+                "url": "https://example.com/article",
+                "status": "completed"
+              }
+            ],
+            "webSearch": {
+              "query": "portable backups",
+              "status": "completed",
+              "sources": [
+                {
+                  "title": "Backup source",
+                  "url": "https://example.com/source"
+                }
+              ]
+            },
+            "webSearchBeforeThinking": true,
+            "annotations": [
+              {
+                "type": "url_citation",
+                "url_citation": {
+                  "title": "Citation",
+                  "url": "https://example.com/citation",
+                  "start_index": 0,
+                  "end_index": 5
+                }
+              }
+            ],
+            "searchReasoning": "Search rationale",
+            "quote": "Quoted text",
+            "timeline": [
+              {
+                "type": "thinking",
+                "id": "thinking-1",
+                "content": "Reasoning text",
+                "isThinking": false,
+                "duration": 4
+              },
+              {
+                "type": "tool_call",
+                "id": "tool-1",
+                "toolCallId": "call-1",
+                "name": "lookup",
+                "arguments": "{\"topic\":\"backup\"}",
+                "resolvedAt": 1,
+                "resolution": { "text": "Approved", "data": { "keep": true } }
+              },
+              {
+                "type": "code_exec",
+                "id": "code-1",
+                "calls": [
+                  {
+                    "id": "exec-1",
+                    "toolName": "python",
+                    "arguments": { "code": "print(1)" },
+                    "status": "completed",
+                    "output": "1"
+                  }
+                ]
+              }
+            ],
+            "toolCalls": [
+              {
+                "id": "call-1",
+                "name": "lookup",
+                "arguments": "{\"topic\":\"backup\"}"
+              }
+            ],
+            "codeExecCalls": [
+              {
+                "id": "exec-1",
+                "toolName": "python",
+                "arguments": { "code": "print(1)" },
+                "status": "completed",
+                "output": "1"
+              }
+            ],
             "attachments": [
               {
                 "id": "cloud-1-image",
                 "type": "image",
                 "fileName": "photo.png",
                 "mimeType": "image/png",
-                "fileSize": 11,
+                "fileSize": 72,
                 "archivePath": "blobs/0"
+              },
+              {
+                "id": "cloud-1-document",
+                "type": "document",
+                "fileName": "notes.pdf",
+                "mimeType": "application/pdf",
+                "textContent": "Document text",
+                "description": "Document description",
+                "fileSize": 123,
+                "pages": [
+                  {
+                    "page": 1,
+                    "text": "Page text",
+                    "image": "page-preview",
+                    "is_scanned": true
+                  }
+                ]
               }
             ]
           }
         ],
-        "createdAt": "2026-08-18T12:00:00.000Z",
-        "isLocalOnly": false
+        "createdAt": "2026-08-18T12:00:00.000Z"
       }
     }
   ],
   "blobs": [
     {
       "path": "blobs/0",
-      "base64": "aW1hZ2UgYnl0ZXM="
+      "base64": "iVBORw0KGgpCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJC"
     }
   ]
 }
