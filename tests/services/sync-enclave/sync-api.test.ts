@@ -457,6 +457,25 @@ describe('sync-api (enclave JSON-RPC)', () => {
     expect(lastBody()).toEqual({ job_id: 'job-1' })
   })
 
+  it('uses the native backup import source on the wire', async () => {
+    const api = await import('@/services/sync-enclave/sync-api')
+    mockFetch.mockResolvedValueOnce(ok({ job_id: 'job-2', upload_id: 'up-2' }))
+
+    await api.importCreate({
+      source: 'tinfoil_backup',
+      totalBytes: 10,
+      totalChunks: 1,
+      archiveSha256: 'ef'.repeat(32),
+    })
+
+    expect(lastBody()).toEqual({
+      source: 'tinfoil_backup',
+      total_bytes: 10,
+      total_chunks: 1,
+      archive_sha256: 'ef'.repeat(32),
+    })
+  })
+
   it('searchQuery posts /v1/search/query and normalizes null results', async () => {
     const api = await import('@/services/sync-enclave/sync-api')
     mockFetch.mockResolvedValueOnce(

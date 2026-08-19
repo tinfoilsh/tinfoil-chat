@@ -23,6 +23,12 @@ import { useProjects } from '@/hooks/use-projects'
 import { useSyncHealthAttention } from '@/hooks/use-sync-health'
 import { useToast } from '@/hooks/use-toast'
 import { authTokenManager } from '@/services/auth'
+import { buildClaudeProjectExport } from '@/services/backup/claude-project-export'
+import {
+  createNativeBackup,
+  restoreNativeBackup,
+  validateNativeBackup,
+} from '@/services/backup/native-backup'
 import { buildChatExport } from '@/services/chat-export/export-archive'
 import { parseLocalTinfoilExport } from '@/services/chat-import/local-tinfoil-import'
 import { runOffDeviceImport } from '@/services/chat-import/off-device-import'
@@ -381,11 +387,7 @@ export function SettingsModal({
   const { toast } = useToast()
 
   // Projects for export functionality
-  const {
-    projects,
-    loading: projectsLoading,
-    refresh: refreshProjects,
-  } = useProjects({
+  const { refresh: refreshProjects } = useProjects({
     autoLoad: isSignedIn && isPremium,
   })
   // Encryption key management state
@@ -504,7 +506,7 @@ export function SettingsModal({
 
   // Import state
   const [importSource, setImportSource] = useState<
-    'chatgpt' | 'claude' | 'tinfoil' | null
+    'chatgpt' | 'claude' | 'tinfoil' | 'tinfoil_backup' | null
   >(null)
   const [isImporting, setIsImporting] = useState(false)
   const [importProgress, setImportProgress] = useState<{
@@ -524,6 +526,7 @@ export function SettingsModal({
   const claudeConversationsFileInputRef = useRef<HTMLInputElement>(null)
   const claudeProjectsFileInputRef = useRef<HTMLInputElement>(null)
   const tinfoilFileInputRef = useRef<HTMLInputElement>(null)
+  const nativeBackupFileInputRef = useRef<HTMLInputElement>(null)
   const localTinfoilImportAbortControllerRef = useRef<AbortController | null>(
     null,
   )
@@ -531,7 +534,10 @@ export function SettingsModal({
   // Export state
   const [isExporting, setIsExporting] = useState(false)
   const [isPreparingExport, setIsPreparingExport] = useState(false)
-  const [exportType, setExportType] = useState<'chats' | 'projects' | null>(
+  const [exportType, setExportType] = useState<
+    'chats' | 'projects' | 'backup' | null
+  >(null)
+  const [nativeBackupWarning, setNativeBackupWarning] = useState<string | null>(
     null,
   )
 
@@ -1354,7 +1360,7 @@ export function SettingsModal({
     Boolean(isSignedIn) && isCloudSyncEnabled() && hasPrimaryKey()
 
   const importOffDevice = async (
-    source: 'chatgpt' | 'claude' | 'tinfoil',
+    source: 'chatgpt' | 'claude' | 'tinfoil' | 'tinfoil_backup',
     file: File,
     sourceLabel: string,
   ) => {
@@ -1954,90 +1960,16 @@ export function SettingsModal({
     }
   }
 
-  // Export projects as projects.json
-  const downloadProjects = async (
-    projectsToExport: Array<{
-      id: string
-      name: string
-      description: string
-      systemInstructions: string
-      memory: Array<{ fact: string }>
-      createdAt: string
-      updatedAt: string
-    }>,
-  ) => {
-    if (projectsToExport.length === 0) {
-      toast({
-        title: 'No projects to export',
-        description: 'You have no projects to export yet.',
-        variant: 'destructive',
-      })
-      return
-    }
-
+  const downloadProjects = async () => {
     setIsExporting(true)
     setExportType('projects')
 
     try {
-      // Fetch documents for each project and convert to Claude-compatible format
-      const projectsWithDocs = await Promise.all(
-        projectsToExport.map(async (project) => {
-          const docs: Array<{
-            uuid: string
-            filename: string
-            content: string
-            created_at: string
-          }> = []
-
-          // Try to fetch documents for this project
-          try {
-            const docsResponse = await projectStorage.listDocuments(
-              project.id,
-              {
-                includeContent: true,
-              },
-            )
-
-            if (docsResponse.documents && docsResponse.documents.length > 0) {
-              await Promise.all(
-                docsResponse.documents.map(async (doc) => {
-                  try {
-                    const fullDoc = await projectStorage.getDocument(
-                      project.id,
-                      doc.id,
-                    )
-                    if (fullDoc && fullDoc.content) {
-                      docs.push({
-                        uuid: doc.id,
-                        filename: fullDoc.filename,
-                        content: fullDoc.content,
-                        created_at: new Date().toISOString(),
-                      })
-                    }
-                  } catch {
-                    // Skip documents that fail to fetch
-                  }
-                }),
-              )
-            }
-          } catch {
-            // Skip documents if we can't fetch them
-          }
-
-          return {
-            uuid: project.id,
-            name: project.name,
-            description: project.description || undefined,
-            prompt_template: project.systemInstructions || undefined,
-            created_at: new Date(project.createdAt).toISOString(),
-            updated_at: new Date(project.updatedAt).toISOString(),
-            docs: docs.length > 0 ? docs : undefined,
-          }
-        }),
-      )
-
-      // Create and download JSON file
-      const jsonContent = JSON.stringify(projectsWithDocs, null, 2)
+      const result = await buildClaudeProjectExport()
+      if (result.projects.length === 0) {
+        throw new Error('No readable projects are available to export')
+      }
+      const jsonContent = JSON.stringify(result.projects, null, 2)
       const blob = new Blob([jsonContent], { type: 'application/json' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -2050,7 +1982,10 @@ export function SettingsModal({
 
       toast({
         title: 'Export complete',
-        description: `Exported ${projectsToExport.length} project${projectsToExport.length !== 1 ? 's' : ''} successfully.`,
+        description:
+          result.skippedProjects + result.skippedDocuments > 0
+            ? `Exported ${result.projects.length} projects. Skipped ${result.skippedProjects} unreadable projects and ${result.skippedDocuments} unreadable documents.`
+            : `Exported ${result.projects.length} project${result.projects.length === 1 ? '' : 's'} for Claude.`,
       })
     } catch (error) {
       logError('Failed to create projects export', error, {
@@ -2065,6 +2000,160 @@ export function SettingsModal({
     } finally {
       setIsExporting(false)
       setExportType(null)
+    }
+  }
+
+  const handleExportNativeBackup = async () => {
+    setIsExporting(true)
+    setExportType('backup')
+    try {
+      const archive = await createNativeBackup()
+      const blob = new Blob([new Uint8Array(archive.data)], {
+        type: 'application/zip',
+      })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = archive.filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+      toast({
+        title: archive.manifest.complete
+          ? 'Backup complete'
+          : 'Incomplete backup downloaded',
+        description: archive.manifest.complete
+          ? 'Your Tinfoil backup is ready.'
+          : `${archive.manifest.warnings.length} item warning${archive.manifest.warnings.length === 1 ? '' : 's'} require attention. Keep this warning with the backup.`,
+        ...(archive.manifest.complete
+          ? {}
+          : { variant: 'destructive' as const }),
+      })
+      setNativeBackupWarning(
+        archive.manifest.complete
+          ? null
+          : `The downloaded backup is incomplete. ${archive.manifest.warnings.length} structured warning${archive.manifest.warnings.length === 1 ? ' is' : 's are'} recorded in its manifest.`,
+      )
+    } catch (error) {
+      logError('Failed to create native backup', error, {
+        component: 'SettingsModal',
+        action: 'handleExportNativeBackup',
+      })
+      toast({
+        title: 'Backup failed',
+        description: 'Could not create the Tinfoil backup.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsExporting(false)
+      setExportType(null)
+    }
+  }
+
+  const handleRestoreNativeBackup = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportSource('tinfoil_backup')
+    setIsImporting(true)
+    setImportResult(null)
+    let restoredLocal: {
+      imported: number
+      skipped: number
+      conflicts: number
+    } | null = null
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      const validated = validateNativeBackup(bytes)
+      if (!validated.manifest.complete) {
+        setNativeBackupWarning(
+          `This backup is marked incomplete and contains ${validated.manifest.warnings.length} warning${validated.manifest.warnings.length === 1 ? '' : 's'}. Restore will continue with the available data.`,
+        )
+      }
+      const hasCloudEntities =
+        validated.manifest.counts.projects +
+          validated.manifest.counts.project_documents +
+          validated.manifest.counts.cloud_chats +
+          validated.relationships.filter(
+            (relationship) => relationship.location === 'cloud',
+          ).length >
+        0
+      if (
+        !isPremium &&
+        validated.manifest.counts.projects +
+          validated.manifest.counts.project_documents >
+          0
+      ) {
+        throw new Error('Premium is required to restore projects')
+      }
+      if (hasCloudEntities && !shouldImportOffDevice()) {
+        throw new Error(
+          'Sign in, unlock your encryption key, and enable cloud sync to restore cloud data',
+        )
+      }
+      const result = await restoreNativeBackup(
+        bytes,
+        user?.id ?? 'anonymous-browser',
+      )
+      restoredLocal = result.local
+      let cloudImported = 0
+      let cloudPending = false
+      let cloudErrors: string[] = []
+      if (result.cloudArchive) {
+        const cloudResult = await runOffDeviceImport(
+          'tinfoil_backup',
+          result.cloudArchive,
+        )
+        cloudImported = cloudResult.status.imported
+        cloudPending =
+          cloudResult.status.status === 'staging' ||
+          cloudResult.status.status === 'running'
+        cloudErrors = cloudResult.status.errors ?? []
+      }
+      const errors = [
+        ...cloudErrors,
+        ...(result.local.conflicts > 0
+          ? [
+              `${result.local.conflicts} local chat ID conflicts were not overwritten.`,
+            ]
+          : []),
+      ]
+      setImportResult({
+        success: errors.length === 0,
+        chatsImported: result.local.imported + cloudImported,
+        projectsImported: 0,
+        errors,
+        pending: cloudPending,
+        message: `Local chats: ${result.local.imported} imported, ${result.local.skipped} already restored. Cloud package: ${result.cloudCounts.cloud_chats} chats, ${result.cloudCounts.projects} projects, ${result.cloudCounts.project_documents} documents, ${result.cloudCounts.relationships} relationships, ${result.cloudCounts.images} images${cloudPending ? '; import is running off-device.' : '.'}`,
+      })
+      onChatsUpdated?.()
+      await refreshProjects()
+      toast({
+        title: cloudPending ? 'Restore started' : 'Restore complete',
+        description: `${result.local.imported} local chat${result.local.imported === 1 ? '' : 's'} restored${cloudPending ? '; cloud data is importing securely.' : '.'}`,
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Could not restore backup'
+      setImportResult({
+        success: false,
+        chatsImported: restoredLocal?.imported ?? 0,
+        projectsImported: 0,
+        errors: [message],
+        message: restoredLocal
+          ? `Local chats: ${restoredLocal.imported} imported, ${restoredLocal.skipped} already restored. Cloud restore did not start.`
+          : undefined,
+      })
+      toast({
+        title: restoredLocal ? 'Restore partially complete' : 'Restore failed',
+        description: message,
+        variant: 'destructive',
+      })
+    } finally {
+      setIsImporting(false)
+      e.target.value = ''
     }
   }
 
@@ -4270,10 +4359,83 @@ ${encryptionKey.replace('key_', '')}
                     </div>
                   </div>
 
+                  <div className="space-y-3">
+                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                      Tinfoil Backup and Restore
+                    </h3>
+                    <div
+                      className={cn(
+                        'space-y-3 rounded-lg border border-border-subtle p-4',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
+                    >
+                      <div className="font-aeonik-fono text-xs text-content-muted">
+                        Create one plaintext ZIP with projects, extracted
+                        document text, cloud and local-only chats,
+                        relationships, and images. Store it securely.
+                      </div>
+                      {nativeBackupWarning && (
+                        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 font-aeonik-fono text-xs text-destructive">
+                          {nativeBackupWarning}
+                        </div>
+                      )}
+                      <input
+                        ref={nativeBackupFileInputRef}
+                        type="file"
+                        accept=".zip"
+                        onChange={handleRestoreNativeBackup}
+                        className="hidden"
+                        disabled={isImporting}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => void handleExportNativeBackup()}
+                          disabled={isExporting || isImporting}
+                          className={cn(
+                            'flex flex-1 items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
+                            isExporting || isImporting
+                              ? 'cursor-not-allowed opacity-50'
+                              : 'hover:bg-surface-chat',
+                            isDarkMode
+                              ? 'bg-surface-chat text-content-primary'
+                              : 'bg-surface-sidebar text-content-primary',
+                          )}
+                        >
+                          {isExporting && exportType === 'backup' ? (
+                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <ArrowDownTrayIcon className="h-4 w-4" />
+                          )}
+                          {isExporting && exportType === 'backup'
+                            ? 'Backing up...'
+                            : 'Create backup'}
+                        </button>
+                        <button
+                          onClick={() =>
+                            nativeBackupFileInputRef.current?.click()
+                          }
+                          disabled={isImporting || isExporting}
+                          className={cn(
+                            'flex flex-1 items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
+                            isImporting || isExporting
+                              ? 'cursor-not-allowed opacity-50'
+                              : 'hover:bg-surface-chat',
+                            isDarkMode
+                              ? 'bg-surface-chat text-content-primary'
+                              : 'bg-surface-sidebar text-content-primary',
+                          )}
+                        >
+                          <ArrowUpTrayIcon className="h-4 w-4" />
+                          Restore backup
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Tinfoil Import */}
                   <div className="space-y-3">
                     <h3 className="font-aeonik text-sm font-medium text-content-secondary">
-                      Import from Tinfoil
+                      Import Legacy Tinfoil Chat Export
                     </h3>
                     <div
                       className={cn(
@@ -4307,7 +4469,7 @@ ${encryptionKey.replace('key_', '')}
                         )}
                       >
                         <ArrowUpTrayIcon className="h-4 w-4" />
-                        Select Tinfoil Export
+                        Select Legacy Chat Export
                       </button>
                     </div>
                   </div>
@@ -4359,7 +4521,7 @@ ${encryptionKey.replace('key_', '')}
                   {isPremium && (
                     <div className="space-y-3">
                       <h3 className="font-aeonik text-sm font-medium text-content-secondary">
-                        Export Projects
+                        Export Projects for Claude
                       </h3>
                       <div
                         className={cn(
@@ -4368,21 +4530,15 @@ ${encryptionKey.replace('key_', '')}
                         )}
                       >
                         <div className="font-aeonik-fono text-xs text-content-muted">
-                          Download all your projects including their settings,
-                          system instructions, memory, and documents.
+                          Create a lossy Claude-compatible projects.json file.
+                          Unreadable projects and documents are reported.
                         </div>
                         <button
-                          onClick={() => downloadProjects(projects)}
-                          disabled={
-                            isExporting ||
-                            projects.length === 0 ||
-                            projectsLoading
-                          }
+                          onClick={() => void downloadProjects()}
+                          disabled={isExporting}
                           className={cn(
                             'flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
-                            isExporting ||
-                              projects.length === 0 ||
-                              projectsLoading
+                            isExporting
                               ? 'cursor-not-allowed opacity-50'
                               : 'hover:bg-surface-chat',
                             isDarkMode
@@ -4392,16 +4548,12 @@ ${encryptionKey.replace('key_', '')}
                         >
                           {isExporting && exportType === 'projects' ? (
                             <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                          ) : projectsLoading ? (
-                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
                           ) : (
                             <AiOutlineExport className="h-4 w-4" />
                           )}
                           {isExporting && exportType === 'projects'
                             ? 'Exporting...'
-                            : projectsLoading
-                              ? 'Loading projects...'
-                              : 'Export Projects'}
+                            : 'Export Projects for Claude'}
                         </button>
                       </div>
                     </div>

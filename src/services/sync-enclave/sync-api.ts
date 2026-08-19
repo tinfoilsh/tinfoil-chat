@@ -405,7 +405,7 @@ export interface SearchReindexStatusResponse {
 /*  Off-device chat import                                                    */
 /* -------------------------------------------------------------------------- */
 
-export type ImportSource = 'chatgpt' | 'claude' | 'tinfoil'
+export type ImportSource = 'chatgpt' | 'claude' | 'tinfoil' | 'tinfoil_backup'
 
 export type ImportJobStatus =
   'idle' | 'staging' | 'running' | 'completed' | 'failed'
