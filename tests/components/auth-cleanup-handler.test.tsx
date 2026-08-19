@@ -408,6 +408,63 @@ describe('AuthCleanupHandler', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
+  it('shows pending recovery after a restore failure is followed by sign-out', async () => {
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_123' } }
+    mockRestorePendingKeyForOwner.mockRejectedValueOnce(
+      new Error('restore failed'),
+    )
+
+    const { rerender } = render(createElement(AuthCleanupHandler))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    mockGetPendingKeyRecovery.mockReturnValue({
+      version: 1,
+      ownerUserId: 'user_123',
+      encryptionKey: 'key_recovery',
+    })
+    authState = { isSignedIn: false, isLoaded: true }
+    userState = { user: null }
+    rerender(createElement(AuthCleanupHandler))
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(screen.getByText('key_recovery')).toBeTruthy()
+  })
+
+  it('resumes sign-out cleanup after a pending restore failure', async () => {
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_123' } }
+    mockRestorePendingKeyForOwner.mockRejectedValueOnce(
+      new Error('restore failed'),
+    )
+
+    const { rerender } = render(createElement(AuthCleanupHandler))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    authState = { isSignedIn: false, isLoaded: true }
+    userState = { user: null }
+    rerender(createElement(AuthCleanupHandler))
+    await act(async () => {
+      await Promise.resolve()
+      vi.advanceTimersByTime(2000)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockPerformSignoutCleanup).toHaveBeenCalledTimes(1)
+    expect(window.location.reload).toHaveBeenCalledTimes(1)
+  })
+
   it('silently discards recovery when a different owner signs in', () => {
     authState = { isSignedIn: true, isLoaded: true }
     userState = { user: { id: 'user_other' } }

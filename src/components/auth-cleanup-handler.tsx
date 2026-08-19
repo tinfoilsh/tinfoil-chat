@@ -88,6 +88,7 @@ export function AuthCleanupHandler() {
     }
     if (latestAuthState.isSignedIn !== false) return
 
+    setCleanupError((current) => (current?.recovery ? null : current))
     const pending = getPendingKeyRecovery()
     setRecoveryKey(pending?.encryptionKey ?? null)
     setShowModal(pending !== null)
