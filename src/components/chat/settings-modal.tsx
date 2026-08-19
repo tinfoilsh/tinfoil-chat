@@ -525,6 +525,7 @@ export function SettingsModal({
     success: boolean
     chatsImported: number
     projectsImported: number
+    documentsImported?: number
     errors: string[]
     pending?: boolean
     message?: string
@@ -2125,7 +2126,9 @@ export function SettingsModal({
         user?.id ?? 'anonymous-browser',
       )
       restoredLocal = result.local
-      let cloudImported = 0
+      let cloudChatsImported = 0
+      let cloudProjectsImported = 0
+      let cloudDocumentsImported = 0
       let cloudPending = false
       let cloudErrors: string[] = []
       if (result.cloudArchive) {
@@ -2137,7 +2140,9 @@ export function SettingsModal({
           cloudResult.jobId,
           cloudResult.status,
         )
-        cloudImported = cloudStatus.imported
+        cloudChatsImported = cloudStatus.counts?.chat?.imported ?? 0
+        cloudProjectsImported = cloudStatus.counts?.project?.imported ?? 0
+        cloudDocumentsImported = cloudStatus.counts?.document?.imported ?? 0
         cloudPending = false
         cloudErrors = cloudStatus.errors ?? []
         if (cloudStatus.status === 'completed') {
@@ -2164,8 +2169,9 @@ export function SettingsModal({
       ]
       setImportResult({
         success: errors.length === 0,
-        chatsImported: result.local.imported + cloudImported,
-        projectsImported: 0,
+        chatsImported: result.local.imported + cloudChatsImported,
+        projectsImported: cloudProjectsImported,
+        documentsImported: cloudDocumentsImported,
         errors,
         pending: cloudPending,
         message: `Local chats: ${result.local.imported} imported, ${result.local.skipped} already restored. Cloud package: ${result.cloudCounts.cloud_chats} chats, ${result.cloudCounts.projects} projects, ${result.cloudCounts.project_documents} documents, ${result.cloudCounts.relationships} relationships, ${result.cloudCounts.images} images${cloudPending ? '; import is running off-device.' : '.'}`,
@@ -4068,13 +4074,19 @@ ${encryptionKey.replace('key_', '')}
                               </div>
                             )}
                             <div className="font-aeonik-fono text-xs text-content-muted">
-                              {importResult.chatsImported > 0 &&
-                                `${importResult.chatsImported} chat${importResult.chatsImported !== 1 ? 's' : ''} imported`}
-                              {importResult.chatsImported > 0 &&
-                                importResult.projectsImported > 0 &&
-                                ', '}
-                              {importResult.projectsImported > 0 &&
-                                `${importResult.projectsImported} project${importResult.projectsImported !== 1 ? 's' : ''} imported`}
+                              {[
+                                importResult.chatsImported > 0
+                                  ? `${importResult.chatsImported} chat${importResult.chatsImported !== 1 ? 's' : ''} imported`
+                                  : null,
+                                importResult.projectsImported > 0
+                                  ? `${importResult.projectsImported} project${importResult.projectsImported !== 1 ? 's' : ''} imported`
+                                  : null,
+                                (importResult.documentsImported ?? 0) > 0
+                                  ? `${importResult.documentsImported} document${importResult.documentsImported !== 1 ? 's' : ''} imported`
+                                  : null,
+                              ]
+                                .filter(Boolean)
+                                .join(', ')}
                             </div>
                             {importResult.errors.length > 0 && (
                               <div className="mt-2 text-xs text-red-400">

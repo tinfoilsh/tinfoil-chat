@@ -132,6 +132,16 @@ export function AuthCleanupHandler() {
 
   const runSignoutCleanup = useCallback(() => {
     completeSignoutStep(SIGNOUT_STEPS.SIGN_OUT)
+    const pendingRecovery = getPendingKeyRecovery()
+    if (pendingRecovery) {
+      logInfo('Preserving pending encryption key recovery after signout', {
+        component: 'AuthCleanupHandler',
+        action: 'resumePendingRecovery',
+      })
+      hideSignoutProgress()
+      refreshPendingRecovery()
+      return
+    }
     const encryptionKey = getEncryptionKey()
     const ownerUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
 

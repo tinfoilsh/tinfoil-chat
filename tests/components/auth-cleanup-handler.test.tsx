@@ -143,6 +143,28 @@ describe('AuthCleanupHandler', () => {
     expect(window.location.reload).toHaveBeenCalledTimes(1)
   })
 
+  it('preserves pending recovery when sign-out cleanup resumes after reload', async () => {
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
+    mockHasPasskeyBackup.mockReturnValue(false)
+    mockGetEncryptionKey.mockReturnValue(null)
+    mockGetPendingKeyRecovery.mockReturnValue({
+      version: 1,
+      ownerUserId: 'user_123',
+      encryptionKey: 'key_recovery',
+    })
+
+    render(createElement(AuthCleanupHandler))
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('key_recovery')).toBeTruthy()
+    expect(mockPerformSignoutCleanup).not.toHaveBeenCalled()
+    expect(mockDeletePendingKeyRecovery).not.toHaveBeenCalled()
+    expect(window.location.reload).not.toHaveBeenCalled()
+  })
+
   it('keeps cleanup retryable while browser data is still being cleared', async () => {
     localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
     mockPerformSignoutCleanup.mockReturnValueOnce(new Promise(() => {}))
