@@ -336,14 +336,19 @@ export function usePasskeyBackup({
     )
   }, [])
 
+  const invalidatePasskeyInitialization = useCallback(() => {
+    passkeyInitializationGenerationRef.current += 1
+    hasInitializedPasskeyRef.current = false
+    cancelPasskeyInitializationWaiters()
+  }, [cancelPasskeyInitializationWaiters])
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       isMountedRef.current = false
-      passkeyInitializationGenerationRef.current += 1
-      cancelPasskeyInitializationWaiters()
+      invalidatePasskeyInitialization()
     }
-  }, [cancelPasskeyInitializationWaiters])
+  }, [invalidatePasskeyInitialization])
 
   // When the signed-in user changes *after* the initial sign-in hydration
   // (sign-out-then-sign-in on the same tab, or a user switch), reset the
@@ -364,9 +369,7 @@ export function usePasskeyBackup({
       return
     }
     if (currentUserId !== previousUserIdRef.current) {
-      passkeyInitializationGenerationRef.current += 1
-      cancelPasskeyInitializationWaiters()
-      hasInitializedPasskeyRef.current = false
+      invalidatePasskeyInitialization()
       passkeyRecoveryDismissedFlag.clear()
       firstTimePromptDismissedFlag.clear()
       setupWarningDismissedFlag.clear()
@@ -387,7 +390,7 @@ export function usePasskeyBackup({
       }
       previousUserIdRef.current = currentUserId
     }
-  }, [cancelPasskeyInitializationWaiters, isSignedIn, user?.id])
+  }, [invalidatePasskeyInitialization, isSignedIn, user?.id])
 
   /**
    * Build the (userId, userName, displayName) tuple for createPrfPasskey
@@ -1045,9 +1048,7 @@ export function usePasskeyBackup({
   }, [applyRecoveredKeyBundle])
 
   const retryPasskeyInitialization = useCallback(() => {
-    passkeyInitializationGenerationRef.current += 1
-    cancelPasskeyInitializationWaiters()
-    hasInitializedPasskeyRef.current = false
+    invalidatePasskeyInitialization()
     setPasskeyInitializationAttempt((attempt) => attempt + 1)
     const generation = passkeyInitializationGenerationRef.current + 1
     const ownerId = userRef.current?.id ?? null
@@ -1059,7 +1060,7 @@ export function usePasskeyBackup({
         reject,
       })
     })
-  }, [cancelPasskeyInitializationWaiters])
+  }, [invalidatePasskeyInitialization])
 
   // --- Passkey initialization (runs once after cloud sync init completes) ---
   useEffect(() => {
@@ -1380,8 +1381,7 @@ export function usePasskeyBackup({
 
     return () => {
       if (generation === passkeyInitializationGenerationRef.current) {
-        passkeyInitializationGenerationRef.current += 1
-        hasInitializedPasskeyRef.current = false
+        invalidatePasskeyInitialization()
       }
     }
   }, [
@@ -1390,6 +1390,7 @@ export function usePasskeyBackup({
     user?.id,
     encryptionKey,
     passkeyInitializationAttempt,
+    invalidatePasskeyInitialization,
   ])
 
   // Clear the persistent "recovery dismissed" flag and the session
@@ -1493,6 +1494,7 @@ export function usePasskeyBackup({
           ...prev,
           passkeyActive: true,
           passkeySetupAvailable: false,
+          passkeySetupFailed: false,
         }))
       }
 

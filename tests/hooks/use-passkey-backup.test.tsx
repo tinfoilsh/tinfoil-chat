@@ -283,6 +283,62 @@ describe('usePasskeyBackup', () => {
     await rejection
   })
 
+  it('rejects initialization waiters when an effect dependency changes', async () => {
+    mocks.isPrfSupported.mockReturnValue(new Promise(() => {}))
+    const { result, rerender } = renderHook(
+      ({ encryptionKey }) =>
+        usePasskeyBackup({
+          ...baseOptions,
+          encryptionKey,
+        }),
+      { initialProps: { encryptionKey: null as string | null } },
+    )
+
+    let retryPromise!: Promise<unknown>
+    act(() => {
+      retryPromise = result.current.retryPasskeyInitialization()
+    })
+    const rejection = expect(retryPromise).rejects.toMatchObject({
+      name: 'PasskeyInitializationCanceledError',
+    })
+
+    rerender({ encryptionKey: 'key_local' })
+
+    await rejection
+  })
+
+  it('clears the retry warning after existing-key setup succeeds', async () => {
+    const timeout = new PasskeyTimeoutError('Passkey timed out')
+    mocks.getCurrentCloudKeyAuthorizationMode.mockResolvedValue('validated')
+    mocks.getAllKeys.mockReturnValue({ primary: 'key_local', alternatives: [] })
+    mocks.createPrfPasskey
+      .mockRejectedValueOnce(timeout)
+      .mockResolvedValueOnce({
+        prfOutput: new Uint8Array(32),
+        credentialId: 'credential-id',
+      })
+    mocks.deriveKeyEncryptionKey.mockResolvedValue({} as CryptoKey)
+    mocks.storeEncryptedKeys.mockResolvedValue({
+      syncVersion: 1,
+      bundleVersion: 1,
+    })
+    const { result } = renderHook(() =>
+      usePasskeyBackup({ ...baseOptions, initialized: false }),
+    )
+
+    await act(async () => {
+      await expect(result.current.setupPasskey()).rejects.toBe(timeout)
+    })
+    expect(result.current.passkeySetupFailed).toBe(true)
+
+    await act(async () => {
+      await expect(result.current.setupPasskey()).resolves.toBe(true)
+    })
+
+    expect(result.current.passkeySetupFailed).toBe(false)
+    expect(result.current.passkeyActive).toBe(true)
+  })
+
   it('routes unknown remote state to passkey recovery', async () => {
     mocks.inspectRemoteEncryptedState.mockResolvedValue('unknown')
     const { result } = renderHook(() =>
