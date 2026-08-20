@@ -28,7 +28,10 @@ export function NativeBackupExport({
   const [failed, setFailed] = useState(false)
   const controller = useRef<AbortController | null>(null)
 
-  useEffect(() => () => controller.current?.abort(), [])
+  useEffect(() => {
+    if (!available) controller.current?.abort()
+    return () => controller.current?.abort()
+  }, [available])
 
   const createBackup = async () => {
     setShowWarning(false)

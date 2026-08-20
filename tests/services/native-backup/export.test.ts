@@ -13,6 +13,10 @@ describe('native backup export orchestration', () => {
   it('collects, formats, commits, and only then downloads', async () => {
     const order: string[] = []
     const dependencies = {
+      prepare: vi.fn(async () => {
+        order.push('prepare')
+        return undefined
+      }),
       collect: vi.fn(async () => {
         order.push('collect')
         return { value: true }
@@ -35,7 +39,7 @@ describe('native backup export orchestration', () => {
       dependencies,
     )
 
-    expect(order).toEqual(['collect', 'format', 'write', 'download'])
+    expect(order).toEqual(['prepare', 'collect', 'format', 'write', 'download'])
     expect(progress).toEqual(['collecting', 'formatting', 'writing'])
     expect(dependencies.collect).toHaveBeenCalledWith(expect.any(AbortSignal))
   })
@@ -43,6 +47,7 @@ describe('native backup export orchestration', () => {
   it('does not format or download after cancellation', async () => {
     const controller = new AbortController()
     const dependencies = {
+      prepare: vi.fn(async () => undefined),
       collect: vi.fn(async () => {
         controller.abort()
         return {}

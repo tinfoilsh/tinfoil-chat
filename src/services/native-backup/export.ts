@@ -4,6 +4,7 @@ import { collectNativeBackupV1, NativeBackupCollectionError } from './collect'
 import { formatNativeBackupV1 } from './format'
 import {
   NativeBackupWriterError,
+  prepareNativeBackupArchiveDestination,
   writeNativeBackupArchive,
   type NativeBackupArchiveResult,
 } from './write'
@@ -11,6 +12,7 @@ import {
 export type NativeBackupExportProgress = 'collecting' | 'formatting' | 'writing'
 
 export interface NativeBackupExportDependencies {
+  prepare?: typeof prepareNativeBackupArchiveDestination
   collect: (signal: AbortSignal) => ReturnType<typeof collectNativeBackupV1>
   format: typeof formatNativeBackupV1
   write: typeof writeNativeBackupArchive
@@ -26,10 +28,11 @@ const download = (result: NativeBackupArchiveResult) => {
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
-  URL.revokeObjectURL(url)
+  requestAnimationFrame(() => URL.revokeObjectURL(url))
 }
 
 const defaults: NativeBackupExportDependencies = {
+  prepare: prepareNativeBackupArchiveDestination,
   collect: (signal) => collectNativeBackupV1(undefined, signal),
   format: formatNativeBackupV1,
   write: writeNativeBackupArchive,
@@ -42,6 +45,8 @@ export async function runNativeBackupExport(
   dependencies: NativeBackupExportDependencies = defaults,
 ): Promise<void> {
   signal.throwIfAborted()
+  const destination = await dependencies.prepare?.()
+  signal.throwIfAborted()
   onProgress('collecting')
   const collected = await dependencies.collect(signal)
   signal.throwIfAborted()
@@ -49,7 +54,7 @@ export async function runNativeBackupExport(
   const formatted = dependencies.format(collected)
   signal.throwIfAborted()
   onProgress('writing')
-  const result = await dependencies.write(formatted, { signal })
+  const result = await dependencies.write(formatted, { signal, destination })
   if (result.kind === 'blob') signal.throwIfAborted()
   dependencies.download(result)
 }

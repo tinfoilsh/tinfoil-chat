@@ -91,6 +91,22 @@ function saveFilePicker(): SaveFilePicker | undefined {
   ).showSaveFilePicker
 }
 
+export async function prepareNativeBackupArchiveDestination(): Promise<
+  FileSystemFileHandle | undefined
+> {
+  const picker = saveFilePicker()
+  if (!picker) return undefined
+  return picker({
+    suggestedName: `tinfoil-backup-${new Date().toISOString().slice(0, 10)}.zip`,
+    types: [
+      {
+        description: 'ZIP archive',
+        accept: { [ZIP_MIME_TYPE]: ['.zip'] },
+      },
+    ],
+  })
+}
+
 const zipOptions: ZipWriterConstructorOptions = {
   bufferedWrite: false,
   encrypted: false,
@@ -278,13 +294,19 @@ async function commitOutput(
 
 export async function writeNativeBackupArchive(
   input: NativeBackupArchiveInput,
-  options: { signal?: AbortSignal } = {},
+  options: {
+    signal?: AbortSignal
+    destination?: FileSystemFileHandle
+  } = {},
   dependencies: NativeBackupWriterDependencies = defaultDependencies,
 ): Promise<NativeBackupArchiveResult> {
   options.signal?.throwIfAborted()
   const filename = filenameFromManifest(input.manifestBytes)
   const entries = orderedEntries(input)
-  const kind = dependencies.fileSystemAccessSupported() ? 'file' : 'blob'
+  const kind =
+    options.destination || dependencies.fileSystemAccessSupported()
+      ? 'file'
+      : 'blob'
   const limits = dependencies.limits[kind]
   const uncompressedBytes = entries.reduce(
     (total, entry) => total + entry.bytes.byteLength,
@@ -299,7 +321,9 @@ export async function writeNativeBackupArchive(
   const blobOutput = kind === 'blob' ? dependencies.createBlobOutput() : null
   const output = blobOutput
     ? blobOutput.writable
-    : await dependencies.createFileWritable(filename)
+    : options.destination
+      ? ((await options.destination.createWritable()) as WritableStream<Uint8Array>)
+      : await dependencies.createFileWritable(filename)
   const bounded = boundedWritable(output, limits.compressedBytes)
   try {
     const zip = dependencies.createZipWriter(bounded.writable, {

@@ -53,4 +53,31 @@ describe('NativeBackupExport', () => {
     expect(await screen.findByText(/No backup file was saved/)).toBeVisible()
     expect(runExport.mock.calls[0][0].aborted).toBe(true)
   })
+
+  it('cancels an active export when availability is lost', async () => {
+    const runExport = vi.fn(
+      (signal: AbortSignal, onProgress: (value: 'collecting') => void) => {
+        onProgress('collecting')
+        return new Promise<void>((_resolve, reject) =>
+          signal.addEventListener('abort', () =>
+            reject(new DOMException('Canceled', 'AbortError')),
+          ),
+        )
+      },
+    )
+    const view = render(<NativeBackupExport available runExport={runExport} />)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create Tinfoil Backup' }),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'I understand, create backup' }),
+    )
+    await waitFor(() => expect(runExport).toHaveBeenCalledOnce())
+
+    view.rerender(
+      <NativeBackupExport available={false} runExport={runExport} />,
+    )
+
+    expect(runExport.mock.calls[0][0].aborted).toBe(true)
+  })
 })
