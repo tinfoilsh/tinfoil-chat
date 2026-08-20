@@ -191,7 +191,7 @@ describe('native backup archive writer', () => {
     expect(events.blobReads).toBe(0)
   })
 
-  it('aborts a file destination when canceled during ZIP finalization', async () => {
+  it('aborts a file destination when canceled immediately before commit', async () => {
     const controller = new AbortController()
     const { dependencies, events } = mockDependencies({
       file: true,
@@ -209,7 +209,28 @@ describe('native backup archive writer', () => {
     expect(events.outputCloses).toBe(0)
   })
 
-  it('reports cancellation during destination commit without returning a Blob', async () => {
+  it('finishes a file commit successfully when canceled during destination close', async () => {
+    const controller = new AbortController()
+    const { dependencies, events } = mockDependencies({
+      file: true,
+      onOutputClose: () => controller.abort(),
+    })
+
+    await expect(
+      writeNativeBackupArchive(
+        input([]),
+        { signal: controller.signal },
+        dependencies,
+      ),
+    ).resolves.toEqual({
+      kind: 'file',
+      filename: 'tinfoil-backup-2026-08-20.zip',
+    })
+    expect(events.outputCloses).toBe(1)
+    expect(events.outputAborts).toBe(0)
+  })
+
+  it('discards a Blob when canceled during destination close', async () => {
     const controller = new AbortController()
     const { dependencies, events } = mockDependencies({
       onOutputClose: () => controller.abort(),
