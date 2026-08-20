@@ -27,9 +27,16 @@ export function NativeBackupExport({
   const [message, setMessage] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
   const controller = useRef<AbortController | null>(null)
+  const availableRef = useRef(available)
+  availableRef.current = available
 
   useEffect(() => {
-    if (!available) controller.current?.abort()
+    if (!available) {
+      setShowWarning(false)
+      setProgress(null)
+      setMessage(null)
+      setFailed(false)
+    }
     return () => controller.current?.abort()
   }, [available])
 
@@ -41,8 +48,10 @@ export function NativeBackupExport({
     controller.current = current
     try {
       await runExport(current.signal, setProgress)
+      if (!availableRef.current) return
       setMessage('Backup saved successfully.')
     } catch (error) {
+      if (current.signal.aborted && !availableRef.current) return
       setFailed(true)
       setMessage(nativeBackupExportError(error))
     } finally {

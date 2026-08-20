@@ -78,6 +78,8 @@ describe('NativeBackupExport', () => {
       <NativeBackupExport available={false} runExport={runExport} />,
     )
 
-    expect(runExport.mock.calls[0][0].aborted).toBe(true)
+    await waitFor(() => expect(runExport.mock.calls[0][0].aborted).toBe(true))
+    view.rerender(<NativeBackupExport available runExport={runExport} />)
+    expect(screen.queryByText(/No backup file was saved/)).toBeNull()
   })
 })

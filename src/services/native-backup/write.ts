@@ -97,7 +97,7 @@ export async function prepareNativeBackupArchiveDestination(): Promise<
   const picker = saveFilePicker()
   if (!picker) return undefined
   return picker({
-    suggestedName: `tinfoil-backup-${new Date().toISOString().slice(0, 10)}.zip`,
+    suggestedName: 'tinfoil-backup.zip',
     types: [
       {
         description: 'ZIP archive',
