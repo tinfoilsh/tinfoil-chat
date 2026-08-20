@@ -6,6 +6,7 @@ export interface NativeBackupImageCandidate {
   sourceKey: string
   chatId: string
   messageIndex: number
+  attachmentIndex?: number
   attachmentId?: string
   page?: number
   legacyIndex?: number
@@ -149,6 +150,7 @@ function cleanAttachments(
           ]),
           chatId,
           messageIndex,
+          attachmentIndex,
           attachmentId,
           fileName: String(attachment.fileName),
           mimeType: String(attachment.mimeType ?? 'application/octet-stream'),
@@ -186,6 +188,7 @@ function cleanAttachments(
                 ]),
                 chatId,
                 messageIndex,
+                attachmentIndex,
                 attachmentId,
                 page: pageNumber,
                 fileName: `${attachmentId}-page-${pageNumber}.jpg`,
