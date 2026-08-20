@@ -203,6 +203,23 @@ describe('sync-api (enclave JSON-RPC)', () => {
     expect(body.idempotency_key).toBe('del-1')
   })
 
+  it('deleteAllProjects posts the CEK and idempotency key', async () => {
+    const api = await import('@/services/sync-enclave/sync-api')
+    mockFetch.mockResolvedValueOnce(ok({ ok: true, deleted: 3 }))
+
+    const response = await api.deleteAllProjects({
+      keyB64: api.hexToB64('aa'.repeat(32)),
+      idempotencyKey: 'delete-projects-1',
+    })
+
+    expect(response).toEqual({ ok: true, deleted: 3 })
+    expect(lastRequest()[0]).toBe('/v1/sync/delete-all-projects')
+    expect(lastBody()).toEqual({
+      key: api.hexToB64('aa'.repeat(32)),
+      idempotency_key: 'delete-projects-1',
+    })
+  })
+
   it('attachmentPut posts idempotency key', async () => {
     const api = await import('@/services/sync-enclave/sync-api')
     mockFetch.mockResolvedValueOnce(

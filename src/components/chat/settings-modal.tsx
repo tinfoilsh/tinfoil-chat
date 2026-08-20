@@ -45,6 +45,7 @@ import {
   formatClaudeProjectExportCounts,
   type ClaudeProjectExportCounts,
 } from '@/services/project-export/claude-project-export'
+import { projectEvents } from '@/services/project/project-events'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { projectCache } from '@/services/storage/project-cache'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -1917,8 +1918,9 @@ export function SettingsModal({
 
     setIsDeletingAllProjects(true)
     try {
-      const result = await projectStorage.deleteAllProjects()
+      const deleted = await projectStorage.deleteAllProjects()
       setProjectExportResult(null)
+      projectEvents.emit({ type: 'projects-invalidated' })
       try {
         await projectCache.clear()
       } catch (cacheError) {
@@ -1929,9 +1931,7 @@ export function SettingsModal({
       }
       toast({
         title: 'All projects deleted',
-        description: result.notificationSent
-          ? 'We will email you a confirmation.'
-          : 'Email confirmation could not be sent.',
+        description: `Deleted ${deleted} ${deleted === 1 ? 'project' : 'projects'}.`,
       })
 
       await refreshProjects()
