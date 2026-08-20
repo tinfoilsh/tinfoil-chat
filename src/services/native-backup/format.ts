@@ -24,7 +24,6 @@ import {
 const MANIFEST_PATH = 'manifest.json'
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
-const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/)
 const countSchema = z.number().int().nonnegative()
 
 export interface NativeBackupFileEntry {
@@ -49,27 +48,6 @@ export interface NativeBackupFormatInput {
   images: readonly NativeBackupImageInput[]
 }
 
-export interface NativeBackupManifestFile {
-  path: string
-  kind: NativeBackupEntityKind
-  sha256: string
-  size_bytes: number
-}
-
-export interface NativeBackupManifestV1 {
-  format: typeof NATIVE_BACKUP_FORMAT
-  version: typeof NATIVE_BACKUP_VERSION
-  backup_id: string
-  created_at: string
-  complete: true
-  counts: Record<NativeBackupEntityKind, number> & { files: number }
-  notices: {
-    contains_plaintext: true
-    documents_are_extracted_text_only: true
-  }
-  files: NativeBackupManifestFile[]
-}
-
 const manifestSchema = z
   .object({
     format: z.literal(NATIVE_BACKUP_FORMAT),
@@ -77,17 +55,10 @@ const manifestSchema = z
     backup_id: z.string().uuid(),
     created_at: z.string().datetime({ offset: true }),
     complete: z.literal(true),
-    counts: z
-      .object({
-        projects: countSchema,
-        project_documents: countSchema,
-        cloud_chats: countSchema,
-        local_chats: countSchema,
-        relationships: countSchema,
-        images: countSchema,
-        files: countSchema,
-      })
-      .strict(),
+    counts: z.record(
+      z.enum([...NATIVE_BACKUP_ENTITY_KINDS, 'files']),
+      countSchema,
+    ),
     notices: z
       .object({
         contains_plaintext: z.literal(true),
@@ -99,13 +70,15 @@ const manifestSchema = z
         .object({
           path: z.string(),
           kind: z.enum(NATIVE_BACKUP_ENTITY_KINDS),
-          sha256: sha256Schema,
+          sha256: z.string().regex(/^[0-9a-f]{64}$/),
           size_bytes: countSchema,
         })
         .strict(),
     ),
   })
   .strict()
+
+export type NativeBackupManifestV1 = z.infer<typeof manifestSchema>
 
 function fail(message: string): never {
   throw new Error(`Invalid native backup: ${message}`)
