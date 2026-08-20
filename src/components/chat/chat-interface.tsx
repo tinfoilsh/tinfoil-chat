@@ -56,7 +56,10 @@ import {
   shouldShowRateLimitBanner,
 } from '@/components/chat/rate-limit-banner'
 import { StreamErrorBanner } from '@/components/chat/stream-error-banner'
-import { classifyCloudKeySetupError } from '@/components/modals/cloud-sync-setup-mode'
+import {
+  classifyCloudKeySetupError,
+  waitForCloudSyncRouting,
+} from '@/components/modals/cloud-sync-setup-mode'
 import {
   ProjectModeIndicator,
   ProjectSidebar,
@@ -2163,10 +2166,42 @@ export function ChatInterface({
       }
       return
     }
-    retryPasskeyInitialization()
-    setShowCloudSyncSetupModal(true)
+    const generation = ++cloudSyncRouteGenerationRef.current
+    setIsCloudSyncRoutePending(true)
+    try {
+      const routingState = await waitForCloudSyncRouting(
+        retryPasskeyInitialization(),
+      )
+      if (generation !== cloudSyncRouteGenerationRef.current) return
+
+      if (
+        routingState?.passkeyRecoveryNeeded ||
+        routingState?.manualRecoveryNeeded
+      ) {
+        setShowCloudSyncSetupModal(true)
+        return
+      }
+      if (routingState?.passkeyAddDeviceAvailable) {
+        await addPasskeyToThisDevice()
+        return
+      }
+      if (routingState?.passkeyActive) {
+        setCloudSyncEnabled(true)
+        return
+      }
+
+      // A timeout is intentionally conservative: try to wrap the existing
+      // key rather than exposing replacement-key setup before routing settles.
+      await setupPasskey()
+    } finally {
+      if (generation === cloudSyncRouteGenerationRef.current) {
+        setIsCloudSyncRoutePending(false)
+      }
+    }
   }, [
+    addPasskeyToThisDevice,
     retryPasskeyInitialization,
+    setupPasskey,
     showPasskeyRecoveryPrompt,
     showFirstTimePasskeyPrompt,
   ])

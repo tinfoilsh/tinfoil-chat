@@ -1,4 +1,7 @@
-import { determineGeneratedKeySetupMode } from '@/components/modals/cloud-sync-setup-mode'
+import {
+  determineGeneratedKeySetupMode,
+  waitForCloudSyncRouting,
+} from '@/components/modals/cloud-sync-setup-mode'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockInspectRemoteEncryptedState = vi.fn()
@@ -75,8 +78,19 @@ describe('determineGeneratedKeySetupMode', () => {
     const modePromise = determineGeneratedKeySetupMode({
       manualRecoveryNeeded: false,
     })
-    await vi.advanceTimersByTimeAsync(3_000)
+    await vi.runAllTimersAsync()
 
     await expect(modePromise).resolves.toBe('recoverExisting')
+  })
+
+  it('bounds cloud sync routing without exposing its timeout', async () => {
+    vi.useFakeTimers()
+
+    const routingPromise = waitForCloudSyncRouting(
+      new Promise<'ready'>(() => {}),
+    )
+    await vi.runAllTimersAsync()
+
+    await expect(routingPromise).resolves.toBeNull()
   })
 })

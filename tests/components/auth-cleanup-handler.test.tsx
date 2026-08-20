@@ -251,4 +251,33 @@ describe('AuthCleanupHandler', () => {
 
     expect(mockPerformSignoutCleanup).toHaveBeenCalledTimes(1)
   })
+
+  it('does not retry signout cleanup after a session signs in', async () => {
+    localStorage.setItem(AUTH_SIGNOUT_PENDING_CLEANUP, 'true')
+    const { rerender } = render(createElement(AuthCleanupHandler))
+    await act(async () => {})
+
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_123' } }
+    rerender(createElement(AuthCleanupHandler))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry cleanup' }))
+
+    expect(mockPerformSignoutCleanup).not.toHaveBeenCalled()
+    expect(window.location.reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('prioritizes a cross-tab reset when both cleanup markers exist', async () => {
+    sessionStorage.setItem(AUTH_ACCOUNT_RESET_FAILED, 'true')
+    localStorage.setItem(AUTH_SIGNOUT_PENDING_CLEANUP, 'true')
+    render(createElement(AuthCleanupHandler))
+    await act(async () => {})
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry cleanup' }))
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(mockRetryFailedStorageCleanup).toHaveBeenCalledTimes(1)
+    expect(mockPerformSignoutCleanup).not.toHaveBeenCalled()
+  })
 })

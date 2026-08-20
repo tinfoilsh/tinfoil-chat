@@ -114,11 +114,15 @@ export function AuthCleanupHandler() {
       isSignedIn === false &&
       localStorage.getItem(AUTH_SIGNOUT_PENDING_CLEANUP) === 'true'
     ) {
-      setCleanupError({
-        message: 'Local data could not be cleared after signing out.',
-        retryStorage: false,
-        retrySignout: true,
-      })
+      setCleanupError((currentError) =>
+        currentError?.retryStorage
+          ? currentError
+          : {
+              message: 'Local data could not be cleared after signing out.',
+              retryStorage: false,
+              retrySignout: true,
+            },
+      )
     }
   }, [isLoaded, isSignedIn])
 
@@ -203,6 +207,11 @@ export function AuthCleanupHandler() {
   )
 
   const runSignoutCleanup = useCallback(() => {
+    const latestAuthState = latestAuthStateRef.current
+    if (!latestAuthState.isLoaded || latestAuthState.isSignedIn !== false) {
+      window.location.reload()
+      return
+    }
     completeSignoutStep(SIGNOUT_STEPS.SIGN_OUT)
     logInfo('Clearing all data after signout', {
       component: 'AuthCleanupHandler',

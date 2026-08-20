@@ -192,7 +192,11 @@ export async function performSignoutCleanup(): Promise<void> {
     await performAccountCleanup({
       context: 'signoutCleanup',
     })
-    localStorage.removeItem(AUTH_SIGNOUT_PENDING_CLEANUP)
+    try {
+      localStorage.removeItem(AUTH_SIGNOUT_PENDING_CLEANUP)
+    } catch {
+      // Cleanup has already succeeded, so marker removal is best-effort.
+    }
 
     logInfo('Signout cleanup completed', {
       component: 'signoutCleanup',

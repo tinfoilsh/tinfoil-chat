@@ -23,6 +23,23 @@ async function inspectRemoteStateWithTimeout() {
   }
 }
 
+export async function waitForCloudSyncRouting<T>(
+  routing: Promise<T>,
+): Promise<T | null> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<null>((resolve) => {
+    timeoutId = setTimeout(() => resolve(null), REMOTE_STATE_ROUTING_TIMEOUT_MS)
+  })
+
+  try {
+    return await Promise.race([routing, timeout])
+  } catch {
+    return null
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId)
+  }
+}
+
 /**
  * Why a key activation failed. `key_mismatch` means the enclave
  * confirmed different cloud data exists under another key;

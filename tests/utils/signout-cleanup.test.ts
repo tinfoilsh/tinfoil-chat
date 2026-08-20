@@ -258,6 +258,17 @@ describe('performSignoutCleanup', () => {
     expect(localStorage.getItem(AUTH_SIGNOUT_PENDING_CLEANUP)).toBeNull()
   })
 
+  it('does not fail successful cleanup when marker removal is unavailable', async () => {
+    const removeItem = vi.spyOn(Storage.prototype, 'removeItem')
+    removeItem.mockImplementation(function (key) {
+      if (key === AUTH_SIGNOUT_PENDING_CLEANUP) {
+        throw new Error('storage unavailable')
+      }
+    })
+
+    await expect(performSignoutCleanup()).resolves.toBeUndefined()
+  })
+
   it('surfaces user-switch cleanup failures without replacing the marker', async () => {
     vi.mocked(indexedDBStorage.resetForAccountChange).mockRejectedValueOnce(
       new Error('reset failed'),

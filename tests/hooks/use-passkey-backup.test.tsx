@@ -198,12 +198,47 @@ describe('usePasskeyBackup', () => {
     expect(result.current.passkeyFirstTimePromptAvailable).toBe(false)
 
     mocks.isPrfSupported.mockResolvedValue(true)
-    act(() => result.current.retryPasskeyInitialization())
+    act(() => {
+      void result.current.retryPasskeyInitialization()
+    })
 
     await act(async () => {
       await Promise.resolve()
     })
     expect(mocks.getPasskeyCredentialState).toHaveBeenCalled()
+  })
+
+  it('ignores stale initialization completions after a retry', async () => {
+    let resolveInitialProbe!: (supported: boolean) => void
+    mocks.isPrfSupported
+      .mockReturnValueOnce(
+        new Promise<boolean>((resolve) => {
+          resolveInitialProbe = resolve
+        }),
+      )
+      .mockResolvedValue(true)
+    const { result } = renderHook(() => usePasskeyBackup(baseOptions))
+
+    let retryPromise!: ReturnType<
+      typeof result.current.retryPasskeyInitialization
+    >
+    act(() => {
+      retryPromise = result.current.retryPasskeyInitialization()
+    })
+    await act(async () => {
+      await retryPromise
+    })
+
+    expect(result.current.passkeyFirstTimePromptAvailable).toBe(true)
+    expect(result.current.passkeySetupFailed).toBe(false)
+
+    await act(async () => {
+      resolveInitialProbe(false)
+      await Promise.resolve()
+    })
+
+    expect(result.current.passkeyFirstTimePromptAvailable).toBe(true)
+    expect(result.current.passkeySetupFailed).toBe(false)
   })
 
   it('routes unknown remote state to passkey recovery', async () => {

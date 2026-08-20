@@ -44,11 +44,13 @@ export async function fetchLegacyPasskeyCredentials(
   else
     options.signal?.addEventListener('abort', abortFromCaller, { once: true })
   try {
+    if (controller.signal.aborted) throw controller.signal.reason
     const isAuthenticated = await settleWithSignal(
       authTokenManager.isAuthenticated(),
       controller.signal,
     )
     if (!isAuthenticated) return []
+    if (controller.signal.aborted) throw controller.signal.reason
     const headers = await settleWithSignal(
       authTokenManager.getAuthHeaders(),
       controller.signal,

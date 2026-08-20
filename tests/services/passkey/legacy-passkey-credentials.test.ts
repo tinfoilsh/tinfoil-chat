@@ -23,6 +23,7 @@ vi.mock('@/utils/error-handling', () => ({
 
 describe('fetchLegacyPasskeyCredentials', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     mocks.isAuthenticated.mockResolvedValue(true)
     mocks.getAuthHeaders.mockResolvedValue({ Authorization: 'Bearer token' })
     vi.stubGlobal(
@@ -68,6 +69,19 @@ describe('fetchLegacyPasskeyCredentials', () => {
     controller.abort()
 
     await rejection
+  })
+
+  it('does not start auth work for a pre-aborted request', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      fetchLegacyPasskeyCredentials({ signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+
+    expect(mocks.isAuthenticated).not.toHaveBeenCalled()
+    expect(mocks.getAuthHeaders).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it.each(['isAuthenticated', 'getAuthHeaders'] as const)(
