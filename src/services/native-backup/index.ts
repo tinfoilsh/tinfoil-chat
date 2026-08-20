@@ -1,3 +1,4 @@
+export * from './collect'
 export * from './constants'
 export * from './image-mime'
 export * from './format'
