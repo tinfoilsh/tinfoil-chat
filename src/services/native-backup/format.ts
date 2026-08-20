@@ -65,6 +65,8 @@ export interface NativeBackupManifestV1 {
   }>
 }
 
+export type NativeBackupV1Input = NativeBackupFormatInput
+
 const manifestSchema: z.ZodType<NativeBackupManifestV1> = strict({
   format: z.literal(NATIVE_BACKUP_FORMAT),
   version: z.literal(NATIVE_BACKUP_VERSION),
