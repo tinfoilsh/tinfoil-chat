@@ -1,6 +1,16 @@
 export const NATIVE_BACKUP_FORMAT = 'tinfoil-native-backup' as const
 export const NATIVE_BACKUP_VERSION = 1 as const
 
+export const NATIVE_BACKUP_LIMITS = {
+  archiveBytes: 512 * 1024 * 1024,
+  entries: 50_000,
+  entities: 100_000,
+  messages: 2_000_000,
+  attachments: 100_000,
+  imageBytes: 32 * 1024 * 1024,
+  aggregateJsonBytes: 256 * 1024 * 1024,
+} as const
+
 export const NATIVE_BACKUP_ENTITY_KINDS = [
   'projects',
   'project_documents',
