@@ -11,6 +11,7 @@ export interface NativeBackupImageCandidate {
   legacyIndex?: number
   fileName: string
   mimeType: string
+  sizeBytes?: number
   description?: string
 }
 export type NativeBackupImageCollector = (
@@ -39,6 +40,12 @@ const pick = (source: Row, keys: readonly string[]): Row =>
       .map((key) => [key, source[key]]),
   )
 const iso = (value: unknown): string => {
+  if (
+    !(value instanceof Date) &&
+    typeof value !== 'string' &&
+    typeof value !== 'number'
+  )
+    throw new Error('Invalid backup timestamp')
   const parsed =
     value instanceof Date ? value : new Date(value as string | number)
   if (Number.isNaN(parsed.getTime()))
@@ -127,18 +134,28 @@ function cleanAttachments(
   messageIndex: number,
   collectImage: NativeBackupImageCollector,
 ) {
-  return rows(value).map((attachment) => {
+  return rows(value).map((attachment, attachmentIndex) => {
     const attachmentId = String(attachment.id)
     if (attachment.type === 'image') {
       return {
         ...pick(attachment, keys('id type')),
         imageId: collectImage({
-          sourceKey: `attachment:${chatId}:${messageIndex}:${attachmentId}`,
+          sourceKey: JSON.stringify([
+            'attachment',
+            chatId,
+            messageIndex,
+            attachmentIndex,
+            attachmentId,
+          ]),
           chatId,
           messageIndex,
           attachmentId,
           fileName: String(attachment.fileName),
           mimeType: String(attachment.mimeType ?? 'application/octet-stream'),
+          sizeBytes:
+            typeof attachment.fileSize === 'number'
+              ? attachment.fileSize
+              : undefined,
           description:
             typeof attachment.description === 'string'
               ? attachment.description
@@ -151,14 +168,22 @@ function cleanAttachments(
         attachment,
         keys('id type fileName mimeType textContent description fileSize'),
       ),
-      pages: list(attachment.pages, (value) => {
+      pages: list(attachment.pages, (value, pageIndex) => {
         const page = row(value)
         const pageNumber = Number(page.page)
         return {
           ...pick(page, keys('page text is_scanned')),
           imageId: page.image
             ? collectImage({
-                sourceKey: `page:${chatId}:${messageIndex}:${attachmentId}:${pageNumber}`,
+                sourceKey: JSON.stringify([
+                  'page',
+                  chatId,
+                  messageIndex,
+                  attachmentIndex,
+                  attachmentId,
+                  pageIndex,
+                  pageNumber,
+                ]),
                 chatId,
                 messageIndex,
                 attachmentId,

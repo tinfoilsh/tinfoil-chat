@@ -65,7 +65,7 @@ const timeline = z.discriminatedUnion('type', [
     toolCallId: id,
     name: z.string(),
     arguments: z.string(),
-    resolvedAt: z.number().optional(),
+    resolvedAt: z.number().finite().optional(),
     resolution: strict({
       text: z.string(),
       data: NativeBackupJsonSchema.optional(),
@@ -158,7 +158,7 @@ export const NativeBackupChatSchema = strict({
   messages: z.array(NativeBackupMessageSchema),
   createdAt: date,
   updatedAt: date,
-  projectId: id.optional(),
+  projectId: id.nullable().optional(),
   presetId: id.optional(),
   model: optionalString,
   webSearchEnabled: z.boolean().optional(),

@@ -110,6 +110,71 @@ describe('native backup v1 schema', () => {
         chatImages: {},
       }),
     ).toThrow('collections must be arrays')
+    expect(() =>
+      sanitizeNativeBackupChat(
+        { ...fixture.chat, createdAt: null },
+        () => 'image',
+      ),
+    ).toThrow('Invalid backup timestamp')
+    expect(() =>
+      NativeBackupChatSchema.parse({
+        ...sanitizedFixture().chat,
+        messages: [
+          {
+            ...sanitizedFixture().chat.messages[0],
+            timeline: [
+              {
+                type: 'tool_call',
+                id: 'call',
+                toolCallId: 'call',
+                name: 'tool',
+                arguments: '{}',
+                resolvedAt: Number.POSITIVE_INFINITY,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow()
+  })
+
+  it('preserves nullable projects and distinct image occurrences', () => {
+    const candidates: Array<{ sourceKey: string; sizeBytes?: number }> = []
+    const chat = sanitizeNativeBackupChat(
+      {
+        ...fixture.chat,
+        projectId: null,
+        messages: [
+          {
+            ...fixture.chat.messages[0],
+            attachments: [
+              {
+                id: 'shared:id',
+                type: 'image',
+                fileName: 'first.png',
+                mimeType: 'image/png',
+                fileSize: 123,
+              },
+              {
+                id: 'shared:id',
+                type: 'image',
+                fileName: 'second.png',
+                mimeType: 'image/png',
+              },
+            ],
+            imageData: [],
+          },
+        ],
+      },
+      (candidate) => {
+        candidates.push(candidate)
+        return `image-${candidates.length}`
+      },
+    )
+
+    expect(chat.projectId).toBeNull()
+    expect(candidates[0].sizeBytes).toBe(123)
+    expect(candidates[0].sourceKey).not.toBe(candidates[1].sourceKey)
   })
 
   it('classifies only eligible signed-in local chats', () => {
