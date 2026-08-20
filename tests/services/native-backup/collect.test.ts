@@ -1,4 +1,5 @@
 import type { Attachment } from '@/components/chat/types'
+import { AuthTokenUnavailableError } from '@/services/auth'
 import {
   NATIVE_BACKUP_LIMITS,
   NativeBackupCollectionError,
@@ -9,6 +10,9 @@ import type { StoredChat } from '@/services/storage/indexed-db'
 import type { Project, ProjectDocument } from '@/types/project'
 
 const timestamp = '2026-08-20T12:00:00.000Z'
+const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+const pngBase64 = (suffix?: number) =>
+  btoa(String.fromCharCode(...png, ...(suffix === undefined ? [] : [suffix])))
 
 function chat(overrides: Partial<StoredChat> = {}): StoredChat {
   return {
@@ -213,7 +217,7 @@ describe('native backup collection', () => {
           role: 'user',
           content: 'local',
           timestamp: new Date(timestamp),
-          imageData: [{ base64: 'BAU=', mimeType: 'image/png' }],
+          imageData: [{ base64: pngBase64(), mimeType: 'image/png' }],
         },
       ],
     })
@@ -225,7 +229,7 @@ describe('native backup collection', () => {
           items: [{ id: cloudChat.id, syncVersion: 1 }],
         }),
         getCloudChat: async () => cloudChat,
-        getCloudImage: async () => new Uint8Array([1, 2, 3]),
+        getCloudImage: async () => png,
         listProjects: async () => ({
           items: [
             {
@@ -258,8 +262,8 @@ describe('native backup collection', () => {
       memory: project().memory,
     })
     expect(result.images.map(({ bytes }) => [...bytes])).toEqual([
-      [1, 2, 3],
-      [4, 5],
+      [...png],
+      [...png],
     ])
     expect(result.relationships).toEqual({
       projectChats: [{ projectId: 'project', chatId: 'cloud-chat' }],
@@ -275,6 +279,46 @@ describe('native backup collection', () => {
         },
       ],
     })
+  })
+
+  it('keeps documents with the same id in different projects', async () => {
+    const projects = [
+      project({ id: 'project-1' }),
+      project({ id: 'project-2' }),
+    ]
+    const documents = projects.map(({ id: projectId }) =>
+      document({ id: 'shared-document', projectId }),
+    )
+
+    const result = await collectNativeBackupV1(
+      dependencies({
+        listProjects: async () => ({
+          items: projects.map(({ id, syncVersion, createdAt, updatedAt }) => ({
+            id,
+            syncVersion,
+            createdAt,
+            updatedAt,
+          })),
+        }),
+        getProject: async (id) => projects.find((value) => value.id === id)!,
+        listDocuments: async (projectId) =>
+          documents
+            .filter((value) => value.projectId === projectId)
+            .map(({ id, projectId, syncVersion, createdAt, updatedAt }) => ({
+              id,
+              projectId,
+              syncVersion,
+              createdAt,
+              updatedAt,
+            })),
+        getDocument: async (projectId, id) =>
+          documents.find(
+            (value) => value.projectId === projectId && value.id === id,
+          )!,
+      }),
+    )
+
+    expect(result.projectDocuments).toHaveLength(2)
   })
 
   it('retries one changed record and fails a persistently changing record', async () => {
@@ -349,15 +393,15 @@ describe('native backup collection', () => {
       })
     const getLocalChat = vi
       .fn()
-      .mockResolvedValueOnce(local('AQ=='))
-      .mockResolvedValueOnce(local('Ag=='))
-      .mockResolvedValueOnce(local('Aw=='))
-      .mockResolvedValueOnce(local('BA=='))
+      .mockResolvedValueOnce(local(pngBase64(1)))
+      .mockResolvedValueOnce(local(pngBase64(2)))
+      .mockResolvedValueOnce(local(pngBase64(3)))
+      .mockResolvedValueOnce(local(pngBase64(4)))
 
     await expect(
       collectNativeBackupV1(
         dependencies({
-          getLocalChats: async () => [local('AQ==')],
+          getLocalChats: async () => [local(pngBase64(1))],
           getLocalChat,
         }),
       ),
@@ -521,6 +565,23 @@ describe('native backup collection', () => {
     )
   })
 
+  it('preserves authentication failures while reading cloud records', async () => {
+    const error = new AuthTokenUnavailableError('signed out')
+
+    await expect(
+      collectNativeBackupV1(
+        dependencies({
+          listChats: async () => ({
+            items: [{ id: 'chat', syncVersion: 1 }],
+          }),
+          getCloudChat: async () => {
+            throw error
+          },
+        }),
+      ),
+    ).rejects.toBe(error)
+  })
+
   it('preflights per-image limits', async () => {
     const oversized = chat({
       messages: [
@@ -547,8 +608,11 @@ describe('native backup collection', () => {
             items: [{ id: oversized.id, syncVersion: 1 }],
           }),
           getCloudChat: async () => oversized,
-          getCloudImage: async () =>
-            new Uint8Array(NATIVE_BACKUP_LIMITS.imageBytes + 1),
+          getCloudImage: async () => {
+            const bytes = new Uint8Array(NATIVE_BACKUP_LIMITS.imageBytes + 1)
+            bytes.set(png)
+            return bytes
+          },
         }),
       ),
     ).rejects.toThrow('image size limit exceeded')

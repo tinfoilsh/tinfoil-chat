@@ -1,6 +1,10 @@
 import type { Attachment, Message } from '@/components/chat/types'
 import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
-import { authTokenManager } from '@/services/auth'
+import {
+  AuthTokenRefreshError,
+  AuthTokenUnavailableError,
+  authTokenManager,
+} from '@/services/auth'
 import { requirePrimaryKeyB64 } from '@/services/cloud/cek-encoding'
 import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { projectStorage } from '@/services/cloud/project-storage'
@@ -8,10 +12,12 @@ import {
   indexedDBStorage,
   type StoredChat,
 } from '@/services/storage/indexed-db'
+import { SyncEnclaveError } from '@/services/sync-enclave'
 import type { Project, ProjectDocument } from '@/types/project'
 import { base64ToUint8Array } from '@/utils/binary-codec'
 import { NATIVE_BACKUP_LIMITS } from './constants'
 import { formatNativeBackupV1, type NativeBackupV1Input } from './format'
+import { detectNativeBackupImageMimeType } from './image-mime'
 import {
   classifyNativeBackupChat,
   sanitizeNativeBackupChat,
@@ -111,13 +117,25 @@ function valid<T>(kind: string, id: string, parse: () => T): T {
     return fail(kind, id, `record is invalid: ${detail(error)}`)
   }
 }
-function unique<T extends Listed>(values: T[]): T[] {
+function unique<T extends Listed>(
+  values: T[],
+  key: (value: T) => string = ({ id }) => id,
+): T[] {
   const byId = new Map<string, T>()
   for (const value of values) {
-    const old = byId.get(value.id)
-    if (!old || value.syncVersion >= old.syncVersion) byId.set(value.id, value)
+    const identity = key(value)
+    const old = byId.get(identity)
+    if (!old || value.syncVersion >= old.syncVersion) byId.set(identity, value)
   }
   return [...byId.values()]
+}
+function throwIfAuthenticationError(error: unknown) {
+  if (
+    error instanceof AuthTokenUnavailableError ||
+    error instanceof AuthTokenRefreshError ||
+    (error instanceof SyncEnclaveError && error.status === 401)
+  )
+    throw error
 }
 async function pages<T extends Listed>(
   fn: (t?: string) => Page<T>,
@@ -212,6 +230,7 @@ async function readRecord<T>(
     return value ?? fail(kind, id, 'record is missing or invalid')
   } catch (error) {
     signal?.throwIfAborted()
+    throwIfAuthenticationError(error)
     if (error instanceof NativeBackupCollectionError) throw error
     return fail(kind, id, `read failed: ${detail(error)}`)
   }
@@ -323,15 +342,24 @@ async function collectChat(
           : cloud && attachment
             ? await wait(signal, () => deps.getCloudImage(attachment))
             : null
-      } catch {
+      } catch (error) {
         signal?.throwIfAborted()
+        throwIfAuthenticationError(error)
         fail('image', candidate.sourceKey, 'image bytes are invalid')
       }
       if (!bytes) fail('image', candidate.sourceKey, 'image bytes are missing')
+      const mimeType =
+        detectNativeBackupImageMimeType(bytes) ??
+        fail('image', candidate.sourceKey, 'image type is unsupported')
+      if (candidate.legacyIndex !== undefined)
+        value.messages[candidate.messageIndex].imageData![
+          candidate.legacyIndex
+        ].mimeType = mimeType
       const metadata = valid('image', candidate.sourceKey, () =>
         sanitizeNativeBackupImage({
           ...candidate,
           id: candidate.sourceKey,
+          mimeType,
           sizeBytes: bytes.length,
         }),
       )
@@ -390,6 +418,7 @@ export async function collectNativeBackupV1(
     (
       await mapLimit(projectItems, ({ id }) => deps.listDocuments(id), signal)
     ).flat(),
+    ({ projectId, id }) => JSON.stringify([projectId, id]),
   )
   const budget = new Budget()
   budget.entities(projectItems.length + documentItems.length)
