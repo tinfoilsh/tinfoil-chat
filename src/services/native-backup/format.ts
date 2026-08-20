@@ -25,6 +25,7 @@ const MANIFEST_PATH = 'manifest.json'
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
 const countSchema = z.number().int().nonnegative()
+const strict = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict()
 
 export interface NativeBackupFileEntry {
   path: string
@@ -48,45 +49,56 @@ export interface NativeBackupFormatInput {
   images: readonly NativeBackupImageInput[]
 }
 
-const manifestSchema = z
-  .object({
-    format: z.literal(NATIVE_BACKUP_FORMAT),
-    version: z.literal(NATIVE_BACKUP_VERSION),
-    backup_id: z.string().uuid(),
-    created_at: z.string().datetime({ offset: true }),
-    complete: z.literal(true),
-    counts: z.record(
-      z.enum([...NATIVE_BACKUP_ENTITY_KINDS, 'files']),
-      countSchema,
-    ),
-    notices: z
-      .object({
-        contains_plaintext: z.literal(true),
-        documents_are_extracted_text_only: z.literal(true),
-      })
-      .strict(),
-    files: z.array(
-      z
-        .object({
-          path: z.string(),
-          kind: z.enum(NATIVE_BACKUP_ENTITY_KINDS),
-          sha256: z.string().regex(/^[0-9a-f]{64}$/),
-          size_bytes: countSchema,
-        })
-        .strict(),
-    ),
-  })
-  .strict()
+export interface NativeBackupManifestV1 {
+  format: typeof NATIVE_BACKUP_FORMAT
+  version: typeof NATIVE_BACKUP_VERSION
+  backup_id: string
+  created_at: string
+  complete: true
+  counts: Record<NativeBackupEntityKind, number> & { files: number }
+  notices: { contains_plaintext: true; documents_are_extracted_text_only: true }
+  files: Array<{
+    path: string
+    kind: NativeBackupEntityKind
+    sha256: string
+    size_bytes: number
+  }>
+}
 
-export type NativeBackupManifestV1 = z.infer<typeof manifestSchema>
+const manifestSchema: z.ZodType<NativeBackupManifestV1> = strict({
+  format: z.literal(NATIVE_BACKUP_FORMAT),
+  version: z.literal(NATIVE_BACKUP_VERSION),
+  backup_id: z.string().uuid(),
+  created_at: z.string().datetime({ offset: true }),
+  complete: z.literal(true),
+  counts: strict({
+    projects: countSchema,
+    project_documents: countSchema,
+    cloud_chats: countSchema,
+    local_chats: countSchema,
+    relationships: countSchema,
+    images: countSchema,
+    files: countSchema,
+  }),
+  notices: strict({
+    contains_plaintext: z.literal(true),
+    documents_are_extracted_text_only: z.literal(true),
+  }),
+  files: z.array(
+    strict({
+      path: z.string(),
+      kind: z.enum(NATIVE_BACKUP_ENTITY_KINDS),
+      sha256: z.string().regex(/^[0-9a-f]{64}$/),
+      size_bytes: countSchema,
+    }),
+  ),
+})
 
 function fail(message: string): never {
   throw new Error(`Invalid native backup: ${message}`)
 }
 
-function jsonBytes(value: unknown): Uint8Array {
-  return encoder.encode(JSON.stringify(value))
-}
+const jsonBytes = (value: unknown) => encoder.encode(JSON.stringify(value))
 
 function parseJson(bytes: Uint8Array, label: string): unknown {
   try {
@@ -96,21 +108,12 @@ function parseJson(bytes: Uint8Array, label: string): unknown {
   }
 }
 
-function idComponent(id: string): string {
-  return `id-${bytesToHex(encoder.encode(id))}`
-}
-
-function hash(bytes: Uint8Array): string {
-  return bytesToHex(sha256(bytes))
-}
-
-function safePath(path: string): boolean {
-  if (!path || path.length > 4096 || path.includes('\\') || path.includes('\0'))
-    return false
-  if (path.startsWith('/') || path.endsWith('/') || path.includes('//'))
-    return false
-  return path.split('/').every((part) => part !== '.' && part !== '..')
-}
+const idComponent = (id: string) => `id-${bytesToHex(encoder.encode(id))}`
+const hash = (bytes: Uint8Array) => bytesToHex(sha256(bytes))
+const relationshipCount = (value: NativeBackupRelationships) =>
+  value.projectChats.length +
+  value.projectDocuments.length +
+  value.chatImages.length
 
 function expectedPathKind(path: string): NativeBackupEntityKind | null {
   if (path === 'relationships.json') return 'relationships'
@@ -129,30 +132,26 @@ function zipUpperBound(path: string, size: number): number {
 }
 
 function assertArchiveLimits(
-  manifestBytes: Uint8Array,
+  manifest: Uint8Array,
   files: NativeBackupFileEntry[],
 ) {
   if (files.length + 1 > NATIVE_BACKUP_LIMITS.entries)
     fail('archive entry limit exceeded')
-  let total = 22 + zipUpperBound(MANIFEST_PATH, manifestBytes.length)
+  let total = 22 + zipUpperBound(MANIFEST_PATH, manifest.length)
   for (const file of files) total += zipUpperBound(file.path, file.bytes.length)
   if (total > NATIVE_BACKUP_LIMITS.archiveBytes)
     fail('archive size limit exceeded')
 }
 
 function sortedUnique<T extends { id: string }>(
-  values: readonly T[],
-  label: string,
+  items: readonly T[],
+  name: string,
 ) {
-  const sorted = [...values].sort((a, b) =>
-    idComponent(a.id) < idComponent(b.id)
-      ? -1
-      : idComponent(a.id) > idComponent(b.id)
-        ? 1
-        : 0,
+  const sorted = [...items].sort((a, b) =>
+    idComponent(a.id).localeCompare(idComponent(b.id)),
   )
   for (let index = 1; index < sorted.length; index++)
-    if (sorted[index - 1].id === sorted[index].id) fail(`duplicate ${label} id`)
+    if (sorted[index - 1].id === sorted[index].id) fail(`duplicate ${name} id`)
   return sorted
 }
 
@@ -242,7 +241,7 @@ export function formatNativeBackupV1(input: NativeBackupFormatInput): {
     project_documents: documents.length,
     cloud_chats: cloudChats.length,
     local_chats: localChats.length,
-    relationships: 1,
+    relationships: relationshipCount(relationships),
     images: images.length,
     files: files.length,
   }
@@ -269,18 +268,13 @@ export function formatNativeBackupV1(input: NativeBackupFormatInput): {
   return { manifestBytes, files }
 }
 
-function relationKey(left: string, right: string) {
-  return `${left}\0${right}`
-}
+const relationKey = (left: string, right: string) => `${left}\0${right}`
 
-function exactRelations(actual: string[], expected: string[], label: string) {
-  if (new Set(actual).size !== actual.length)
-    fail(`duplicate ${label} relationship`)
-  if (
-    actual.length !== expected.length ||
-    actual.some((value) => !expected.includes(value))
-  )
-    fail(`${label} relationships do not match entities`)
+function exactRelations(values: string[], wanted: Set<string>, name: string) {
+  const actual = new Set(values)
+  if (actual.size !== values.length) fail(`duplicate ${name} relationship`)
+  if (actual.size !== wanted.size || values.some((value) => !wanted.has(value)))
+    fail(`${name} relationships do not match entities`)
 }
 
 function assertSemanticContent(
@@ -298,15 +292,20 @@ function assertSemanticContent(
     fail('duplicate entity id')
   if (documentIds.size !== documents.length || imageIds.size !== images.length)
     fail('duplicate entity id')
-  const expectedDocuments = documents.map(({ projectId, id }) => {
-    if (!projectIds.has(projectId)) fail('document references unknown project')
-    return relationKey(projectId, id)
-  })
-  const expectedChats = chats.flatMap(({ id, projectId }) => {
-    if (!projectId) return []
-    if (!projectIds.has(projectId)) fail('chat references unknown project')
-    return [relationKey(projectId, id)]
-  })
+  const expectedDocuments = new Set(
+    documents.map(({ projectId, id }) => {
+      if (!projectIds.has(projectId))
+        fail('document references unknown project')
+      return relationKey(projectId, id)
+    }),
+  )
+  const expectedChats = new Set(
+    chats.flatMap(({ id, projectId }) => {
+      if (!projectId) return []
+      if (!projectIds.has(projectId)) fail('chat references unknown project')
+      return [relationKey(projectId, id)]
+    }),
+  )
   exactRelations(
     relationships.projectDocuments.map(({ projectId, documentId }) => {
       if (!projectIds.has(projectId) || !documentIds.has(documentId))
@@ -331,7 +330,7 @@ function assertSemanticContent(
         fail('chat image relationship references unknown entity')
       return relationKey(chatId, imageId)
     }),
-    images.map(({ chatId, id }) => relationKey(chatId, id)),
+    new Set(images.map(({ chatId, id }) => relationKey(chatId, id))),
     'chat image',
   )
   let messages = 0
@@ -408,7 +407,7 @@ export function assertValidNativeBackupV1(
     if (seenPaths.has(file.path)) fail(`duplicate path ${file.path}`)
     seenPaths.add(file.path)
     const metadata = listed.get(file.path)
-    const expectedKind = safePath(file.path) && expectedPathKind(file.path)
+    const expectedKind = expectedPathKind(file.path)
     if (
       !metadata ||
       !expectedKind ||
@@ -474,7 +473,7 @@ export function assertValidNativeBackupV1(
     project_documents: documents.length,
     cloud_chats: files.filter(({ kind }) => kind === 'cloud_chats').length,
     local_chats: files.filter(({ kind }) => kind === 'local_chats').length,
-    relationships: relationships.length,
+    relationships: relationshipCount(relationships[0]),
     images: images.length,
     files: files.length,
   }
