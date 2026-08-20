@@ -179,17 +179,6 @@ export interface DeleteRequest {
   keyB64: string
 }
 
-export interface DeleteAllProjectsRequest {
-  /** Base64 CEK used to authenticate the destructive operation. */
-  keyB64: string
-  idempotencyKey: string
-}
-
-export interface DeleteAllProjectsResponse {
-  ok: true
-  deleted: number
-}
-
 export interface OKResponse {
   ok: true
 }
@@ -405,7 +394,7 @@ export interface SearchReindexStatusResponse {
 /*  Off-device chat import                                                    */
 /* -------------------------------------------------------------------------- */
 
-export type ImportSource = 'chatgpt' | 'claude' | 'tinfoil' | 'tinfoil_backup'
+export type ImportSource = 'chatgpt' | 'claude' | 'tinfoil'
 
 export type ImportJobStatus =
   'idle' | 'staging' | 'running' | 'completed' | 'failed'
@@ -442,17 +431,10 @@ export interface ImportStartRequest {
 
 export interface ImportStatusResponse {
   status: ImportJobStatus
-  phase?: string
   imported: number
   failed: number
   total: number
-  counts?: Record<
-    string,
-    { imported: number; skipped: number; failed: number; blocked: number }
-  >
-  warnings?: string[]
   errors?: string[]
-  project_mappings?: Record<string, string>
   job_id?: string
 }
 
@@ -663,21 +645,6 @@ export async function deleteRow(req: DeleteRequest): Promise<OKResponse> {
       if_match: req.ifMatch,
       idempotency_key: req.idempotencyKey,
       key: req.keyB64,
-    },
-    undefined,
-    { requestScope: 'cloud-sync' },
-  )
-}
-
-export async function deleteAllProjects(
-  req: DeleteAllProjectsRequest,
-): Promise<DeleteAllProjectsResponse> {
-  const client = await getSyncEnclaveClient()
-  return client.post<DeleteAllProjectsResponse>(
-    '/v1/sync/delete-all-projects',
-    {
-      key: req.keyB64,
-      idempotency_key: req.idempotencyKey,
     },
     undefined,
     { requestScope: 'cloud-sync' },
