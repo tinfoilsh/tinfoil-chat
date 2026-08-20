@@ -261,6 +261,7 @@ export async function getUserInitiatedSignoutWarnings(
     clearOnUnknown: boolean
   }) => Promise<boolean | null>,
 ): Promise<UserInitiatedSignoutWarnings> {
+  const currentEncryptionKey = encryptionKey ?? encryptionService.getKey()
   const refreshBackup = refreshPasskeyBackup
     ? refreshPasskeyBackup({ clearOnUnknown: true }).catch((error) => {
         logError('Failed to verify passkey backup before sign out', error, {
@@ -285,7 +286,8 @@ export async function getUserInitiatedSignoutWarnings(
 
   return {
     localOnlyChats,
-    missingPasskeyBackup: encryptionKey !== null && backupVerified !== true,
+    missingPasskeyBackup:
+      currentEncryptionKey !== null && backupVerified !== true,
   }
 }
 

@@ -175,12 +175,12 @@ describe('AuthCleanupHandler', () => {
       legacyKey,
       JSON.stringify({ encryptionKey: 'key_must_not_be_restored' }),
     )
-    const getItem = vi.spyOn(Storage.prototype, 'getItem')
+    const getItem = vi.spyOn(localStorage, 'getItem')
 
     render(createElement(AuthCleanupHandler))
 
-    expect(localStorage.getItem(legacyKey)).toBeNull()
     expect(getItem.mock.calls.some(([key]) => key === legacyKey)).toBe(false)
+    expect(localStorage.getItem(legacyKey)).toBeNull()
   })
 
   it('retries a failed reset signaled by another tab', async () => {

@@ -57,7 +57,10 @@ vi.mock('@/services/cloud/sync-health', () => ({
 }))
 
 vi.mock('@/services/encryption/encryption-service', () => ({
-  encryptionService: { clearKey: vi.fn() },
+  encryptionService: {
+    clearKey: vi.fn(),
+    getKey: vi.fn(() => localStorage.getItem(USER_ENCRYPTION_KEY)),
+  },
 }))
 
 vi.mock('@/services/inference/tinfoil-client', () => ({
@@ -153,6 +156,28 @@ describe('performSignoutCleanup', () => {
     expect(signOut).toHaveBeenCalledTimes(1)
     expect(encryptionService.clearKey).toHaveBeenCalledTimes(1)
     expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalledTimes(1)
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps local data when sign-out fails and allows a retry', async () => {
+    const signOut = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('sign out failed'))
+      .mockResolvedValueOnce(undefined)
+    const reload = vi
+      .spyOn(window.location, 'reload')
+      .mockImplementation(() => {})
+
+    await expect(performUserInitiatedSignout(signOut)).rejects.toThrow(
+      'sign out failed',
+    )
+    expect(encryptionService.clearKey).not.toHaveBeenCalled()
+    expect(indexedDBStorage.resetForAccountChange).not.toHaveBeenCalled()
+
+    await performUserInitiatedSignout(signOut)
+
+    expect(signOut).toHaveBeenCalledTimes(2)
+    expect(encryptionService.clearKey).toHaveBeenCalledTimes(1)
     expect(reload).toHaveBeenCalledTimes(1)
   })
 
@@ -352,6 +377,18 @@ describe('performSignoutCleanup', () => {
       missingPasskeyBackup: true,
     })
     expect(refreshPasskeyBackup).toHaveBeenCalledWith({ clearOnUnknown: true })
+  })
+
+  it('warns for a persisted key before the key prop initializes', async () => {
+    localStorage.setItem(USER_ENCRYPTION_KEY, 'key_persisted')
+    const refreshPasskeyBackup = vi.fn().mockResolvedValue(false)
+
+    await expect(
+      getUserInitiatedSignoutWarnings(null, refreshPasskeyBackup),
+    ).resolves.toEqual({
+      localOnlyChats: false,
+      missingPasskeyBackup: true,
+    })
   })
 
   it('does not warn for a key with an authoritatively verified backup', async () => {

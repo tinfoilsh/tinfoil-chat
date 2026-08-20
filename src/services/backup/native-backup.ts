@@ -1036,17 +1036,14 @@ async function buildCloudImport(
     )
   }
   for (const chat of validated.cloudChats) {
-    const sanitizedChat = sanitizeBackupChat(chat)
-    const messages = sanitizedChat.messages.map((message) => {
-      const sanitizedMessage = sanitizeBackupMessage(message)
-      const { attachments, ...portableMessage } = sanitizedMessage
+    const messages = chat.messages.map((message) => {
+      const { attachments, ...portableMessage } = message
       return {
         ...portableMessage,
         ...(attachments
           ? {
               attachments: attachments.map((attachment) => {
-                const sanitizedAttachment = sanitizeBackupAttachment(attachment)
-                const sourcePath = sanitizedAttachment.backup_path
+                const sourcePath = attachment.backup_path
                 let archivePath: string | undefined
                 if (sourcePath) {
                   archivePath = blobPathForSource.get(sourcePath)
@@ -1063,7 +1060,7 @@ async function buildCloudImport(
                   }
                 }
                 const { backup_path: _backupPath, ...portableAttachment } =
-                  sanitizedAttachment
+                  attachment
                 return {
                   ...portableAttachment,
                   ...(archivePath ? { archivePath } : {}),
@@ -1079,7 +1076,7 @@ async function buildCloudImport(
       messages: _messages,
       decryptionFailed: _decryptionFailed,
       ...portableChat
-    } = sanitizedChat
+    } = chat
     cloudEntity(
       cloudFiles,
       entities,
