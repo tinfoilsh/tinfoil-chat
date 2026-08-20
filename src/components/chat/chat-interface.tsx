@@ -58,6 +58,7 @@ import {
 import { StreamErrorBanner } from '@/components/chat/stream-error-banner'
 import {
   classifyCloudKeySetupError,
+  enableCloudSyncAfterPasskey,
   waitForCloudSyncRouting,
 } from '@/components/modals/cloud-sync-setup-mode'
 import {
@@ -71,7 +72,10 @@ import { LogoLoading } from '@/components/ui/logo-loading'
 import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
-import { usePasskeyBackup } from '@/hooks/use-passkey-backup'
+import {
+  PasskeyInitializationCanceledError,
+  usePasskeyBackup,
+} from '@/hooks/use-passkey-backup'
 import { usePinnedChats } from '@/hooks/use-pinned-chats'
 import { useProfileSync } from '@/hooks/use-profile-sync'
 import { runManualCloudSync } from '@/services/cloud/manual-cloud-sync'
@@ -85,7 +89,11 @@ import {
 import { cloudSync, SyncInProgressError } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { generateCodeExecutionAccessToken } from '@/services/exec-snapshot/access-token'
-import { isPrfSupported, PrfNotSupportedError } from '@/services/passkey'
+import {
+  isPrfSupported,
+  PasskeyTimeoutError,
+  PrfNotSupportedError,
+} from '@/services/passkey'
 import { chatEvents } from '@/services/storage/chat-events'
 import { chatStorage } from '@/services/storage/chat-storage'
 import {
@@ -2182,7 +2190,7 @@ export function ChatInterface({
         return
       }
       if (routingState?.passkeyAddDeviceAvailable) {
-        await addPasskeyToThisDevice()
+        await enableCloudSyncAfterPasskey(addPasskeyToThisDevice)
         return
       }
       if (routingState?.passkeyActive) {
@@ -2192,7 +2200,20 @@ export function ChatInterface({
 
       // A timeout is intentionally conservative: try to wrap the existing
       // key rather than exposing replacement-key setup before routing settles.
-      await setupPasskey()
+      await enableCloudSyncAfterPasskey(setupPasskey)
+    } catch (error) {
+      if (error instanceof PasskeyInitializationCanceledError) return
+      if (
+        error instanceof PrfNotSupportedError ||
+        error instanceof PasskeyTimeoutError
+      ) {
+        logError('Passkey setup from Cloud Sync routing failed', error, {
+          component: 'ChatInterface',
+          action: 'handleOpenCloudSyncSetup',
+        })
+        return
+      }
+      throw error
     } finally {
       if (generation === cloudSyncRouteGenerationRef.current) {
         setIsCloudSyncRoutePending(false)

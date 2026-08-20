@@ -139,6 +139,13 @@ class PasskeyRoutingProbeTimeoutError extends Error {
   }
 }
 
+export class PasskeyInitializationCanceledError extends Error {
+  constructor() {
+    super('Passkey initialization was canceled')
+    this.name = 'PasskeyInitializationCanceledError'
+  }
+}
+
 class PasskeyRecoveryInventoryError extends Error {
   constructor(readonly reason: 'timeout' | 'unavailable') {
     super('Passkey recovery candidate inventory could not be loaded')
@@ -314,15 +321,29 @@ export function usePasskeyBackup({
   const routingProbeGenerationRef = useRef(0)
   const passkeyInitializationGenerationRef = useRef(0)
   const passkeyInitializationWaitersRef = useRef<
-    Array<(state: PasskeyBackupState) => void>
+    Array<{
+      generation: number
+      ownerId: string | null
+      resolve: (state: PasskeyBackupState) => void
+      reject: (error: PasskeyInitializationCanceledError) => void
+    }>
   >([])
+
+  const cancelPasskeyInitializationWaiters = useCallback(() => {
+    const waiters = passkeyInitializationWaitersRef.current.splice(0)
+    waiters.forEach(({ reject }) =>
+      reject(new PasskeyInitializationCanceledError()),
+    )
+  }, [])
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       isMountedRef.current = false
+      passkeyInitializationGenerationRef.current += 1
+      cancelPasskeyInitializationWaiters()
     }
-  }, [])
+  }, [cancelPasskeyInitializationWaiters])
 
   // When the signed-in user changes *after* the initial sign-in hydration
   // (sign-out-then-sign-in on the same tab, or a user switch), reset the
@@ -342,8 +363,9 @@ export function usePasskeyBackup({
       }
       return
     }
-    if (currentUserId !== null && currentUserId !== previousUserIdRef.current) {
+    if (currentUserId !== previousUserIdRef.current) {
       passkeyInitializationGenerationRef.current += 1
+      cancelPasskeyInitializationWaiters()
       hasInitializedPasskeyRef.current = false
       passkeyRecoveryDismissedFlag.clear()
       firstTimePromptDismissedFlag.clear()
@@ -365,7 +387,7 @@ export function usePasskeyBackup({
       }
       previousUserIdRef.current = currentUserId
     }
-  }, [isSignedIn, user?.id])
+  }, [cancelPasskeyInitializationWaiters, isSignedIn, user?.id])
 
   /**
    * Build the (userId, userName, displayName) tuple for createPrfPasskey
@@ -1024,22 +1046,32 @@ export function usePasskeyBackup({
 
   const retryPasskeyInitialization = useCallback(() => {
     passkeyInitializationGenerationRef.current += 1
+    cancelPasskeyInitializationWaiters()
     hasInitializedPasskeyRef.current = false
     setPasskeyInitializationAttempt((attempt) => attempt + 1)
-    return new Promise<PasskeyBackupState>((resolve) => {
-      passkeyInitializationWaitersRef.current.push(resolve)
+    const generation = passkeyInitializationGenerationRef.current + 1
+    const ownerId = userRef.current?.id ?? null
+    return new Promise<PasskeyBackupState>((resolve, reject) => {
+      passkeyInitializationWaitersRef.current.push({
+        generation,
+        ownerId,
+        resolve,
+        reject,
+      })
     })
-  }, [])
+  }, [cancelPasskeyInitializationWaiters])
 
   // --- Passkey initialization (runs once after cloud sync init completes) ---
   useEffect(() => {
     if (!initialized || !isSignedIn || hasInitializedPasskeyRef.current) return
     hasInitializedPasskeyRef.current = true
     const generation = ++passkeyInitializationGenerationRef.current
+    const ownerId = user?.id ?? null
     let resultState = latestStateRef.current
     const isCurrentInitialization = () =>
       isMountedRef.current &&
-      generation === passkeyInitializationGenerationRef.current
+      generation === passkeyInitializationGenerationRef.current &&
+      (userRef.current?.id ?? null) === ownerId
     const applyInitializationState = (
       update: (state: PasskeyBackupState) => PasskeyBackupState,
     ) => {
@@ -1331,8 +1363,19 @@ export function usePasskeyBackup({
       })
       .finally(() => {
         if (!isCurrentInitialization()) return
-        const waiters = passkeyInitializationWaitersRef.current.splice(0)
-        waiters.forEach((resolve) => resolve(resultState))
+        const pendingWaiters = passkeyInitializationWaitersRef.current
+        passkeyInitializationWaitersRef.current = pendingWaiters.filter(
+          (waiter) => {
+            if (
+              waiter.generation === generation &&
+              waiter.ownerId === ownerId
+            ) {
+              waiter.resolve(resultState)
+              return false
+            }
+            return true
+          },
+        )
       })
 
     return () => {
@@ -1341,7 +1384,13 @@ export function usePasskeyBackup({
         hasInitializedPasskeyRef.current = false
       }
     }
-  }, [initialized, isSignedIn, encryptionKey, passkeyInitializationAttempt])
+  }, [
+    initialized,
+    isSignedIn,
+    user?.id,
+    encryptionKey,
+    passkeyInitializationAttempt,
+  ])
 
   // Clear the persistent "recovery dismissed" flag and the session
   // first-time-prompt flag once the user has a key again (via passkey
@@ -1390,6 +1439,15 @@ export function usePasskeyBackup({
 
     return () => clearInterval(interval)
   }, [state.passkeyActive, isSignedIn, refreshKeyFromPasskeyBackup])
+
+  const surfacePasskeySetupFailure = useCallback(() => {
+    if (!isMountedRef.current) return
+    setState((prev) => ({
+      ...prev,
+      passkeySetupFailed: true,
+      passkeyRetryAvailable: true,
+    }))
+  }, [])
 
   /**
    * Create a passkey and encrypt existing localStorage keys to the backend.
@@ -1444,15 +1502,20 @@ export function usePasskeyBackup({
       })
       return true
     } catch (error) {
-      if (error instanceof PrfNotSupportedError) throw error
-      if (error instanceof PasskeyTimeoutError) throw error
+      if (
+        error instanceof PrfNotSupportedError ||
+        error instanceof PasskeyTimeoutError
+      ) {
+        surfacePasskeySetupFailure()
+        throw error
+      }
       logError('Passkey setup failed', error, {
         component: 'usePasskeyBackup',
         action: 'setupPasskey',
       })
       return false
     }
-  }, [])
+  }, [surfacePasskeySetupFailure])
 
   /**
    * Generate a new key + create a new passkey (explicit split).
@@ -2016,8 +2079,13 @@ export function usePasskeyBackup({
       passkeyEvents.emit({ type: 'bundle-state-maybe-changed' })
       return true
     } catch (error) {
-      if (error instanceof PrfNotSupportedError) throw error
-      if (error instanceof PasskeyTimeoutError) throw error
+      if (
+        error instanceof PrfNotSupportedError ||
+        error instanceof PasskeyTimeoutError
+      ) {
+        surfacePasskeySetupFailure()
+        throw error
+      }
       logError('Failed to add passkey for this device', error, {
         component: 'usePasskeyBackup',
         action: 'addPasskeyToThisDevice',
@@ -2026,7 +2094,7 @@ export function usePasskeyBackup({
     } finally {
       passkeyFlowInProgressRef.current = false
     }
-  }, [promoteLegacyPasskeyForCurrentDevice])
+  }, [promoteLegacyPasskeyForCurrentDevice, surfacePasskeySetupFailure])
 
   return {
     ...state,

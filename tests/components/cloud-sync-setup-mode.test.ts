@@ -1,14 +1,24 @@
 import {
   determineGeneratedKeySetupMode,
+  enableCloudSyncAfterPasskey,
   waitForCloudSyncRouting,
 } from '@/components/modals/cloud-sync-setup-mode'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mockInspectRemoteEncryptedState = vi.fn()
+const { mockInspectRemoteEncryptedState, mockSetCloudSyncEnabled } = vi.hoisted(
+  () => ({
+    mockInspectRemoteEncryptedState: vi.fn(),
+    mockSetCloudSyncEnabled: vi.fn(),
+  }),
+)
 
 vi.mock('@/services/cloud/cloud-key-preflight', () => ({
   inspectRemoteEncryptedState: (...args: unknown[]) =>
     mockInspectRemoteEncryptedState(...args),
+}))
+
+vi.mock('@/utils/cloud-sync-settings', () => ({
+  setCloudSyncEnabled: mockSetCloudSyncEnabled,
 }))
 
 describe('determineGeneratedKeySetupMode', () => {
@@ -92,5 +102,26 @@ describe('determineGeneratedKeySetupMode', () => {
     await vi.runAllTimersAsync()
 
     await expect(routingPromise).resolves.toBeNull()
+  })
+
+  it('propagates canceled cloud sync routing', async () => {
+    const error = new Error('canceled')
+
+    await expect(waitForCloudSyncRouting(Promise.reject(error))).rejects.toBe(
+      error,
+    )
+  })
+
+  it('enables cloud sync only after passkey setup succeeds', async () => {
+    await expect(enableCloudSyncAfterPasskey(async () => true)).resolves.toBe(
+      true,
+    )
+    expect(mockSetCloudSyncEnabled).toHaveBeenCalledWith(true)
+
+    mockSetCloudSyncEnabled.mockClear()
+    await expect(enableCloudSyncAfterPasskey(async () => false)).resolves.toBe(
+      false,
+    )
+    expect(mockSetCloudSyncEnabled).not.toHaveBeenCalled()
   })
 })

@@ -3,6 +3,7 @@ import {
   SETTINGS_MANUAL_RECOVERY_DISMISSED,
 } from '@/constants/storage-keys'
 import { usePasskeyBackup } from '@/hooks/use-passkey-backup'
+import { PasskeyTimeoutError, PrfNotSupportedError } from '@/services/passkey'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -239,6 +240,47 @@ describe('usePasskeyBackup', () => {
 
     expect(result.current.passkeyFirstTimePromptAvailable).toBe(true)
     expect(result.current.passkeySetupFailed).toBe(false)
+  })
+
+  it('rejects initialization waiters when the signed-in user changes', async () => {
+    mocks.isPrfSupported.mockReturnValue(new Promise(() => {}))
+    const { result, rerender } = renderHook(
+      ({ userId }) =>
+        usePasskeyBackup({
+          ...baseOptions,
+          user: { id: userId } as any,
+        }),
+      { initialProps: { userId: 'user_1' } },
+    )
+
+    let retryPromise!: Promise<unknown>
+    act(() => {
+      retryPromise = result.current.retryPasskeyInitialization()
+    })
+    const rejection = expect(retryPromise).rejects.toMatchObject({
+      name: 'PasskeyInitializationCanceledError',
+    })
+
+    rerender({ userId: 'user_2' })
+
+    await rejection
+  })
+
+  it('rejects initialization waiters when the hook unmounts', async () => {
+    mocks.isPrfSupported.mockReturnValue(new Promise(() => {}))
+    const { result, unmount } = renderHook(() => usePasskeyBackup(baseOptions))
+
+    let retryPromise!: Promise<unknown>
+    act(() => {
+      retryPromise = result.current.retryPasskeyInitialization()
+    })
+    const rejection = expect(retryPromise).rejects.toMatchObject({
+      name: 'PasskeyInitializationCanceledError',
+    })
+
+    unmount()
+
+    await rejection
   })
 
   it('routes unknown remote state to passkey recovery', async () => {
@@ -595,6 +637,24 @@ describe('usePasskeyBackup', () => {
 
       expect(success).toBe(true)
       expect(mocks.promoteRecoveredCekToEnclave).toHaveBeenCalledOnce()
+    })
+
+    it.each([
+      new PrfNotSupportedError('PRF unavailable'),
+      new PasskeyTimeoutError('Passkey timed out'),
+    ])('surfaces retry UI for expected setup errors', async (error) => {
+      mocks.keyCurrent.mockResolvedValue({ key_id: 'key-id', has_data: true })
+      mocks.addBundleForCurrentKey.mockRejectedValue(error)
+      const { result } = renderHook(() => usePasskeyBackup(baseOptions))
+
+      await act(async () => {
+        await expect(result.current.addPasskeyToThisDevice()).rejects.toBe(
+          error,
+        )
+      })
+
+      expect(result.current.passkeySetupFailed).toBe(true)
+      expect(result.current.passkeyRetryAvailable).toBe(true)
     })
   })
 })

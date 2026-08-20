@@ -2,6 +2,7 @@ import {
   CloudKeySetupError,
   inspectRemoteEncryptedState,
 } from '@/services/cloud/cloud-key-preflight'
+import { setCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 
 export type CloudKeySetupMode = 'recoverExisting' | 'explicitStartFresh'
 
@@ -33,11 +34,17 @@ export async function waitForCloudSyncRouting<T>(
 
   try {
     return await Promise.race([routing, timeout])
-  } catch {
-    return null
   } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId)
   }
+}
+
+export async function enableCloudSyncAfterPasskey(
+  setupPasskey: () => Promise<boolean>,
+): Promise<boolean> {
+  const succeeded = await setupPasskey()
+  if (succeeded) setCloudSyncEnabled(true)
+  return succeeded
 }
 
 /**
