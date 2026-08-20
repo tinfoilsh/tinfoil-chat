@@ -18,39 +18,52 @@ const localChat: StoredChat = {
   id: 'local',
   title: 'Local',
   messages: [
-    { role: 'user', content: 'one', timestamp: new Date(timestamp) },
+    {
+      role: 'user',
+      content: 'one',
+      timestamp: new Date(timestamp),
+      attachments: [
+        {
+          id: 'image',
+          type: 'image',
+          fileName: 'image.png',
+          encryptionKey: 'key',
+        },
+      ],
+    },
     { role: 'assistant', content: 'two', timestamp: new Date(timestamp) },
   ],
   createdAt: timestamp,
   updatedAt: timestamp,
   lastAccessedAt: 0,
-  isLocalOnly: true,
-  syncUserId: 'user',
+  syncVersion: 1,
 }
 
 describe('native backup collection limits', () => {
   it('preflights aggregate record counts before returning input', async () => {
     const { collectNativeBackupV1 } =
       await import('@/services/native-backup/collect')
+    const getCloudImage = vi.fn().mockResolvedValue(new Uint8Array([1]))
     const dependencies: NativeBackupCollectionDependencies = {
       isAuthenticated: async () => true,
       activeUserId: () => 'user',
       requireUnlockedCek: () => {},
-      listChats: async () => ({ items: [] }),
-      getCloudChat: async () => null,
-      getCloudImage: async () => null,
+      listChats: async () => ({
+        items: [{ id: localChat.id, syncVersion: 1 }],
+      }),
+      getCloudChat: async () => localChat,
+      getCloudImage,
       listProjects: async () => ({ items: [] }),
       getProject: async () => null,
       listDocuments: async () => [],
       getDocument: async () => null,
-      getLocalChats: async () => [localChat],
-      getLocalChat: async () => localChat,
-      randomUUID: () => '123e4567-e89b-42d3-a456-426614174000',
-      now: () => new Date(timestamp),
+      getLocalChats: async () => [],
+      getLocalChat: async () => null,
     }
 
     await expect(collectNativeBackupV1(dependencies)).rejects.toThrow(
       'message limit exceeded',
     )
+    expect(getCloudImage).not.toHaveBeenCalled()
   })
 })

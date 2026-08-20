@@ -77,8 +77,6 @@ function dependencies(
     getDocument: async () => null,
     getLocalChats: async () => [],
     getLocalChat: async () => null,
-    randomUUID: () => '123e4567-e89b-42d3-a456-426614174000',
-    now: () => new Date(timestamp),
     ...overrides,
   }
 }
@@ -282,9 +280,13 @@ describe('native backup collection', () => {
   it('retries one changed record and fails a persistently changing record', async () => {
     const stable = chat({ syncVersion: 2 })
     const getStable = vi.fn().mockResolvedValue(stable)
+    const listStable = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [{ id: stable.id, syncVersion: 1 }] })
+      .mockResolvedValue({ items: [{ id: stable.id, syncVersion: 2 }] })
     await collectNativeBackupV1(
       dependencies({
-        listChats: async () => ({ items: [{ id: stable.id, syncVersion: 1 }] }),
+        listChats: listStable,
         getCloudChat: getStable,
       }),
     )
@@ -299,6 +301,119 @@ describe('native backup collection', () => {
         }),
       ),
     ).rejects.toThrow('cloud chat chat: version changed during collection')
+  })
+
+  it('revalidates local ownership and eligibility after a changed read', async () => {
+    const eligible = chat({ isLocalOnly: true, syncUserId: 'user' })
+    const ineligible = chat({
+      isLocalOnly: true,
+      syncUserId: 'other-user',
+    })
+    const getLocalChat = vi
+      .fn()
+      .mockResolvedValueOnce(eligible)
+      .mockResolvedValue(ineligible)
+
+    const result = await collectNativeBackupV1(
+      dependencies({
+        getLocalChats: async () => [eligible],
+        getLocalChat,
+      }),
+    )
+
+    expect(result.localChats).toEqual([])
+    expect(getLocalChat).toHaveBeenCalledTimes(3)
+  })
+
+  it('refreshes authoritative timestamps when a listed version changes', async () => {
+    const oldTimestamp = '2026-08-19T12:00:00.000Z'
+    const listProjects = vi
+      .fn()
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 'project',
+            syncVersion: 1,
+            createdAt: oldTimestamp,
+            updatedAt: oldTimestamp,
+          },
+        ],
+      })
+      .mockResolvedValue({
+        items: [
+          {
+            id: 'project',
+            syncVersion: 2,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        ],
+      })
+
+    const result = await collectNativeBackupV1(
+      dependencies({
+        listProjects,
+        getProject: async () => project({ syncVersion: 2 }),
+      }),
+    )
+
+    expect(result.projects[0]).toMatchObject({
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    expect(listProjects).toHaveBeenCalledTimes(2)
+  })
+
+  it('deduplicates mutable paginated rows at their latest versions', async () => {
+    const listChats = vi
+      .fn()
+      .mockResolvedValueOnce({
+        items: [{ id: 'chat', syncVersion: 1 }],
+        next: 'next',
+      })
+      .mockResolvedValueOnce({ items: [{ id: 'chat', syncVersion: 2 }] })
+    const listProjects = vi
+      .fn()
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 'project',
+            syncVersion: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        ],
+        next: 'next',
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 'project',
+            syncVersion: 2,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        ],
+      })
+    const getCloudChat = vi.fn().mockResolvedValue(chat({ syncVersion: 2 }))
+    const getProject = vi.fn().mockResolvedValue(project({ syncVersion: 2 }))
+    const listDocuments = vi.fn().mockResolvedValue([])
+
+    const result = await collectNativeBackupV1(
+      dependencies({
+        listChats,
+        listProjects,
+        getCloudChat,
+        getProject,
+        listDocuments,
+      }),
+    )
+
+    expect(result.cloudChats).toHaveLength(1)
+    expect(result.projects).toHaveLength(1)
+    expect(getCloudChat).toHaveBeenCalledTimes(2)
+    expect(getProject).toHaveBeenCalledTimes(1)
+    expect(listDocuments).toHaveBeenCalledTimes(1)
   })
 
   it('fails the whole collection with missing record and image details', async () => {
