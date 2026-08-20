@@ -109,6 +109,7 @@ import { ConfirmDialog } from './components/confirm-dialog'
 import { normalizeChatFont, type ChatFont } from './hooks/use-chat-font'
 import { usePromptLibrary } from './hooks/use-prompt-library'
 import { MfaSettingsCard } from './mfa-settings-card'
+import { NativeBackupExport } from './native-backup-export'
 import {
   EMPTY_PRESET_EDITOR_STATE,
   PresetEditor,
@@ -3358,6 +3359,14 @@ ${encryptionKey.replace('key_', '')}
                         }
                       />
                     )}
+                    <NativeBackupExport
+                      available={Boolean(
+                        isSignedIn &&
+                        encryptionKey &&
+                        process.env.NEXT_PUBLIC_NATIVE_BACKUP_EXPORT_ENABLED ===
+                          'true',
+                      )}
+                    />
                   </div>
 
                   {/* Your Personal Encryption Key - Collapsible */}
