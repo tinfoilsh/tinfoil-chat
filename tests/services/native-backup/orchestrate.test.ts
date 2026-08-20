@@ -98,6 +98,7 @@ describe('restoreNativeBackup', () => {
       syncUserId: 'destination-owner',
       isLocalOnly: true,
     })
+    expect(result.report.projects.imported).toBe(1)
     expect(result.state).toBe('completed')
   })
 
@@ -146,6 +147,32 @@ describe('restoreNativeBackup', () => {
 
     expect(result.report.local_chats).toMatchObject({ imported: 0, failed: 1 })
     expect(result.state).toBe('partial')
+  })
+
+  it('treats a legacy owner row as an idempotent restore', async () => {
+    dependencies.validate.mockResolvedValue(validated(false))
+    await restoreNativeBackup(
+      sourceFile,
+      'owner-a',
+      new AbortController().signal,
+      {},
+      dependencies,
+    )
+    const id = saveChat.mock.calls[0][0].id
+    dependencies.getChat.mockImplementation(async (requestedId: string) =>
+      requestedId === id ? { id, userId: 'owner-a' } : null,
+    )
+
+    const result = await restoreNativeBackup(
+      sourceFile,
+      'owner-a',
+      new AbortController().signal,
+      {},
+      dependencies,
+    )
+
+    expect(result.report.local_chats.skipped).toBe(1)
+    expect(saveChat).toHaveBeenCalledTimes(1)
   })
 
   it('uses service counts for an idempotent cloud restore', async () => {

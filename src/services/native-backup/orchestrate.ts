@@ -89,12 +89,19 @@ function applyImage(chat: Chat, image: NativeBackupImage, bytes: Uint8Array) {
 function applyCloudReport(
   status: ImportStatusResponse,
   report: NativeRestoreResult['report'],
+  fallback: NonNullable<ValidatedNativeRestore['cloud']>['manifest']['counts'],
 ) {
   // prettier-ignore
   const aliases: Record<string, NativeRestoreKind> = { project: 'projects', document: 'project_documents', chat: 'cloud_chats' }
   for (const [kind, outcome] of Object.entries(status.counts ?? {})) {
     const target = aliases[kind]
     if (target) Object.assign(report[target], outcome)
+  }
+  if (status.status === 'completed' && !status.counts) {
+    report.projects.imported = fallback.projects
+    report.project_documents.imported = fallback.documents
+    report.cloud_chats.imported = fallback.chats
+    report.attachments.imported = fallback.blobs
   }
   report.attachments.warnings.push(...(status.warnings ?? []))
   report.cloud_chats.errors.push(...(status.errors ?? []))
@@ -115,7 +122,9 @@ async function restoreLocalChats(
     const id = destinationChatId(ownerId, validated.backup.backup_id, source.id)
     const existing = await dependencies.getChat(id)
     if (existing) {
-      const bucket = existing.syncUserId === ownerId ? 'skipped' : 'blocked'
+      const existingOwner =
+        existing.syncUserId ?? (existing as Chat & { userId?: string }).userId
+      const bucket = existingOwner === ownerId ? 'skipped' : 'blocked'
       report.local_chats[bucket]++
       // prettier-ignore
       report.attachments[bucket] += validated.local.images.filter(({ metadata }) => metadata.chatId === source.id).length
@@ -194,7 +203,7 @@ export async function restoreNativeBackup(
     } finally {
       if (upload.kind === 'file') await upload.cleanup()
     }
-    applyCloudReport(status!, report)
+    applyCloudReport(status!, report, validated.cloud.manifest.counts)
     if (status!.status !== 'completed' && status!.status !== 'failed')
       return { state: 'pending', jobId, report }
     if (status!.status === 'failed') return { state: 'failed', jobId, report }

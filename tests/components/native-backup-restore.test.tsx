@@ -97,6 +97,29 @@ describe('NativeBackupRestore', () => {
     expect(updated).toHaveBeenCalledOnce()
   })
 
+  it('reports a failed asynchronous chat reload instead of success', async () => {
+    const runRestore = vi.fn(async () => ({
+      state: 'completed' as const,
+      report,
+    }))
+    const updated = vi.fn(async () => {
+      throw new Error('Chat reload failed')
+    })
+    const { container } = render(
+      <NativeBackupRestore
+        available
+        ownerId="owner"
+        runRestore={runRestore}
+        onChatsUpdated={updated}
+      />,
+    )
+
+    selectArchive(container)
+
+    expect(await screen.findByText('Chat reload failed')).toBeVisible()
+    expect(screen.queryByText('Backup restored successfully.')).toBeNull()
+  })
+
   it('explains pending local restore and allows cancellation', async () => {
     const runRestore = vi.fn(
       (_file: File, _owner: string, signal: AbortSignal) =>
@@ -220,6 +243,32 @@ describe('NativeBackupRestore', () => {
       await screen.findByText(
         'The cloud restore failed. No local chats were restored.',
       ),
+    ).toBeVisible()
+  })
+
+  it('replaces the dismissed progress message after completion', async () => {
+    let finish!: (result: NativeRestoreResult) => void
+    const runRestore = vi.fn(
+      (
+        _file: File,
+        _owner: string,
+        _signal: AbortSignal,
+        events: { onStarted(status: any): void },
+      ) => {
+        events.onStarted({ status: 'running' })
+        return new Promise<NativeRestoreResult>((resolve) => (finish = resolve))
+      },
+    )
+    const view = render(
+      <NativeBackupRestore available ownerId="owner" runRestore={runRestore} />,
+    )
+    selectArchive(view.container)
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+
+    finish({ state: 'completed', report })
+
+    expect(
+      await screen.findByText('Backup restored successfully.'),
     ).toBeVisible()
   })
 })

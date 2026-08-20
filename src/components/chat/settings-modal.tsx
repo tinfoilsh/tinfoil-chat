@@ -336,7 +336,7 @@ type SettingsModalProps = {
   isClient: boolean
   defaultSystemPrompt?: string
   onCloudSyncSetupClick?: () => void
-  onChatsUpdated?: () => void
+  onChatsUpdated?: () => void | Promise<void>
   isSignedIn?: boolean
   isPremium?: boolean
   encryptionKey: string | null

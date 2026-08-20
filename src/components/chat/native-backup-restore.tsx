@@ -10,7 +10,7 @@ export function NativeBackupRestore({
 }: {
   available?: boolean
   ownerId?: string
-  onChatsUpdated?: () => void
+  onChatsUpdated?: () => void | Promise<void>
   runRestore?: typeof restoreNativeBackup
 }) {
   const input = useRef<HTMLInputElement>(null)
@@ -50,8 +50,10 @@ export function NativeBackupRestore({
         // prettier-ignore
         onPhase: (value) => { if (!dismissed.current && value) setPhase(value) },
       })
-      if (!dismissed.current) setResult(next)
-      if (!dismissed.current || next.state === 'failed')
+      if (next.state === 'completed' || next.state === 'partial')
+        await onChatsUpdated?.()
+      if (!dismissed.current || next.state !== 'pending') setResult(next)
+      if (!dismissed.current || next.state !== 'pending')
         setMessage(
           next.state === 'pending'
             ? "The cloud restore is still running. We'll email you when it finishes. No local chats were restored; reselect this archive afterward to restore them."
@@ -61,8 +63,6 @@ export function NativeBackupRestore({
                 ? 'Backup restored with warnings.'
                 : 'Backup restored successfully.',
         )
-      if (next.state === 'completed' || next.state === 'partial')
-        onChatsUpdated?.()
     } catch (cause) {
       if (!current.signal.aborted)
         setMessage(cause instanceof Error ? cause.message : 'Restore failed')
