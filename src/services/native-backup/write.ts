@@ -8,7 +8,7 @@ import type { NativeBackupFileEntry } from './format'
 
 const ZIP_MIME_TYPE = 'application/zip'
 const MANIFEST_PATH = 'manifest.json'
-const ZIP_TIMESTAMP = new Date('1980-01-01T00:00:00.000Z')
+const ZIP_YEAR = 1980
 
 export interface NativeBackupWriterLimits {
   file: { compressedBytes: number; uncompressedBytes: number }
@@ -55,6 +55,12 @@ export interface NativeZipWriter {
   close(): Promise<void>
 }
 
+export interface NativeZipWriterOptions {
+  signal?: AbortSignal
+  lastModDate: Date
+  extendedTimestamp: false
+}
+
 export interface NativeBlobOutput {
   writable: WritableStream<Uint8Array>
   getData(): Promise<Blob>
@@ -66,7 +72,7 @@ export interface NativeBackupWriterDependencies {
   createBlobOutput(): NativeBlobOutput
   createZipWriter(
     writable: WritableStream<Uint8Array>,
-    signal?: AbortSignal,
+    options: NativeZipWriterOptions,
   ): NativeZipWriter
   limits: NativeBackupWriterLimits
 }
@@ -88,10 +94,9 @@ function saveFilePicker(): SaveFilePicker | undefined {
 const zipOptions: ZipWriterConstructorOptions = {
   bufferedWrite: false,
   encrypted: false,
-  extendedTimestamp: false,
   keepOrder: true,
-  lastModDate: ZIP_TIMESTAMP,
   level: 6,
+  preventClose: true,
   useCompressionStream: false,
   useWebWorkers: false,
 }
@@ -119,14 +124,14 @@ const defaultDependencies: NativeBackupWriterDependencies = {
       getData: () => writer.getData(),
     }
   },
-  createZipWriter: (writable, signal) => {
-    const writer = new ZipWriter(writable, { ...zipOptions, signal })
+  createZipWriter: (writable, options) => {
+    const writer = new ZipWriter(writable, { ...zipOptions, ...options })
     return {
       add: async (path, bytes) => {
         await writer.add(path, new Uint8ArrayReader(bytes))
       },
       close: async () => {
-        await writer.close()
+        await writer.close(undefined, { preventClose: true })
       },
     }
   },
@@ -147,6 +152,7 @@ function filenameFromManifest(manifestBytes: Uint8Array): string {
 function safePath(path: string): boolean {
   if (!path || path.length > 4096 || /[\\\0\u0000-\u001f]/.test(path))
     return false
+  if (path !== path.trim()) return false
   if (path.startsWith('/') || path.endsWith('/') || /^[A-Za-z]:/.test(path))
     return false
   return path
@@ -195,6 +201,17 @@ function boundedWritable(
       release()
     }
   }
+  const commit = async () => {
+    if (settled) return
+    try {
+      await target.close()
+    } catch (error) {
+      await target.abort(error).catch(() => undefined)
+      throw error
+    } finally {
+      release()
+    }
+  }
   let written = 0
   return {
     writable: new WritableStream<Uint8Array>({
@@ -207,17 +224,25 @@ function boundedWritable(
         written += chunk.byteLength
         await target.write(chunk)
       },
-      close: async () => {
-        try {
-          await target.close()
-        } finally {
-          release()
-        }
-      },
+      close: () => undefined,
       abort,
     }),
     abort,
+    commit,
   }
+}
+
+function zipTimestamp(): Date {
+  return new Date(ZIP_YEAR, 0, 1, 0, 0, 0, 0)
+}
+
+async function commitOutput(
+  output: ReturnType<typeof boundedWritable>,
+  signal?: AbortSignal,
+) {
+  signal?.throwIfAborted()
+  await output.commit()
+  signal?.throwIfAborted()
 }
 
 export async function writeNativeBackupArchive(
@@ -246,12 +271,18 @@ export async function writeNativeBackupArchive(
     : await dependencies.createFileWritable(filename)
   const bounded = boundedWritable(output, limits.compressedBytes)
   try {
-    const zip = dependencies.createZipWriter(bounded.writable, options.signal)
+    const zip = dependencies.createZipWriter(bounded.writable, {
+      signal: options.signal,
+      lastModDate: zipTimestamp(),
+      extendedTimestamp: false,
+    })
     for (const entry of entries) {
       options.signal?.throwIfAborted()
       await zip.add(entry.path, entry.bytes)
     }
     await zip.close()
+    options.signal?.throwIfAborted()
+    await commitOutput(bounded, options.signal)
     if (blobOutput)
       return { kind: 'blob', filename, blob: await blobOutput.getData() }
     return { kind: 'file', filename }
