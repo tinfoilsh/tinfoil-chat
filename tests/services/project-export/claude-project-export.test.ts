@@ -163,6 +163,28 @@ describe('buildClaudeProjectExport', () => {
     expect(getProject).not.toHaveBeenCalled()
   })
 
+  it('keeps the freshest project when pagination returns a duplicate', async () => {
+    const stale = { ...listItem('project-1'), updatedAt: createdAt }
+    const fresh = { ...listItem('project-1'), syncVersion: 2 }
+    const testStorage = storage({
+      listProjects: vi
+        .fn()
+        .mockResolvedValueOnce({
+          projects: [fresh],
+          hasMore: true,
+          nextContinuationToken: 'next',
+        })
+        .mockResolvedValueOnce({ projects: [stale], hasMore: false }),
+    })
+
+    const result = await buildClaudeProjectExport(testStorage)
+
+    expect(JSON.parse(result.json)).toEqual([
+      expect.objectContaining({ updated_at: updatedAt }),
+    ])
+    expect(testStorage.getProject).toHaveBeenCalledOnce()
+  })
+
   it('returns counts and warnings for project and document failures', async () => {
     const testStorage = storage({
       listProjects: vi.fn().mockResolvedValue({
@@ -269,5 +291,35 @@ describe('buildClaudeProjectExport', () => {
     await expect(
       buildClaudeProjectExport(storage(), { maxEncodedBytes: 10 }),
     ).rejects.toBeInstanceOf(ClaudeProjectExportSizeError)
+  })
+
+  it('stops reading documents when their content exceeds the bound', async () => {
+    const documents = Array.from({ length: 8 }, (_, index) => ({
+      ...listItem(`document-${index}`),
+      projectId: 'project-1',
+      sizeBytes: 100,
+    }))
+    const getDocument = vi.fn().mockImplementation(async (_projectId, id) => ({
+      id,
+      projectId: 'project-1',
+      filename: `${id}.txt`,
+      contentType: 'text/plain',
+      sizeBytes: 100,
+      syncVersion: 1,
+      createdAt,
+      updatedAt,
+      content: 'x'.repeat(100),
+    }))
+
+    await expect(
+      buildClaudeProjectExport(
+        storage({
+          listDocuments: vi.fn().mockResolvedValue({ documents }),
+          getDocument,
+        }),
+        { maxEncodedBytes: 300 },
+      ),
+    ).rejects.toBeInstanceOf(ClaudeProjectExportSizeError)
+    expect(getDocument.mock.calls.length).toBeLessThan(documents.length)
   })
 })

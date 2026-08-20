@@ -1954,6 +1954,7 @@ export function SettingsModal({
       setIsDeletingAllProjects(false)
       setShowDeleteAllProjectsConfirm(false)
       setDeleteAllProjectsConfirmText('')
+      setProjectExportResult(null)
     }
   }
 

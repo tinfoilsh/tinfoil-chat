@@ -59,7 +59,7 @@ interface ExportOptions {
 async function listAllProjects(
   storage: Pick<ProjectStorageService, 'listProjects'>,
 ): Promise<ProjectListItem[]> {
-  const projects: ProjectListItem[] = []
+  const projectsById = new Map<string, ProjectListItem>()
   let continuationToken: string | undefined
 
   do {
@@ -67,11 +67,73 @@ async function listAllProjects(
       limit: PROJECT_PAGE_LIMIT,
       continuationToken,
     })
-    projects.push(...page.projects)
+    for (const project of page.projects) {
+      const existing = projectsById.get(project.id)
+      if (
+        !existing ||
+        project.updatedAt > existing.updatedAt ||
+        (project.updatedAt === existing.updatedAt &&
+          project.syncVersion > existing.syncVersion)
+      ) {
+        projectsById.set(project.id, project)
+      }
+    }
     continuationToken = page.nextContinuationToken
   } while (continuationToken)
 
-  return projects
+  return [...projectsById.values()]
+}
+
+class ExportSizeGuard {
+  private readonly encoder = new TextEncoder()
+  private completedProjectBytes = 0
+  private completedProjects = 0
+  private pendingProjectBytes = 0
+
+  constructor(private readonly maxEncodedBytes: number) {}
+
+  beginProject(project: ClaudeProject): void {
+    this.pendingProjectBytes = this.encodedLength(JSON.stringify(project))
+    this.assertWithinBound(this.pendingProjectBytes)
+  }
+
+  addDocument(document: NonNullable<ClaudeProject['docs']>[number]): void {
+    this.pendingProjectBytes += this.encodedLength(JSON.stringify(document))
+    this.assertWithinBound(this.pendingProjectBytes)
+  }
+
+  finishProject(project: ClaudeProject): string {
+    const serialized = JSON.stringify(project, null, 2)
+      .split('\n')
+      .map((line) => `  ${line}`)
+      .join('\n')
+    const serializedBytes = this.encodedLength(serialized)
+    this.assertWithinBound(serializedBytes)
+    this.completedProjectBytes += serializedBytes
+    this.completedProjects++
+    this.pendingProjectBytes = 0
+    return serialized
+  }
+
+  encodedLength(value: string): number {
+    return this.encoder.encode(value).length
+  }
+
+  private assertWithinBound(pendingProjectBytes: number): void {
+    const framingBytes = 4
+    const separatorBytes = this.completedProjects > 0 ? 2 : 0
+    const completedSeparatorBytes = Math.max(0, this.completedProjects - 1) * 2
+    if (
+      framingBytes +
+        this.completedProjectBytes +
+        completedSeparatorBytes +
+        separatorBytes +
+        pendingProjectBytes >
+      this.maxEncodedBytes
+    ) {
+      throw new ClaudeProjectExportSizeError()
+    }
+  }
 }
 
 async function readDocuments(
@@ -80,6 +142,7 @@ async function readDocuments(
   documents: ProjectDocumentListItem[],
   counts: ClaudeProjectExportCounts,
   warnings: string[],
+  sizeGuard: ExportSizeGuard,
 ): Promise<NonNullable<ClaudeProject['docs']>> {
   const exported: Array<NonNullable<ClaudeProject['docs']>[number] | null> =
     new Array(documents.length).fill(null)
@@ -102,14 +165,17 @@ async function readDocuments(
           )
           continue
         }
-        exported[index] = {
+        const exportedDocument = {
           uuid: listedDocument.id,
           filename: document.filename,
           content: document.content,
           created_at: listedDocument.createdAt,
         }
+        sizeGuard.addDocument(exportedDocument)
+        exported[index] = exportedDocument
         counts.exportedDocuments++
-      } catch {
+      } catch (error) {
+        if (error instanceof ClaudeProjectExportSizeError) throw error
         counts.skippedDocuments++
         warnings.push(
           `Skipped document ${listedDocument.id} in project ${projectId}.`,
@@ -139,7 +205,10 @@ export async function buildClaudeProjectExport(
   // Finish the authoritative project listing before reading any content. A
   // listing failure must abort rather than produce an incomplete project set.
   const listedProjects = await listAllProjects(storage)
-  const projects: ClaudeProject[] = []
+  const serializedProjects: string[] = []
+  const sizeGuard = new ExportSizeGuard(
+    options.maxEncodedBytes ?? CLAUDE_PROJECT_EXPORT_MAX_BYTES,
+  )
   const counts: ClaudeProjectExportCounts = {
     exportedProjects: 0,
     skippedProjects: 0,
@@ -162,6 +231,18 @@ export async function buildClaudeProjectExport(
       continue
     }
 
+    const exportedProject: ClaudeProject = {
+      uuid: project.id,
+      name: project.name,
+      ...(project.description ? { description: project.description } : {}),
+      ...(project.systemInstructions
+        ? { prompt_template: project.systemInstructions }
+        : {}),
+      created_at: listedProject.createdAt,
+      updated_at: listedProject.updatedAt,
+    }
+    sizeGuard.beginProject(exportedProject)
+
     let listedDocuments: ProjectDocumentListItem[] = []
     try {
       listedDocuments = (await storage.listDocuments(project.id)).documents
@@ -177,29 +258,19 @@ export async function buildClaudeProjectExport(
       listedDocuments,
       counts,
       warnings,
+      sizeGuard,
     )
 
-    projects.push({
-      uuid: project.id,
-      name: project.name,
-      ...(project.description ? { description: project.description } : {}),
-      ...(project.systemInstructions
-        ? { prompt_template: project.systemInstructions }
-        : {}),
-      created_at: listedProject.createdAt,
-      updated_at: listedProject.updatedAt,
-      ...(docs.length > 0 ? { docs } : {}),
-    })
+    if (docs.length > 0) exportedProject.docs = docs
+    serializedProjects.push(sizeGuard.finishProject(exportedProject))
     counts.exportedProjects++
   }
 
-  const json = JSON.stringify(projects, null, 2)
-  const encodedBytes = new TextEncoder().encode(json).length
-  if (
-    encodedBytes > (options.maxEncodedBytes ?? CLAUDE_PROJECT_EXPORT_MAX_BYTES)
-  ) {
-    throw new ClaudeProjectExportSizeError()
-  }
+  const json =
+    serializedProjects.length === 0
+      ? '[]'
+      : `[\n${serializedProjects.join(',\n')}\n]`
+  const encodedBytes = sizeGuard.encodedLength(json)
 
   return { json, encodedBytes, counts, warnings }
 }
