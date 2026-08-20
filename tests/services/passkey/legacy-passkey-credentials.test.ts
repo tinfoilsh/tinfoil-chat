@@ -48,14 +48,12 @@ describe('fetchLegacyPasskeyCredentials', () => {
   it('aborts a hanging request after the named timeout', async () => {
     vi.useFakeTimers()
     const credentialsPromise = fetchLegacyPasskeyCredentials({ timeoutMs: 50 })
-    await Promise.resolve()
-    await Promise.resolve()
-
-    vi.advanceTimersByTime(50)
-
-    await expect(credentialsPromise).rejects.toBeInstanceOf(
+    const rejection = expect(credentialsPromise).rejects.toBeInstanceOf(
       LegacyPasskeyCredentialsTimeoutError,
     )
+    await vi.advanceTimersByTimeAsync(50)
+
+    await rejection
   })
 
   it('propagates caller cancellation to the request', async () => {
@@ -64,13 +62,29 @@ describe('fetchLegacyPasskeyCredentials', () => {
       signal: controller.signal,
       timeoutMs: 5_000,
     })
-    await Promise.resolve()
-    await Promise.resolve()
-
-    controller.abort()
-
-    await expect(credentialsPromise).rejects.toMatchObject({
+    const rejection = expect(credentialsPromise).rejects.toMatchObject({
       name: 'AbortError',
     })
+    controller.abort()
+
+    await rejection
   })
+
+  it.each(['isAuthenticated', 'getAuthHeaders'] as const)(
+    'bounds hanging %s acquisition with the same timeout',
+    async (method) => {
+      vi.useFakeTimers()
+      mocks[method].mockReturnValue(new Promise(() => {}))
+
+      const credentialsPromise = fetchLegacyPasskeyCredentials({
+        timeoutMs: 50,
+      })
+      const rejection = expect(credentialsPromise).rejects.toBeInstanceOf(
+        LegacyPasskeyCredentialsTimeoutError,
+      )
+      await vi.advanceTimersByTimeAsync(50)
+
+      await rejection
+    },
+  )
 })

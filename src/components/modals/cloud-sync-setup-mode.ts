@@ -83,8 +83,8 @@ export async function determineGeneratedKeySetupMode({
 
   try {
     const remoteState = await inspectRemoteStateWithTimeout()
-    return remoteState === 'empty' ? 'recoverExisting' : 'explicitStartFresh'
+    return remoteState === 'exists' ? 'explicitStartFresh' : 'recoverExisting'
   } catch {
-    return 'explicitStartFresh'
+    return 'recoverExisting'
   }
 }

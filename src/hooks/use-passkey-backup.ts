@@ -96,7 +96,7 @@ export interface PasskeyBackupState {
 }
 
 export type PasskeyRecoveryFailure =
-  'auth_failed' | 'inventory_timeout' | 'stale_backup'
+  'auth_failed' | 'inventory_timeout' | 'inventory_unavailable' | 'stale_backup'
 
 type StoredPasskeyBackup = {
   credentialId: string
@@ -140,7 +140,7 @@ class PasskeyRoutingProbeTimeoutError extends Error {
 }
 
 class PasskeyRecoveryInventoryError extends Error {
-  constructor() {
+  constructor(readonly reason: 'timeout' | 'unavailable') {
     super('Passkey recovery candidate inventory could not be loaded')
     this.name = 'PasskeyRecoveryInventoryError'
   }
@@ -298,6 +298,8 @@ export function usePasskeyBackup({
     passkeyFirstTimePromptAvailable: false,
     passkeyRecoveryFailure: null,
   })
+  const [passkeyInitializationAttempt, setPasskeyInitializationAttempt] =
+    useState(0)
 
   const isMountedRef = useRef(true)
   const passkeyFlowInProgressRef = useRef(false)
@@ -491,8 +493,12 @@ export function usePasskeyBackup({
         (signal) => loadRecoveryCandidates({ signal }),
         PASSKEY_RECOVERY_INVENTORY_TIMEOUT_MS,
       )
-    } catch {
-      throw new PasskeyRecoveryInventoryError()
+    } catch (error) {
+      throw new PasskeyRecoveryInventoryError(
+        error instanceof PasskeyRoutingProbeTimeoutError
+          ? 'timeout'
+          : 'unavailable',
+      )
     }
     if (entries.length === 0) return null
 
@@ -973,7 +979,10 @@ export function usePasskeyBackup({
         if (isMountedRef.current) {
           setState((prev) => ({
             ...prev,
-            passkeyRecoveryFailure: 'inventory_timeout',
+            passkeyRecoveryFailure:
+              error.reason === 'timeout'
+                ? 'inventory_timeout'
+                : 'inventory_unavailable',
           }))
         }
         return null
@@ -1005,6 +1014,11 @@ export function usePasskeyBackup({
       return null
     }
   }, [applyRecoveredKeyBundle])
+
+  const retryPasskeyInitialization = useCallback(() => {
+    hasInitializedPasskeyRef.current = false
+    setPasskeyInitializationAttempt((attempt) => attempt + 1)
+  }, [])
 
   // --- Passkey initialization (runs once after cloud sync init completes) ---
   useEffect(() => {
@@ -1265,7 +1279,7 @@ export function usePasskeyBackup({
     }
 
     initializePasskey()
-  }, [initialized, isSignedIn, encryptionKey])
+  }, [initialized, isSignedIn, encryptionKey, passkeyInitializationAttempt])
 
   // Clear the persistent "recovery dismissed" flag and the session
   // first-time-prompt flag once the user has a key again (via passkey
@@ -1967,5 +1981,6 @@ export function usePasskeyBackup({
     skipPasskeyRecovery,
     addPasskeyToThisDevice,
     refreshBundleState,
+    retryPasskeyInitialization,
   }
 }

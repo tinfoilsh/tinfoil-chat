@@ -1,5 +1,5 @@
 import { determineGeneratedKeySetupMode } from '@/components/modals/cloud-sync-setup-mode'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockInspectRemoteEncryptedState = vi.fn()
 
@@ -11,6 +11,10 @@ vi.mock('@/services/cloud/cloud-key-preflight', () => ({
 describe('determineGeneratedKeySetupMode', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('uses explicitStartFresh when manual recovery is required', async () => {
@@ -42,17 +46,17 @@ describe('determineGeneratedKeySetupMode', () => {
     expect(mode).toBe('explicitStartFresh')
   })
 
-  it('uses explicitStartFresh when the remote cloud state is unknown', async () => {
+  it('keeps recoverExisting when the remote cloud state is unknown', async () => {
     mockInspectRemoteEncryptedState.mockResolvedValue('unknown')
 
     const mode = await determineGeneratedKeySetupMode({
       manualRecoveryNeeded: false,
     })
 
-    expect(mode).toBe('explicitStartFresh')
+    expect(mode).toBe('recoverExisting')
   })
 
-  it('requires explicit start fresh when remote inspection fails', async () => {
+  it('keeps recoverExisting when remote inspection fails', async () => {
     mockInspectRemoteEncryptedState.mockRejectedValue(
       new Error('Network error'),
     )
@@ -61,6 +65,18 @@ describe('determineGeneratedKeySetupMode', () => {
       manualRecoveryNeeded: false,
     })
 
-    expect(mode).toBe('explicitStartFresh')
+    expect(mode).toBe('recoverExisting')
+  })
+
+  it('keeps recoverExisting when remote inspection times out', async () => {
+    vi.useFakeTimers()
+    mockInspectRemoteEncryptedState.mockReturnValue(new Promise(() => {}))
+
+    const modePromise = determineGeneratedKeySetupMode({
+      manualRecoveryNeeded: false,
+    })
+    await vi.advanceTimersByTimeAsync(3_000)
+
+    await expect(modePromise).resolves.toBe('recoverExisting')
   })
 })

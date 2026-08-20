@@ -338,6 +338,7 @@ describe('passkey-key-storage load + delete (enclave wire)', () => {
         legacyTimeoutMs: 123,
       })
 
+      expect(mockKeyCurrent).toHaveBeenCalledWith({ signal: controller.signal })
       expect(mockFetchLegacy).toHaveBeenCalledWith({
         signal: controller.signal,
         timeoutMs: 123,

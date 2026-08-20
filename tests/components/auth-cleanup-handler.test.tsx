@@ -4,6 +4,7 @@ import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
   AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP,
+  AUTH_SIGNOUT_PENDING_CLEANUP,
   SETTINGS_CLOUD_SYNC_ENABLED,
   USER_ENCRYPTION_KEY,
 } from '@/constants/storage-keys'
@@ -230,5 +231,24 @@ describe('AuthCleanupHandler', () => {
     expect(
       screen.getByRole('alertdialog', { name: 'Unable to clear local data' }),
     ).toBeTruthy()
+  })
+
+  it('blocks a signed-out remount until pending cleanup is retried', async () => {
+    localStorage.setItem(AUTH_SIGNOUT_PENDING_CLEANUP, 'true')
+    render(createElement(AuthCleanupHandler))
+    await act(async () => {})
+
+    expect(
+      screen.getByRole('alertdialog', {
+        name: 'Unable to clear local data',
+      }),
+    ).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry cleanup' }))
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(mockPerformSignoutCleanup).toHaveBeenCalledTimes(1)
   })
 })

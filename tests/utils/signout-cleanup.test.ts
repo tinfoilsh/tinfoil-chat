@@ -5,6 +5,7 @@ import {
   AUTH_ACCOUNT_RESET_SIGNAL,
   AUTH_ACTIVE_USER_ID,
   AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP,
+  AUTH_SIGNOUT_PENDING_CLEANUP,
   SECRET_PASSKEY_BACKED_UP,
   SETTINGS_HAS_SEEN_ONBOARDING,
   USER_ENCRYPTION_KEY,
@@ -246,6 +247,15 @@ describe('performSignoutCleanup', () => {
     await expect(performSignoutCleanup()).rejects.toThrow('reset failed')
 
     expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_123')
+    expect(localStorage.getItem(AUTH_SIGNOUT_PENDING_CLEANUP)).toBe('true')
+  })
+
+  it('clears a pending signout marker after cleanup succeeds', async () => {
+    localStorage.setItem(AUTH_SIGNOUT_PENDING_CLEANUP, 'true')
+
+    await performSignoutCleanup()
+
+    expect(localStorage.getItem(AUTH_SIGNOUT_PENDING_CLEANUP)).toBeNull()
   })
 
   it('surfaces user-switch cleanup failures without replacing the marker', async () => {

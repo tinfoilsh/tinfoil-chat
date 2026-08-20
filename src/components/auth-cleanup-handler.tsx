@@ -6,6 +6,7 @@ import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
   AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP,
+  AUTH_SIGNOUT_PENDING_CLEANUP,
 } from '@/constants/storage-keys'
 import { logError, logInfo } from '@/utils/error-handling'
 import {
@@ -32,6 +33,7 @@ export function AuthCleanupHandler() {
   const [cleanupError, setCleanupError] = useState<{
     message: string
     retryStorage: boolean
+    retrySignout: boolean
   } | null>(null)
   const [cleanupRetrying, setCleanupRetrying] = useState(false)
   const hasCheckedRef = useRef(false)
@@ -89,6 +91,7 @@ export function AuthCleanupHandler() {
         message:
           'Local data could not be cleared after another tab changed accounts.',
         retryStorage: true,
+        retrySignout: false,
       })
     }
     if (sessionStorage.getItem(AUTH_ACCOUNT_RESET_FAILED) === 'true') {
@@ -104,6 +107,20 @@ export function AuthCleanupHandler() {
         handleCrossTabResetFailure,
       )
   }, [])
+
+  useEffect(() => {
+    if (
+      isLoaded &&
+      isSignedIn === false &&
+      localStorage.getItem(AUTH_SIGNOUT_PENDING_CLEANUP) === 'true'
+    ) {
+      setCleanupError({
+        message: 'Local data could not be cleared after signing out.',
+        retryStorage: false,
+        retrySignout: true,
+      })
+    }
+  }, [isLoaded, isSignedIn])
 
   const clearPendingSignoutCleanup = useCallback(() => {
     if (pendingSignoutCleanupRef.current !== null) {
@@ -146,6 +163,7 @@ export function AuthCleanupHandler() {
               message:
                 'Local data from the previous account could not be cleared.',
               retryStorage: false,
+              retrySignout: false,
             })
             return
           }
@@ -202,9 +220,11 @@ export function AuthCleanupHandler() {
           action: 'signout',
         })
         hideSignoutProgress()
+        setCleanupRetrying(false)
         setCleanupError({
           message: 'Local data could not be cleared after signing out.',
           retryStorage: false,
+          retrySignout: true,
         })
       })
   }, [])
@@ -295,6 +315,11 @@ export function AuthCleanupHandler() {
         <button
           type="button"
           onClick={() => {
+            if (cleanupError.retrySignout) {
+              setCleanupRetrying(true)
+              runSignoutCleanup()
+              return
+            }
             if (!cleanupError.retryStorage) {
               window.location.reload()
               return
@@ -309,6 +334,7 @@ export function AuthCleanupHandler() {
                   message:
                     'Local data still could not be cleared after another tab changed accounts.',
                   retryStorage: true,
+                  retrySignout: false,
                 })
               })
           }}

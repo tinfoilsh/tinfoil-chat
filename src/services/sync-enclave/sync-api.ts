@@ -739,10 +739,17 @@ export async function removeBundle(
  * enclave is mapped to this empty shape so callers can treat it as a
  * normal "first-time user" state without special-casing exceptions).
  */
-export async function keyCurrent(): Promise<KeyCurrentResponse> {
+export async function keyCurrent(
+  options: { signal?: AbortSignal } = {},
+): Promise<KeyCurrentResponse> {
   const client = await getSyncEnclaveClient()
   try {
-    const resp = await client.post<KeyCurrentResponse>('/v1/key/current', {})
+    const resp = await client.post<KeyCurrentResponse>(
+      '/v1/key/current',
+      {},
+      undefined,
+      options,
+    )
     // The server is a Go service; a nil bundle map marshals to JSON
     // null. Normalize so callers can Object.values/index the map
     // without crashing on edge shapes (e.g. a key registered via

@@ -336,6 +336,17 @@ describe('sync-api (enclave JSON-RPC)', () => {
     })
   })
 
+  it('propagates caller cancellation through keyCurrent', async () => {
+    const api = await import('@/services/sync-enclave/sync-api')
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      api.keyCurrent({ signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
   it('migrate posts /v1/blobs/migrate with target key', async () => {
     const api = await import('@/services/sync-enclave/sync-api')
     mockFetch.mockResolvedValueOnce(

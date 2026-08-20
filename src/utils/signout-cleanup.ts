@@ -5,6 +5,7 @@ import {
   AUTH_ACCOUNT_RESET_SIGNAL,
   AUTH_ACTIVE_USER_ID,
   AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP,
+  AUTH_SIGNOUT_PENDING_CLEANUP,
   SECRET_PASSKEY_BACKED_UP,
   SETTINGS_HAS_SEEN_ONBOARDING,
   USER_ENCRYPTION_KEY,
@@ -191,12 +192,18 @@ export async function performSignoutCleanup(): Promise<void> {
     await performAccountCleanup({
       context: 'signoutCleanup',
     })
+    localStorage.removeItem(AUTH_SIGNOUT_PENDING_CLEANUP)
 
     logInfo('Signout cleanup completed', {
       component: 'signoutCleanup',
       action: 'performSignoutCleanup',
     })
   } catch (error) {
+    try {
+      localStorage.setItem(AUTH_SIGNOUT_PENDING_CLEANUP, 'true')
+    } catch {
+      // The current page still blocks on the cleanup error below.
+    }
     logError('Error during signout cleanup', error, {
       component: 'signoutCleanup',
       action: 'performSignoutCleanup',

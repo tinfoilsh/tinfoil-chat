@@ -217,7 +217,7 @@ export async function loadPasskeyCredentials(
   options: LoadPasskeyCredentialsOptions = {},
 ): Promise<PasskeyCredentialEntry[]> {
   try {
-    const resp = await enclaveKeyCurrent()
+    const resp = await enclaveKeyCurrent({ signal: options.signal })
     if (resp.key_id) {
       const entries = Object.values(resp.bundles).map((bundle) => ({
         ...reshapeBundleToEntry(bundle),
@@ -270,7 +270,7 @@ export async function loadRecoveryCandidates(
 ): Promise<PasskeyCredentialEntry[]> {
   const enclavePromise = (async () => {
     try {
-      const resp = await enclaveKeyCurrent()
+      const resp = await enclaveKeyCurrent({ signal: options.signal })
       if (!resp.key_id) return []
       return Object.values(resp.bundles).map((bundle) => ({
         ...reshapeBundleToEntry(bundle),

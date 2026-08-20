@@ -185,10 +185,7 @@ describe('usePasskeyBackup', () => {
   it('bounds the cold-load PRF probe and leaves initialization retryable', async () => {
     vi.useFakeTimers()
     mocks.isPrfSupported.mockReturnValue(new Promise(() => {}))
-    const { result, rerender } = renderHook(
-      (options) => usePasskeyBackup(options),
-      { initialProps: baseOptions },
-    )
+    const { result } = renderHook(() => usePasskeyBackup(baseOptions))
 
     await act(async () => {
       await Promise.resolve()
@@ -201,8 +198,7 @@ describe('usePasskeyBackup', () => {
     expect(result.current.passkeyFirstTimePromptAvailable).toBe(false)
 
     mocks.isPrfSupported.mockResolvedValue(true)
-    rerender({ ...baseOptions, initialized: false })
-    rerender(baseOptions)
+    act(() => result.current.retryPasskeyInitialization())
 
     await act(async () => {
       await Promise.resolve()
@@ -323,7 +319,7 @@ describe('usePasskeyBackup', () => {
     })
 
     expect(recovered).toBeNull()
-    expect(result.current.passkeyRecoveryFailure).toBe('inventory_timeout')
+    expect(result.current.passkeyRecoveryFailure).toBe('inventory_unavailable')
     expect(mocks.authenticatePrfPasskey).not.toHaveBeenCalled()
   })
 

@@ -477,6 +477,7 @@ export function ChatInterface({
     skipPasskeyRecovery,
     addPasskeyToThisDevice,
     refreshBundleState,
+    retryPasskeyInitialization,
   } = usePasskeyBackup({
     encryptionKey,
     initialized: cloudSyncInitialized && !showOnboarding,
@@ -2162,8 +2163,13 @@ export function ChatInterface({
       }
       return
     }
+    retryPasskeyInitialization()
     setShowCloudSyncSetupModal(true)
-  }, [showPasskeyRecoveryPrompt, showFirstTimePasskeyPrompt])
+  }, [
+    retryPasskeyInitialization,
+    showPasskeyRecoveryPrompt,
+    showFirstTimePasskeyPrompt,
+  ])
 
   // Pre-warm the cloud-sync modal chunks as soon as a cloud-sync entry
   // point is reachable, so clicking the sidebar prompt opens the popup
