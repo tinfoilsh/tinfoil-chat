@@ -155,7 +155,17 @@ function filenameFromManifest(manifestBytes: Uint8Array): string {
     typeof createdAt === 'string'
       ? /^(\d{4}-\d{2}-\d{2})T/.exec(createdAt)
       : null
-  if (!match || !Number.isFinite(Date.parse(createdAt as string)))
+  const year = Number(match?.[1].slice(0, 4))
+  const month = Number(match?.[1].slice(5, 7))
+  const day = Number(match?.[1].slice(8, 10))
+  const date = new Date(Date.UTC(year, month - 1, day))
+  if (
+    !match ||
+    !Number.isFinite(Date.parse(createdAt as string)) ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  )
     throw new NativeBackupWriterError(
       'invalid_manifest',
       'manifest created_at is missing or invalid',

@@ -137,6 +137,21 @@ describe('native backup archive writer', () => {
     ).resolves.toMatchObject({ filename: 'tinfoil-backup-2026-08-20.zip' })
   })
 
+  it('rejects normalized calendar dates before opening output', async () => {
+    const archive = input([])
+    archive.manifestBytes = new TextEncoder().encode(
+      JSON.stringify({ created_at: '2026-02-31T12:00:00.000Z' }),
+    )
+    const { dependencies, events } = mockDependencies()
+
+    await expect(
+      writeNativeBackupArchive(archive, {}, dependencies),
+    ).rejects.toMatchObject<Partial<NativeBackupWriterError>>({
+      code: 'invalid_manifest',
+    })
+    expect(events.blobOutputs).toBe(0)
+  })
+
   it('uses the larger file-backed limits without creating a fallback Blob', async () => {
     const archive = input([])
     const { dependencies, events } = mockDependencies({
