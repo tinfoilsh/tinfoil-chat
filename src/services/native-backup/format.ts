@@ -96,6 +96,9 @@ const manifestSchema: z.ZodType<NativeBackupManifestV1> = strict({
   ),
 })
 
+export const parseNativeBackupManifestV1 = (bytes: Uint8Array) =>
+  manifestSchema.parse(parseJson(bytes, MANIFEST_PATH))
+
 function fail(message: string): never {
   throw new Error(`Invalid native backup: ${message}`)
 }
@@ -279,7 +282,7 @@ function exactRelations(values: string[], wanted: Set<string>, name: string) {
     fail(`${name} relationships do not match entities`)
 }
 
-function assertSemanticContent(
+export function assertSemanticContent(
   projects: NativeBackupProject[],
   documents: NativeBackupProjectDocument[],
   chats: NativeBackupChat[],
