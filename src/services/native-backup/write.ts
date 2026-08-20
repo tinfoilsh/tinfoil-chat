@@ -139,9 +139,23 @@ const defaultDependencies: NativeBackupWriterDependencies = {
 }
 
 function filenameFromManifest(manifestBytes: Uint8Array): string {
-  const prefix = new TextDecoder().decode(manifestBytes.subarray(0, 1024))
-  const match = /"created_at":"(\d{4}-\d{2}-\d{2})T/.exec(prefix)
-  if (!match)
+  let createdAt: unknown
+  try {
+    const manifest = JSON.parse(
+      new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes),
+    )
+    createdAt =
+      manifest && typeof manifest === 'object'
+        ? (manifest as Record<string, unknown>).created_at
+        : undefined
+  } catch {
+    createdAt = undefined
+  }
+  const match =
+    typeof createdAt === 'string'
+      ? /^(\d{4}-\d{2}-\d{2})T/.exec(createdAt)
+      : null
+  if (!match || !Number.isFinite(Date.parse(createdAt as string)))
     throw new NativeBackupWriterError(
       'invalid_manifest',
       'manifest created_at is missing or invalid',
@@ -157,7 +171,13 @@ function safePath(path: string): boolean {
     return false
   return path
     .split('/')
-    .every((part) => part.length > 0 && part !== '.' && part !== '..')
+    .every(
+      (part) =>
+        part.length > 0 &&
+        part === part.trim() &&
+        part !== '.' &&
+        part !== '..',
+    )
 }
 
 function orderedEntries(input: NativeBackupArchiveInput) {

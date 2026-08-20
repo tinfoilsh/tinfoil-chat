@@ -116,6 +116,27 @@ describe('native backup archive writer', () => {
     })
   })
 
+  it('reads the filename date from the complete manifest JSON', async () => {
+    const archive = input([])
+    archive.manifestBytes = new TextEncoder().encode(
+      JSON.stringify(
+        {
+          padding: 'x'.repeat(1100),
+          created_at: '2026-08-20T12:00:00.000Z',
+        },
+        null,
+        2,
+      ),
+    )
+    const { dependencies } = mockDependencies({
+      uncompressedBytes: archive.manifestBytes.length,
+    })
+
+    await expect(
+      writeNativeBackupArchive(archive, {}, dependencies),
+    ).resolves.toMatchObject({ filename: 'tinfoil-backup-2026-08-20.zip' })
+  })
+
   it('uses the larger file-backed limits without creating a fallback Blob', async () => {
     const archive = input([])
     const { dependencies, events } = mockDependencies({
@@ -287,6 +308,8 @@ describe('native backup archive writer', () => {
   it.each([
     [' a.json', 'a.json'],
     ['a.json ', 'a.json'],
+    ['projects/ a.json', 'projects/a.json'],
+    ['projects/ /a.json', 'projects/a.json'],
   ])(
     'rejects whitespace-normalized path collision %s with %s',
     async (path, other) => {
