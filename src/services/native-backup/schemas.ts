@@ -5,6 +5,17 @@ const date = z.string().datetime({ offset: true })
 const optionalString = z.string().optional()
 const strict = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict()
 
+export const NATIVE_BACKUP_IMAGE_MIME_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'image/bmp',
+] as const
+export const NativeBackupImageMimeSchema = z.enum(
+  NATIVE_BACKUP_IMAGE_MIME_TYPES,
+)
+
 export const NativeBackupJsonSchema: z.ZodType<unknown> = z.lazy(() =>
   z.union([
     z.string(),
@@ -176,7 +187,7 @@ export const NativeBackupImageSchema = strict({
   page: z.number().int().nonnegative().optional(),
   legacyIndex: z.number().int().nonnegative().optional(),
   fileName: z.string(),
-  mimeType: z.string(),
+  mimeType: NativeBackupImageMimeSchema,
   sizeBytes: z.number().int().nonnegative().optional(),
   description: optionalString,
 })

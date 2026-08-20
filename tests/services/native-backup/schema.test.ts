@@ -177,6 +177,30 @@ describe('native backup v1 schema', () => {
     expect(candidates[0].sourceKey).not.toBe(candidates[1].sourceKey)
   })
 
+  it('forwards only valid image sizes and supported image types', () => {
+    const candidates: Array<{ sizeBytes?: number }> = []
+    const value = structuredClone(fixture.chat)
+    value.messages[0].attachments = [
+      {
+        id: 'image',
+        type: 'image',
+        fileName: 'image.png',
+        mimeType: 'image/png',
+        fileSize: Number.NaN,
+      },
+    ]
+    value.messages[0].imageData = []
+
+    sanitizeNativeBackupChat(value, (candidate) => {
+      candidates.push(candidate)
+      return 'image'
+    })
+    expect(candidates[0].sizeBytes).toBeUndefined()
+
+    value.messages[0].attachments[0].mimeType = 'image/avif'
+    expect(() => sanitizeNativeBackupChat(value, () => 'image')).toThrow()
+  })
+
   it('classifies only eligible signed-in local chats', () => {
     expect(classifyNativeBackupChat(fixture.chat, 'cloud')).toBe('cloud')
     expect(classifyNativeBackupChat(fixture.chat, 'signed_in')).toBe('local')
