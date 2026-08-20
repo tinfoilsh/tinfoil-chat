@@ -15,6 +15,7 @@ import {
   parseNativeBackupManifestV1,
   type NativeBackupManifestV1,
 } from './format'
+import { detectNativeBackupImageMimeType } from './image-mime'
 import {
   NativeBackupChatSchema,
   NativeBackupImageSchema,
@@ -253,21 +254,6 @@ async function parseArchive(
   // prettier-ignore
   return { backup, projects, documents, cloudChats, localChats, relationships: relationValue, images }
 }
-function imageMime(bytes: Uint8Array): string | null {
-  const has = (...values: number[]) =>
-    values.every((value, index) => bytes[index] === value)
-  if (bytes.length >= 8 && has(137, 80, 78, 71, 13, 10, 26, 10))
-    return 'image/png'
-  if (bytes.length >= 3 && has(255, 216, 255)) return 'image/jpeg'
-  const text = (start: number, end: number) =>
-    String.fromCharCode(...bytes.subarray(start, end))
-  if (bytes.length >= 6 && ['GIF87a', 'GIF89a'].includes(text(0, 6)))
-    return 'image/gif'
-  if (bytes.length >= 12 && text(0, 4) === 'RIFF' && text(8, 12) === 'WEBP')
-    return 'image/webp'
-  if (bytes.length >= 2 && has(66, 77)) return 'image/bmp'
-  return null
-}
 // prettier-ignore
 type CloudSink = { add(path: string, bytes: Uint8Array): Promise<void>; finish(): Promise<NativeCloudUpload>; abort(reason?: unknown): Promise<void> }
 async function createCloudSink(
@@ -362,7 +348,7 @@ export async function validateAndPackageNativeBackup(
     const blobs: NativeCloudImportManifestV1['blobs'] = []
     // prettier-ignore
     const readImage = async <T>(image: ParsedBackup['images'][number], consume: (bytes: Uint8Array) => T | Promise<T>) => readEntry(image.entry, { size_bytes: image.entry.uncompressedSize, sha256: image.sha256 }, options.signal, async (bytes) => {
-      const mime = imageMime(bytes)
+      const mime = detectNativeBackupImageMimeType(bytes)
       if (!mime || mime !== image.metadata.mimeType.split(';', 1)[0].trim() || !image.metadata.fileName.trim()) fail(`image is malformed: ${image.metadata.id}`)
       return consume(bytes)
     })
@@ -488,7 +474,7 @@ export async function forEachNativeBackupLocalImage(images: NativeBackupImageSou
       if (source.file !== file || source.sizeBytes > NATIVE_BACKUP_LIMITS.imageBytes || source.path !== `images/${idComponent(image.metadata.id)}.bin`) fail('invalid local image source')
       const entry = entries.get(source.path) ?? fail('local image entry is missing')
       await readEntry(entry, { size_bytes: source.sizeBytes, sha256: source.sha256 }, options.signal, async (bytes) => {
-        if (imageMime(bytes) !== image.metadata.mimeType.split(';', 1)[0].trim()) fail(`image is malformed: ${image.metadata.id}`)
+        if (detectNativeBackupImageMimeType(bytes) !== image.metadata.mimeType.split(';', 1)[0].trim()) fail(`image is malformed: ${image.metadata.id}`)
         await consume({ metadata: image.metadata, bytes })
         options.signal?.throwIfAborted()
       })
