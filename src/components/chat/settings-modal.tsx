@@ -45,7 +45,7 @@ import {
   formatClaudeProjectExportCounts,
   type ClaudeProjectExportCounts,
 } from '@/services/project-export/claude-project-export'
-import { projectEvents } from '@/services/project/project-events'
+import { invalidateProjects } from '@/services/project/project-events'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { projectCache } from '@/services/storage/project-cache'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -1920,7 +1920,7 @@ export function SettingsModal({
     try {
       const deleted = await projectStorage.deleteAllProjects()
       setProjectExportResult(null)
-      projectEvents.emit({ type: 'projects-invalidated' })
+      invalidateProjects()
       try {
         await projectCache.clear()
       } catch (cacheError) {

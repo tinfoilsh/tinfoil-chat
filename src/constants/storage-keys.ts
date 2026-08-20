@@ -134,6 +134,7 @@ export const SYNC_PROFILE_BASELINE = 'tinfoil-sync-profile-baseline'
 export const SYNC_PROFILE_LOCAL_METADATA = 'tinfoil-sync-profile-local-metadata'
 export const SYNC_PROFILE_UNKNOWN_FIELDS = 'tinfoil-sync-profile-unknown-fields'
 export const SYNC_PROFILE_GENERATION = 'tinfoil-sync-profile-generation'
+export const SYNC_PROJECTS_INVALIDATED = 'tinfoil-sync-projects-invalidated'
 // Content modification time of the pending local profile edit, used to
 // arbitrate last-write-wins against a concurrently-updated remote.
 export const SYNC_PROFILE_CHANGED_AT = 'tinfoil-sync-profile-changed-at'

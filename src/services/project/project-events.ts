@@ -1,4 +1,5 @@
 import type { Message } from '@/components/chat/types'
+import { SYNC_PROJECTS_INVALIDATED } from '@/constants/storage-keys'
 import { logError } from '@/utils/error-handling'
 
 type ProjectMemoryUpdateEvent = {
@@ -55,3 +56,13 @@ class ProjectEventsEmitter {
 }
 
 export const projectEvents = new ProjectEventsEmitter()
+
+export function invalidateProjects(): void {
+  projectEvents.emit({ type: 'projects-invalidated' })
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(SYNC_PROJECTS_INVALIDATED, crypto.randomUUID())
+  } catch {
+    // Cross-tab invalidation is best-effort; the current tab was already reset.
+  }
+}

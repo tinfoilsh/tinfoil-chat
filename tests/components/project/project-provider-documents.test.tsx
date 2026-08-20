@@ -1,5 +1,6 @@
 import { useProject } from '@/components/project/project-context'
 import { ProjectProvider } from '@/components/project/project-provider'
+import { SYNC_PROJECTS_INVALIDATED } from '@/constants/storage-keys'
 import type { Project, ProjectDocument } from '@/types/project'
 import { act, renderHook } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
@@ -257,6 +258,39 @@ describe('ProjectProvider documents', () => {
     })
     expect(result.current.activeProject).toBeNull()
     expect(result.current.projectDocuments).toEqual([])
+
+    await act(async () => {
+      resolvePendingProject({ ...project, id: 'project-2' })
+      await pendingLoad
+    })
+
+    expect(result.current.activeProject).toBeNull()
+    expect(result.current.projectDocuments).toEqual([])
+  })
+
+  it('handles cross-tab invalidation without letting a stale load restore state', async () => {
+    const { result } = await renderInProject()
+    let resolvePendingProject!: (project: Project) => void
+    mocks.getProject.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePendingProject = resolve
+      }),
+    )
+
+    let pendingLoad!: Promise<boolean>
+    act(() => {
+      pendingLoad = result.current.enterProjectMode('project-2')
+    })
+    await vi.waitFor(() => expect(mocks.getProject).toHaveBeenCalledTimes(2))
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: SYNC_PROJECTS_INVALIDATED,
+          newValue: 'another-tab-signal',
+        }),
+      )
+    })
 
     await act(async () => {
       resolvePendingProject({ ...project, id: 'project-2' })
