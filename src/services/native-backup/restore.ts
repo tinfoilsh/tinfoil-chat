@@ -174,7 +174,10 @@ async function parseArchive(
     []
   let relationships: NativeBackupRelationships | undefined
   for (const file of backup.files) {
-    if (file.path.endsWith('.bin')) continue
+    if (file.path.endsWith('.bin')) {
+      if (file.kind !== 'images') fail(`invalid kind for ${file.path}`)
+      continue
+    }
     const entry = byPath.get(file.path)!
     await readEntry(entry, file, signal, (bytes) => {
       const value = parse(bytes, file.path)
@@ -257,7 +260,7 @@ function imageMime(bytes: Uint8Array): string | null {
     return 'image/png'
   if (bytes.length >= 3 && has(255, 216, 255)) return 'image/jpeg'
   const text = (start: number, end: number) =>
-    decoder.decode(bytes.subarray(start, end))
+    String.fromCharCode(...bytes.subarray(start, end))
   if (bytes.length >= 6 && ['GIF87a', 'GIF89a'].includes(text(0, 6)))
     return 'image/gif'
   if (bytes.length >= 12 && text(0, 4) === 'RIFF' && text(8, 12) === 'WEBP')
@@ -411,7 +414,7 @@ export async function validateAndPackageNativeBackup(
       }
       for (const chat of value.cloudChats) {
         // prettier-ignore
-        const cloudImages = new Map<string, { metadata: NativeBackupImage; path?: string; base64?: string }>()
+        const cloudImages = new Map<string, { metadata: NativeBackupImage; sizeBytes: number; path?: string; base64?: string }>()
         for (const image of value.images.filter(
           ({ metadata }) => metadata.chatId === chat.id,
         ))
@@ -429,7 +432,7 @@ export async function validateAndPackageNativeBackup(
               await sink!.add(path, bytes)
             }
             // prettier-ignore
-            cloudImages.set(image.metadata.id, { metadata: image.metadata, path, ...(!path ? { base64: uint8ArrayToBase64(bytes) } : {}) })
+            cloudImages.set(image.metadata.id, { metadata: image.metadata, sizeBytes: bytes.length, path, ...(!path ? { base64: uint8ArrayToBase64(bytes) } : {}) })
           })
         // prettier-ignore
         const messages = chat.messages.map((message) => ({
@@ -438,7 +441,7 @@ export async function validateAndPackageNativeBackup(
           attachments: message.attachments?.map((attachment) => {
             if (attachment.type === 'image') {
               const image = cloudImages.get(attachment.imageId) ?? fail(`missing image ${attachment.imageId}`)
-              return { id: attachment.id, type: 'image', fileName: image.metadata.fileName, mimeType: image.metadata.mimeType, fileSize: image.metadata.sizeBytes, ...(image.metadata.description ? { description: image.metadata.description } : {}), archivePath: image.path }
+              return { id: attachment.id, type: 'image', fileName: image.metadata.fileName, mimeType: image.metadata.mimeType, fileSize: image.sizeBytes, ...(image.metadata.description ? { description: image.metadata.description } : {}), archivePath: image.path }
             }
             if (!attachment.fileName.trim())
               fail('document attachment filename is empty')
@@ -450,7 +453,7 @@ export async function validateAndPackageNativeBackup(
           'chat',
           id,
           { ...payload, messages, isLocalOnly: false },
-          projectId,
+          projectId ?? undefined,
         )
       }
       // prettier-ignore

@@ -8,6 +8,8 @@ import {
   type NativeRestoreArchive,
 } from '@/services/native-backup'
 import { base64ToUint8Array } from '@/utils/binary-codec'
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex } from '@noble/hashes/utils.js'
 import {
   BlobReader,
   BlobWriter,
@@ -216,6 +218,21 @@ describe('native backup restore validation and cloud packaging', () => {
       ),
     ).rejects.toThrow()
 
+    const wrongKind = JSON.parse(
+      new TextDecoder().decode(formatted.manifestBytes),
+    )
+    wrongKind.files.find(({ path }: { path: string }) =>
+      path.endsWith('.bin'),
+    ).kind = 'projects'
+    await expect(
+      validateAndPackageNativeBackup(
+        await zip(
+          new TextEncoder().encode(JSON.stringify(wrongKind)),
+          formatted.files,
+        ),
+      ),
+    ).rejects.toThrow('invalid kind')
+
     const tampered = formatted.files.map((file, index) =>
       index ? file : { ...file, bytes: new Uint8Array([1]) },
     )
@@ -234,13 +251,45 @@ describe('native backup restore validation and cloud packaging', () => {
     ).rejects.toThrow('invalid, unknown, or duplicate')
 
     const malformedInput = backupInput()
-    malformedInput.images[0].bytes = new Uint8Array([0, 1, 2, 3])
+    malformedInput.images[0].bytes = new Uint8Array([255, 0, 0, 0])
     const malformed = formatNativeBackupV1(malformedInput)
     await expect(
       validateAndPackageNativeBackup(
         await zip(malformed.manifestBytes, malformed.files),
       ),
     ).rejects.toThrow('image is malformed')
+  })
+
+  it('uses verified image bytes when optional size metadata is absent', async () => {
+    const formatted = formatNativeBackupV1(backupInput())
+    const metadataFile = formatted.files.find(
+      ({ path }) => path.endsWith('.json') && path.startsWith('images/'),
+    )!
+    const metadata = JSON.parse(new TextDecoder().decode(metadataFile.bytes))
+    delete metadata.sizeBytes
+    metadataFile.bytes = new TextEncoder().encode(JSON.stringify(metadata))
+    const manifest = JSON.parse(
+      new TextDecoder().decode(formatted.manifestBytes),
+    )
+    const listed = manifest.files.find(
+      ({ path }: { path: string }) => path === metadataFile.path,
+    )
+    listed.size_bytes = metadataFile.bytes.length
+    listed.sha256 = bytesToHex(sha256(metadataFile.bytes))
+
+    const result = await validateAndPackageNativeBackup(
+      await zip(
+        new TextEncoder().encode(JSON.stringify(manifest)),
+        formatted.files,
+      ),
+    )
+    const files = await unzip((result.cloud!.upload as { blob: Blob }).blob)
+    const chat = result.cloud!.manifest.entities.find(
+      ({ kind }) => kind === 'chat',
+    )!
+    const payload = JSON.parse(new TextDecoder().decode(files.get(chat.path)))
+
+    expect(payload.messages[0].attachments[0].fileSize).toBe(png.length)
   })
 
   it('checks outer and per-entry limits without calling File.arrayBuffer', async () => {
