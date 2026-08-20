@@ -185,6 +185,33 @@ describe('buildClaudeProjectExport', () => {
     expect(testStorage.getProject).toHaveBeenCalledOnce()
   })
 
+  it('sorts deduplicated projects by freshness with a stable ID tie-break', async () => {
+    const older = { ...listItem('older'), updatedAt: createdAt }
+    const first = { ...listItem('first'), syncVersion: 2 }
+    const second = { ...listItem('second'), syncVersion: 2 }
+    const moved = { ...listItem('moved'), updatedAt: createdAt }
+    const refreshedMoved = { ...moved, updatedAt, syncVersion: 3 }
+    const testStorage = storage({
+      listProjects: vi
+        .fn()
+        .mockResolvedValueOnce({
+          projects: [moved, second, older],
+          hasMore: true,
+          nextContinuationToken: 'next',
+        })
+        .mockResolvedValueOnce({
+          projects: [first, refreshedMoved],
+          hasMore: false,
+        }),
+    })
+
+    const result = await buildClaudeProjectExport(testStorage)
+
+    expect(
+      JSON.parse(result.json).map((item: { uuid: string }) => item.uuid),
+    ).toEqual(['moved', 'first', 'second', 'older'])
+  })
+
   it('returns counts and warnings for project and document failures', async () => {
     const testStorage = storage({
       listProjects: vi.fn().mockResolvedValue({
@@ -290,6 +317,59 @@ describe('buildClaudeProjectExport', () => {
   it('rejects encoded JSON over the configured bound', async () => {
     await expect(
       buildClaudeProjectExport(storage(), { maxEncodedBytes: 10 }),
+    ).rejects.toBeInstanceOf(ClaudeProjectExportSizeError)
+  })
+
+  it('applies the encoded bound exactly to pretty-printed output', async () => {
+    const testStorage = storage({
+      listDocuments: vi.fn().mockResolvedValue({
+        documents: [
+          {
+            ...listItem('document-1'),
+            projectId: 'project-1',
+            sizeBytes: 4,
+          },
+        ],
+      }),
+      getDocument: vi.fn().mockResolvedValue({
+        id: 'document-1',
+        projectId: 'project-1',
+        filename: 'notes.txt',
+        contentType: 'text/plain',
+        sizeBytes: 4,
+        syncVersion: 1,
+        createdAt,
+        updatedAt,
+        content: 'text',
+      }),
+    })
+    const result = await buildClaudeProjectExport(testStorage)
+
+    await expect(
+      buildClaudeProjectExport(testStorage, {
+        maxEncodedBytes: result.encodedBytes,
+      }),
+    ).resolves.toEqual(result)
+    await expect(
+      buildClaudeProjectExport(testStorage, {
+        maxEncodedBytes: result.encodedBytes - 1,
+      }),
+    ).rejects.toBeInstanceOf(ClaudeProjectExportSizeError)
+  })
+
+  it('applies the encoded bound to an empty export', async () => {
+    const emptyStorage = storage({
+      listProjects: vi.fn().mockResolvedValue({
+        projects: [],
+        hasMore: false,
+      }),
+    })
+
+    await expect(
+      buildClaudeProjectExport(emptyStorage, { maxEncodedBytes: 2 }),
+    ).resolves.toMatchObject({ json: '[]', encodedBytes: 2 })
+    await expect(
+      buildClaudeProjectExport(emptyStorage, { maxEncodedBytes: 1 }),
     ).rejects.toBeInstanceOf(ClaudeProjectExportSizeError)
   })
 

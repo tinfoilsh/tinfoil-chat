@@ -1954,7 +1954,6 @@ export function SettingsModal({
       setIsDeletingAllProjects(false)
       setShowDeleteAllProjectsConfirm(false)
       setDeleteAllProjectsConfirmText('')
-      setProjectExportResult(null)
     }
   }
 
@@ -2043,6 +2042,7 @@ export function SettingsModal({
       setDeleteAllChatsConfirmText('')
       setShowDeleteAllProjectsConfirm(false)
       setDeleteAllProjectsConfirmText('')
+      setProjectExportResult(null)
     }
   }, [isOpen])
 

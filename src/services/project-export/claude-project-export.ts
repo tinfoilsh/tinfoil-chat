@@ -81,7 +81,11 @@ async function listAllProjects(
     continuationToken = page.nextContinuationToken
   } while (continuationToken)
 
-  return [...projectsById.values()]
+  return [...projectsById.values()].sort((a, b) => {
+    if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? 1 : -1
+    if (a.syncVersion !== b.syncVersion) return b.syncVersion - a.syncVersion
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  })
 }
 
 class ExportSizeGuard {
@@ -89,34 +93,59 @@ class ExportSizeGuard {
   private completedProjectBytes = 0
   private completedProjects = 0
   private pendingProjectBytes = 0
+  private pendingDocuments = 0
 
   constructor(private readonly maxEncodedBytes: number) {}
 
   beginProject(project: ClaudeProject): void {
-    this.pendingProjectBytes = this.encodedLength(JSON.stringify(project))
+    this.pendingProjectBytes = this.encodedLength(this.indent(project, 2))
+    this.pendingDocuments = 0
     this.assertWithinBound(this.pendingProjectBytes)
   }
 
   addDocument(document: NonNullable<ClaudeProject['docs']>[number]): void {
-    this.pendingProjectBytes += this.encodedLength(JSON.stringify(document))
+    const documentBytes = this.encodedLength(this.indent(document, 6))
+    if (this.pendingDocuments === 0) {
+      const projectClosingBytes = this.encodedLength('\n  }')
+      this.pendingProjectBytes +=
+        this.encodedLength(',\n    "docs": [\n') +
+        documentBytes +
+        this.encodedLength('\n    ]\n  }') -
+        projectClosingBytes
+    } else {
+      this.pendingProjectBytes += this.encodedLength(',\n') + documentBytes
+    }
+    this.pendingDocuments++
     this.assertWithinBound(this.pendingProjectBytes)
   }
 
   finishProject(project: ClaudeProject): string {
-    const serialized = JSON.stringify(project, null, 2)
-      .split('\n')
-      .map((line) => `  ${line}`)
-      .join('\n')
+    const serialized = this.indent(project, 2)
     const serializedBytes = this.encodedLength(serialized)
     this.assertWithinBound(serializedBytes)
     this.completedProjectBytes += serializedBytes
     this.completedProjects++
     this.pendingProjectBytes = 0
+    this.pendingDocuments = 0
     return serialized
   }
 
   encodedLength(value: string): number {
     return this.encoder.encode(value).length
+  }
+
+  assertFinal(encodedBytes: number): void {
+    if (encodedBytes > this.maxEncodedBytes) {
+      throw new ClaudeProjectExportSizeError()
+    }
+  }
+
+  private indent(value: unknown, spaces: number): string {
+    const indentation = ' '.repeat(spaces)
+    return JSON.stringify(value, null, 2)
+      .split('\n')
+      .map((line) => `${indentation}${line}`)
+      .join('\n')
   }
 
   private assertWithinBound(pendingProjectBytes: number): void {
@@ -271,6 +300,7 @@ export async function buildClaudeProjectExport(
       ? '[]'
       : `[\n${serializedProjects.join(',\n')}\n]`
   const encodedBytes = sizeGuard.encodedLength(json)
+  sizeGuard.assertFinal(encodedBytes)
 
   return { json, encodedBytes, counts, warnings }
 }
