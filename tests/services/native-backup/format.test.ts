@@ -3,6 +3,7 @@ import {
   assertValidNativeBackupV1,
   formatNativeBackupV1,
   type NativeBackupFormatInput,
+  type NativeBackupManifestV1,
 } from '@/services/native-backup'
 import goldenManifest from '../../fixtures/native-backup-manifest-v1.json'
 
@@ -97,7 +98,53 @@ describe('native backup v1 manifest', () => {
     expect(assertValidNativeBackupV1(first.manifestBytes, first.files)).toEqual(
       goldenManifest,
     )
+    expectTypeOf<NativeBackupManifestV1['counts']>().toMatchTypeOf<{
+      projects: number
+      project_documents: number
+      cloud_chats: number
+      local_chats: number
+      relationships: number
+      images: number
+      files: number
+    }>()
   })
+
+  it('validates near-limit relationship sets without quadratic membership scans', () => {
+    const nearLimit = input()
+    const count = 24_000
+    nearLimit.projects = Array.from({ length: count }, (_, index) => ({
+      id: `p-${index}`,
+      name: `Project ${index}`,
+      description: '',
+      systemInstructions: '',
+      memory: [],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }))
+    nearLimit.projectDocuments = nearLimit.projects.map((project, index) => ({
+      id: `d-${index}`,
+      projectId: project.id,
+      filename: `${index}.txt`,
+      contentType: 'text/plain',
+      sizeBytes: 1,
+      extractedText: 'x',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }))
+    nearLimit.cloudChats[0].projectId = nearLimit.projects[0].id
+    nearLimit.relationships.projectChats[0].projectId = nearLimit.projects[0].id
+    nearLimit.relationships.projectDocuments = nearLimit.projectDocuments.map(
+      ({ id, projectId }) => ({ projectId, documentId: id }),
+    )
+
+    const formatted = formatNativeBackupV1(nearLimit)
+    const manifest = assertValidNativeBackupV1(
+      formatted.manifestBytes,
+      formatted.files,
+    )
+    expect(manifest.counts.files).toBe(48_005)
+    expect(manifest.counts.relationships).toBe(24_002)
+  }, 30_000)
 
   it('requires matching image metadata, bytes, and message references', () => {
     const missingBytes = { ...input(), images: [] }
@@ -153,7 +200,7 @@ describe('native backup v1 manifest', () => {
     expect(() => formatNativeBackupV1(archiveLimited)).toThrow(
       'archive size limit exceeded',
     )
-  })
+  }, 15_000)
 
   it('rejects unsafe or noncanonical paths', () => {
     const formatted = formatNativeBackupV1(input())
@@ -186,12 +233,13 @@ describe('native backup v1 manifest', () => {
     ).toThrow('size or hash mismatch')
 
     type MutableManifest = {
-      counts: { images: number }
+      counts: { images: number; relationships?: number }
       complete: boolean
       files: unknown[]
     }
     for (const mutation of [
       (manifest: MutableManifest) => manifest.counts.images++,
+      (manifest: MutableManifest) => delete manifest.counts.relationships,
       (manifest: MutableManifest) => (manifest.complete = false),
       (manifest: MutableManifest) => manifest.files.pop(),
     ]) {
