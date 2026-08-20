@@ -259,9 +259,24 @@ function portable(chat: StoredChat, images?: NativeBackupImageCandidate[]) {
     return candidate.sourceKey
   })
 }
+function imagePayload(chat: StoredChat, candidate: NativeBackupImageCandidate) {
+  const message = chat.messages[candidate.messageIndex]
+  const attachment =
+    candidate.attachmentIndex === undefined
+      ? undefined
+      : message.attachments?.[candidate.attachmentIndex]
+  return candidate.legacyIndex !== undefined
+    ? message.imageData?.[candidate.legacyIndex]?.base64
+    : candidate.page !== undefined
+      ? attachment?.pages?.find(({ page }) => page === candidate.page)?.image
+      : attachment?.base64
+}
 function localToken(chat: StoredChat) {
+  const images: NativeBackupImageCandidate[] = []
+  const value = valid('local chat', chat.id, () => portable(chat, images))
   return JSON.stringify([
-    portable(chat),
+    value,
+    images.map((candidate) => [candidate, imagePayload(chat, candidate)]),
     chat.isLocalOnly,
     chat.isBlankChat,
     chat.isTemporary,
@@ -294,17 +309,13 @@ async function collectChat(
   const images = await mapLimit(
     candidates,
     async (candidate) => {
-      const message = chat.messages[candidate.messageIndex]
-      const attachment = message.attachments?.find(
-        ({ id }) => id === candidate.attachmentId,
-      )
-      const base64 =
-        candidate.legacyIndex !== undefined
-          ? message.imageData?.[candidate.legacyIndex]?.base64
-          : candidate.page !== undefined
-            ? attachment?.pages?.find(({ page }) => page === candidate.page)
-                ?.image
-            : attachment?.base64
+      const attachment =
+        candidate.attachmentIndex === undefined
+          ? undefined
+          : chat.messages[candidate.messageIndex].attachments?.[
+              candidate.attachmentIndex
+            ]
+      const base64 = imagePayload(chat, candidate)
       let bytes: Uint8Array | null = null
       try {
         bytes = base64

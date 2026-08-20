@@ -267,7 +267,7 @@ describe('native backup collection', () => {
       chatImages: [
         {
           chatId: 'cloud-chat',
-          imageId: 'attachment:cloud-chat:0:cloud-image',
+          imageId: '["attachment","cloud-chat",0,0,"cloud-image"]',
         },
         {
           chatId: 'local-chat',
@@ -323,6 +323,64 @@ describe('native backup collection', () => {
 
     expect(result.localChats).toEqual([])
     expect(getLocalChat).toHaveBeenCalledTimes(3)
+  })
+
+  it('detects local image changes during collection', async () => {
+    const local = (base64: string) =>
+      chat({
+        isLocalOnly: true,
+        syncUserId: 'user',
+        messages: [
+          {
+            role: 'user',
+            content: 'image',
+            timestamp: new Date(timestamp),
+            attachments: [
+              {
+                id: 'image',
+                type: 'image',
+                fileName: 'image.png',
+                mimeType: 'image/png',
+                base64,
+              },
+            ],
+          },
+        ],
+      })
+    const getLocalChat = vi
+      .fn()
+      .mockResolvedValueOnce(local('AQ=='))
+      .mockResolvedValueOnce(local('Ag=='))
+      .mockResolvedValueOnce(local('Aw=='))
+      .mockResolvedValueOnce(local('BA=='))
+
+    await expect(
+      collectNativeBackupV1(
+        dependencies({
+          getLocalChats: async () => [local('AQ==')],
+          getLocalChat,
+        }),
+      ),
+    ).rejects.toThrow('local chat chat: version changed during collection')
+  })
+
+  it('adds record context to malformed local chat errors', async () => {
+    const malformed = chat({
+      isLocalOnly: true,
+      syncUserId: 'user',
+      createdAt: null as unknown as string,
+    })
+
+    await expect(
+      collectNativeBackupV1(
+        dependencies({
+          getLocalChats: async () => [malformed],
+          getLocalChat: async () => malformed,
+        }),
+      ),
+    ).rejects.toThrow(
+      'local chat chat: record is invalid: Invalid backup timestamp',
+    )
   })
 
   it('refreshes authoritative timestamps when a listed version changes', async () => {
@@ -459,7 +517,7 @@ describe('native backup collection', () => {
         }),
       ),
     ).rejects.toThrow(
-      'image attachment:chat:0:missing: image bytes are missing',
+      'image ["attachment","chat",0,0,"missing"]: image bytes are missing',
     )
   })
 
