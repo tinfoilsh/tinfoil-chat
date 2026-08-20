@@ -197,8 +197,9 @@ describe('native backup v1 schema', () => {
     })
     expect(candidates[0].sizeBytes).toBeUndefined()
 
-    value.messages[0].attachments[0].mimeType = 'image/avif'
-    expect(() => sanitizeNativeBackupChat(value, () => 'image')).toThrow()
+    expect(() =>
+      sanitizeNativeBackupImage({ ...fixture.image, mimeType: 'image/avif' }),
+    ).toThrow()
   })
 
   it('classifies only eligible signed-in local chats', () => {

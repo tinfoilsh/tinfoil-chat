@@ -53,11 +53,6 @@ const iso = (value: unknown): string => {
     throw new Error('Invalid backup timestamp')
   return parsed.toISOString()
 }
-const imageMimeType = (value: unknown) =>
-  schemas.NativeBackupImageMimeSchema.parse(
-    String(value).split(';', 1)[0].trim().toLowerCase(),
-  )
-
 export function sanitizeNativeBackupProject(value: unknown) {
   const source = row(value)
   return schemas.NativeBackupProjectSchema.parse({
@@ -157,9 +152,7 @@ function cleanAttachments(
           attachmentIndex,
           attachmentId,
           fileName: String(attachment.fileName),
-          mimeType: imageMimeType(
-            attachment.mimeType ?? 'application/octet-stream',
-          ),
+          mimeType: String(attachment.mimeType ?? 'application/octet-stream'),
           sizeBytes:
             typeof attachment.fileSize === 'number' &&
             Number.isInteger(attachment.fileSize) &&
@@ -242,9 +235,9 @@ function cleanMessage(
           messageIndex,
           legacyIndex,
           fileName: `legacy-image-${legacyIndex}`,
-          mimeType: imageMimeType(image.mimeType),
+          mimeType: String(image.mimeType),
         }),
-        mimeType: imageMimeType(image.mimeType),
+        mimeType: image.mimeType,
       }
     }),
     timestamp: iso(source.timestamp),
