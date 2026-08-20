@@ -109,6 +109,49 @@ describe('native backup v1 manifest', () => {
     }>()
   })
 
+  it('serializes relationships independently of input order', () => {
+    const ordered = input()
+    ordered.cloudChats.push({
+      id: 'c2',
+      title: 'Second cloud chat',
+      messages: [],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      projectId: 'p',
+    })
+    ordered.relationships.projectChats.push({ projectId: 'p', chatId: 'c2' })
+    const reversed = structuredClone(ordered)
+    reversed.relationships.projectChats.reverse()
+
+    expect(formatNativeBackupV1(reversed).manifestBytes).toEqual(
+      formatNativeBackupV1(ordered).manifestBytes,
+    )
+  })
+
+  it('distinguishes relationship IDs containing delimiters', () => {
+    const malformed = input()
+    malformed.projects = [
+      { ...malformed.projects[0], id: 'a\0b' },
+      { ...malformed.projects[0], id: 'a' },
+    ]
+    malformed.projectDocuments = [
+      { ...malformed.projectDocuments[0], id: 'c', projectId: 'a\0b' },
+      { ...malformed.projectDocuments[0], id: 'b\0c', projectId: 'a' },
+    ]
+    malformed.cloudChats = []
+    malformed.localChats = []
+    malformed.images = []
+    malformed.relationships = {
+      projectChats: [],
+      projectDocuments: [{ projectId: 'a\0b', documentId: 'c' }],
+      chatImages: [],
+    }
+
+    expect(() => formatNativeBackupV1(malformed)).toThrow(
+      'project document relationships do not match entities',
+    )
+  })
+
   it('validates near-limit relationship sets without quadratic membership scans', () => {
     const nearLimit = input()
     const count = 24_000

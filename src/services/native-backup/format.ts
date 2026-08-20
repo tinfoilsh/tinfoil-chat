@@ -164,6 +164,29 @@ function addJson(
   files.push({ path, kind, bytes: jsonBytes(value) })
 }
 
+const relationKey = (left: string, right: string) =>
+  JSON.stringify([left, right])
+
+function sortedRelationships(
+  relationships: NativeBackupRelationships,
+): NativeBackupRelationships {
+  const byKey =
+    <T>(key: (value: T) => string) =>
+    (left: T, right: T) =>
+      key(left).localeCompare(key(right))
+  return {
+    projectChats: [...relationships.projectChats].sort(
+      byKey(({ projectId, chatId }) => relationKey(projectId, chatId)),
+    ),
+    projectDocuments: [...relationships.projectDocuments].sort(
+      byKey(({ projectId, documentId }) => relationKey(projectId, documentId)),
+    ),
+    chatImages: [...relationships.chatImages].sort(
+      byKey(({ chatId, imageId }) => relationKey(chatId, imageId)),
+    ),
+  }
+}
+
 export function formatNativeBackupV1(input: NativeBackupFormatInput): {
   manifestBytes: Uint8Array
   files: NativeBackupFileEntry[]
@@ -202,8 +225,8 @@ export function formatNativeBackupV1(input: NativeBackupFormatInput): {
     })),
     'image',
   )
-  const relationships = NativeBackupRelationshipsSchema.parse(
-    input.relationships,
+  const relationships = sortedRelationships(
+    NativeBackupRelationshipsSchema.parse(input.relationships),
   )
   const files: NativeBackupFileEntry[] = []
   for (const value of projects)
@@ -267,8 +290,6 @@ export function formatNativeBackupV1(input: NativeBackupFormatInput): {
   assertValidNativeBackupV1(manifestBytes, files)
   return { manifestBytes, files }
 }
-
-const relationKey = (left: string, right: string) => `${left}\0${right}`
 
 function exactRelations(values: string[], wanted: Set<string>, name: string) {
   const actual = new Set(values)
