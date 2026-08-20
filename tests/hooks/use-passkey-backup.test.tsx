@@ -239,6 +239,48 @@ describe('usePasskeyBackup', () => {
     expect(result.current.passkeyRecoveryNeeded).toBe(true)
   })
 
+  it('bounds PRF support detection as part of the routing decision', async () => {
+    vi.useFakeTimers()
+    mocks.isPrfSupported.mockReturnValue(new Promise(() => {}))
+    const { result } = renderHook(() =>
+      usePasskeyBackup({ ...baseOptions, initialized: false }),
+    )
+
+    let promptPromise!: Promise<boolean>
+    act(() => {
+      promptPromise = result.current.showFirstTimePasskeyPrompt()
+    })
+    await act(async () => {
+      await Promise.resolve()
+      vi.advanceTimersByTime(3_000)
+    })
+
+    await expect(promptPromise).resolves.toBe(true)
+    expect(result.current.passkeyRecoveryNeeded).toBe(true)
+    expect(mocks.loadRecoveryCandidates).not.toHaveBeenCalled()
+  })
+
+  it('makes a hanging recovery inventory retryable after timeout', async () => {
+    vi.useFakeTimers()
+    mocks.loadRecoveryCandidates.mockReturnValue(new Promise(() => {}))
+    const { result } = renderHook(() =>
+      usePasskeyBackup({ ...baseOptions, initialized: false }),
+    )
+
+    let recoveryPromise!: Promise<string | null>
+    act(() => {
+      recoveryPromise = result.current.recoverWithPasskey()
+    })
+    await act(async () => {
+      await Promise.resolve()
+      vi.advanceTimersByTime(5_000)
+    })
+
+    await expect(recoveryPromise).resolves.toBeNull()
+    expect(result.current.passkeyRecoveryFailure).toBe('inventory_timeout')
+    expect(mocks.authenticatePrfPasskey).not.toHaveBeenCalled()
+  })
+
   it('ignores a routing probe after dismissal', async () => {
     let resolveCandidates!: (value: unknown[]) => void
     mocks.loadRecoveryCandidates.mockReturnValue(

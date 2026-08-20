@@ -94,7 +94,8 @@ export interface PasskeyBackupState {
   passkeyRecoveryFailure: PasskeyRecoveryFailure | null
 }
 
-export type PasskeyRecoveryFailure = 'auth_failed' | 'stale_backup'
+export type PasskeyRecoveryFailure =
+  'auth_failed' | 'inventory_timeout' | 'stale_backup'
 
 type StoredPasskeyBackup = {
   credentialId: string
@@ -128,20 +129,31 @@ export interface UsePasskeyBackupOptions {
 
 const SYNC_CHECK_INTERVAL_MS = 30_000
 const PASSKEY_ROUTING_PROBE_TIMEOUT_MS = 3_000
+const PASSKEY_RECOVERY_INVENTORY_TIMEOUT_MS = 5_000
+
+class PasskeyRoutingProbeTimeoutError extends Error {
+  constructor() {
+    super('Passkey routing probe timed out')
+    this.name = 'PasskeyRoutingProbeTimeoutError'
+  }
+}
 
 async function withPasskeyRoutingProbeTimeout<T>(
-  probe: Promise<T>,
+  probe: (signal: AbortSignal) => Promise<T>,
+  timeoutMs = PASSKEY_ROUTING_PROBE_TIMEOUT_MS,
 ): Promise<T> {
+  const controller = new AbortController()
   let timeoutId: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(
-      () => reject(new Error('Passkey routing probe timed out')),
-      PASSKEY_ROUTING_PROBE_TIMEOUT_MS,
-    )
+    timeoutId = setTimeout(() => {
+      const error = new PasskeyRoutingProbeTimeoutError()
+      controller.abort(error)
+      reject(error)
+    }, timeoutMs)
   })
 
   try {
-    return await Promise.race([probe, timeout])
+    return await Promise.race([probe(controller.signal), timeout])
   } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId)
   }
@@ -465,7 +477,10 @@ export function usePasskeyBackup({
     bundleVersion: number
     legacyKek?: CryptoKey
   } | null> => {
-    const entries = await loadRecoveryCandidates()
+    const entries = await withPasskeyRoutingProbeTimeout(
+      (signal) => loadRecoveryCandidates({ signal }),
+      PASSKEY_RECOVERY_INVENTORY_TIMEOUT_MS,
+    )
     if (entries.length === 0) return null
 
     const credentialIds = entries.map((e) => e.id)
@@ -937,6 +952,19 @@ export function usePasskeyBackup({
       })
       return recovery.keyBundle.primary
     } catch (error) {
+      if (error instanceof PasskeyRoutingProbeTimeoutError) {
+        logInfo('Passkey recovery candidate inventory timed out', {
+          component: 'usePasskeyBackup',
+          action: 'recoverWithPasskey',
+        })
+        if (isMountedRef.current) {
+          setState((prev) => ({
+            ...prev,
+            passkeyRecoveryFailure: 'inventory_timeout',
+          }))
+        }
+        return null
+      }
       if (
         error instanceof PrfNotSupportedError ||
         error instanceof PasskeyTimeoutError
@@ -1533,13 +1561,17 @@ export function usePasskeyBackup({
   const showPasskeyRecoveryPrompt = useCallback(async (): Promise<boolean> => {
     const generation = ++routingProbeGenerationRef.current
     if (encryptionService.getKey()) return false
-    const prfSupported = await isPrfSupported()
-    if (!prfSupported) return false
     try {
-      const candidates = await withPasskeyRoutingProbeTimeout(
-        loadRecoveryCandidates(),
+      const { prfSupported, candidates } = await withPasskeyRoutingProbeTimeout(
+        async (signal) => {
+          const prfSupported = await isPrfSupported()
+          if (!prfSupported) return { prfSupported, candidates: [] }
+          const candidates = await loadRecoveryCandidates({ signal })
+          return { prfSupported, candidates }
+        },
       )
       if (generation !== routingProbeGenerationRef.current) return false
+      if (!prfSupported) return false
       if (candidates.length === 0) return false
     } catch {
       if (generation !== routingProbeGenerationRef.current) return false
@@ -1569,26 +1601,37 @@ export function usePasskeyBackup({
   const showFirstTimePasskeyPrompt = useCallback(async (): Promise<boolean> => {
     const generation = ++routingProbeGenerationRef.current
     manualRecoveryDismissedFlag.clear()
-    const prfSupported = await isPrfSupported()
-    if (generation !== routingProbeGenerationRef.current) return false
-    if (!prfSupported) {
-      if (isMountedRef.current) {
-        setState((prev) => ({
-          ...prev,
-          manualRecoveryNeeded: true,
-          passkeyRecoveryNeeded: false,
-          passkeyFirstTimePromptAvailable: false,
-          passkeySetupFailed: true,
-          passkeyRetryAvailable: false,
-        }))
-      }
-      return false
-    }
     try {
-      const [candidates, remoteState] = await withPasskeyRoutingProbeTimeout(
-        Promise.all([loadRecoveryCandidates(), inspectRemoteEncryptedState()]),
-      )
+      const { prfSupported, candidates, remoteState } =
+        await withPasskeyRoutingProbeTimeout(async (signal) => {
+          const prfSupported = await isPrfSupported()
+          if (!prfSupported) {
+            return {
+              prfSupported,
+              candidates: [],
+              remoteState: 'empty' as const,
+            }
+          }
+          const [candidates, remoteState] = await Promise.all([
+            loadRecoveryCandidates({ signal }),
+            inspectRemoteEncryptedState(),
+          ])
+          return { prfSupported, candidates, remoteState }
+        })
       if (generation !== routingProbeGenerationRef.current) return false
+      if (!prfSupported) {
+        if (isMountedRef.current) {
+          setState((prev) => ({
+            ...prev,
+            manualRecoveryNeeded: true,
+            passkeyRecoveryNeeded: false,
+            passkeyFirstTimePromptAvailable: false,
+            passkeySetupFailed: true,
+            passkeyRetryAvailable: false,
+          }))
+        }
+        return false
+      }
       if (candidates.length > 0 || remoteState === 'unknown') {
         passkeyRecoveryDismissedFlag.clear()
         setupWarningDismissedFlag.clear()

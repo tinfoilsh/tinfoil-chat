@@ -4,6 +4,19 @@ import type { PasskeyCredentialEntry } from './passkey-key-storage'
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
+export const LEGACY_PASSKEY_CREDENTIALS_TIMEOUT_MS = 3_000
+
+export interface FetchLegacyPasskeyCredentialsOptions {
+  signal?: AbortSignal
+  timeoutMs?: number
+}
+
+export class LegacyPasskeyCredentialsTimeoutError extends Error {
+  constructor() {
+    super('Legacy passkey credentials fetch timed out')
+    this.name = 'LegacyPasskeyCredentialsTimeoutError'
+  }
+}
 
 /**
  * One-way recovery fetch for users who registered a passkey on the
@@ -18,15 +31,25 @@ const API_BASE_URL =
  * Writes to /api/passkey-credentials/ are intentionally NOT exposed
  * here — the legacy table is read-only for the new client.
  */
-export async function fetchLegacyPasskeyCredentials(): Promise<
-  PasskeyCredentialEntry[]
-> {
+export async function fetchLegacyPasskeyCredentials(
+  options: FetchLegacyPasskeyCredentialsOptions = {},
+): Promise<PasskeyCredentialEntry[]> {
   if (!(await authTokenManager.isAuthenticated())) {
     return []
   }
+  const controller = new AbortController()
+  const timeoutId = setTimeout(
+    () => controller.abort(new LegacyPasskeyCredentialsTimeoutError()),
+    options.timeoutMs ?? LEGACY_PASSKEY_CREDENTIALS_TIMEOUT_MS,
+  )
+  const abortFromCaller = () => controller.abort(options.signal?.reason)
+  if (options.signal?.aborted) abortFromCaller()
+  else
+    options.signal?.addEventListener('abort', abortFromCaller, { once: true })
   try {
     const resp = await fetch(`${API_BASE_URL}/api/passkey-credentials/`, {
       headers: await authTokenManager.getAuthHeaders(),
+      signal: controller.signal,
     })
     if (resp.status === 404 || resp.status === 401) return []
     if (!resp.ok) {
@@ -36,6 +59,10 @@ export async function fetchLegacyPasskeyCredentials(): Promise<
     if (!Array.isArray(body)) return []
     return body.filter(isPasskeyCredentialEntry)
   } catch (err) {
+    const error =
+      controller.signal.reason instanceof LegacyPasskeyCredentialsTimeoutError
+        ? controller.signal.reason
+        : err
     logError('failed to load legacy passkey credentials', err, {
       component: 'LegacyPasskeyCredentials',
       action: 'fetchLegacyPasskeyCredentials',
@@ -44,7 +71,10 @@ export async function fetchLegacyPasskeyCredentials(): Promise<
     // an empty array) apart from "could not find out"; swallowing the
     // failure as [] would misroute recovery into first-time setup and
     // let deletePasskeyCredential report a false success.
-    throw err
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+    options.signal?.removeEventListener('abort', abortFromCaller)
   }
 }
 

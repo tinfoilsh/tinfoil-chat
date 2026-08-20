@@ -53,7 +53,8 @@ interface CloudSyncSetupModalBaseProps {
   isDarkMode: boolean
   prfSupported?: boolean
   manualRecoveryNeeded?: boolean
-  passkeyRecoveryFailure?: 'auth_failed' | 'stale_backup' | null
+  passkeyRecoveryFailure?:
+    'auth_failed' | 'inventory_timeout' | 'stale_backup' | null
   /**
    * Called when the user clicks "Skip for Now" on the passkey-recovery step.
    * Lets the caller persist a "don't auto-reopen" flag. When omitted, the
@@ -922,7 +923,9 @@ ${generatedKey.replace('key_', '')}
             <p className="text-balance text-center text-xs text-amber-700 dark:text-amber-400">
               {passkeyRecoveryFailure === 'stale_backup'
                 ? "This passkey is valid, but its backup key doesn't match your existing cloud data. Enter your backup key manually, or start fresh if you no longer need the old data."
-                : 'Passkey authentication failed. You can try again or enter your encryption key manually.'}
+                : passkeyRecoveryFailure === 'inventory_timeout'
+                  ? 'Passkey recovery took too long. Please try again or enter your encryption key manually.'
+                  : 'Passkey authentication failed. You can try again or enter your encryption key manually.'}
             </p>
           </div>
         )}

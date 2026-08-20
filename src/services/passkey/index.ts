@@ -18,6 +18,7 @@ export {
 } from './passkey-key-storage'
 export type {
   KeyBundle,
+  LoadPasskeyCredentialsOptions,
   PasskeyCredentialEntry,
   PasskeyCredentialState,
   PasskeyDeviceState,

@@ -100,10 +100,7 @@ export type PasskeyCredentialState = 'exists' | 'empty' | 'unknown'
  *  - `unknown`: enclave was unreachable; caller should leave state alone.
  */
 export type PasskeyDeviceState =
-  | 'this-device'
-  | 'other-device-only'
-  | 'empty'
-  | 'unknown'
+  'this-device' | 'other-device-only' | 'empty' | 'unknown'
 
 export interface StoreEncryptedKeysOptions {
   expectedSyncVersion?: number | null
@@ -207,9 +204,14 @@ function reshapeBundleToEntry(bundle: {
 
 // --- Public API ------------------------------------------------------------
 
-export async function loadPasskeyCredentials(): Promise<
-  PasskeyCredentialEntry[]
-> {
+export interface LoadPasskeyCredentialsOptions {
+  signal?: AbortSignal
+  legacyTimeoutMs?: number
+}
+
+export async function loadPasskeyCredentials(
+  options: LoadPasskeyCredentialsOptions = {},
+): Promise<PasskeyCredentialEntry[]> {
   try {
     const resp = await enclaveKeyCurrent()
     if (resp.key_id) {
@@ -223,19 +225,24 @@ export async function loadPasskeyCredentials(): Promise<
       // bundle is written, so a key_id can exist with no way to unlock
       // it. Fall back to the legacy passkey so the user can still
       // recover instead of being forced into manual key entry.
-      return await loadLegacyFallback()
+      return await loadLegacyFallback(options)
     }
-    return await loadLegacyFallback()
+    return await loadLegacyFallback(options)
   } catch (err) {
     if (err instanceof SyncEnclaveError && err.status === 404) {
-      return loadLegacyFallback()
+      return loadLegacyFallback(options)
     }
     throw err
   }
 }
 
-async function loadLegacyFallback(): Promise<PasskeyCredentialEntry[]> {
-  const legacy = await fetchLegacyPasskeyCredentials()
+async function loadLegacyFallback(
+  options: LoadPasskeyCredentialsOptions = {},
+): Promise<PasskeyCredentialEntry[]> {
+  const legacy = await fetchLegacyPasskeyCredentials({
+    signal: options.signal,
+    timeoutMs: options.legacyTimeoutMs,
+  })
   if (legacy.length === 0) return []
   logInfo('falling back to legacy passkey credentials for recovery', {
     component: 'PasskeyKeyStorage',
@@ -254,9 +261,9 @@ async function loadLegacyFallback(): Promise<PasskeyCredentialEntry[]> {
  * registry still be offered for recovery after another platform has
  * registered the key, so it can unlock the shared CEK and enroll itself.
  */
-export async function loadRecoveryCandidates(): Promise<
-  PasskeyCredentialEntry[]
-> {
+export async function loadRecoveryCandidates(
+  options: LoadPasskeyCredentialsOptions = {},
+): Promise<PasskeyCredentialEntry[]> {
   let enclaveEntries: PasskeyCredentialEntry[] = []
   try {
     const resp = await enclaveKeyCurrent()
@@ -269,7 +276,7 @@ export async function loadRecoveryCandidates(): Promise<
   } catch (err) {
     if (!(err instanceof SyncEnclaveError) || err.status !== 404) throw err
   }
-  const legacyEntries = await loadLegacyFallback()
+  const legacyEntries = await loadLegacyFallback(options)
   const byId = new Map<string, PasskeyCredentialEntry>()
   for (const entry of legacyEntries) byId.set(entry.id, entry)
   for (const entry of enclaveEntries) byId.set(entry.id, entry)

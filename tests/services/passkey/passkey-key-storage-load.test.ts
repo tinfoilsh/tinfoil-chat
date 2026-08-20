@@ -268,6 +268,21 @@ describe('passkey-key-storage load + delete (enclave wire)', () => {
       expect(entries).toHaveLength(1)
       expect(entries[0].source).toBe('legacy')
     })
+
+    it('propagates cancellation and timeout options to legacy loading', async () => {
+      const controller = new AbortController()
+      mockKeyCurrent.mockResolvedValue({ key_id: null, bundles: {} })
+
+      await loadRecoveryCandidates({
+        signal: controller.signal,
+        legacyTimeoutMs: 123,
+      })
+
+      expect(mockFetchLegacy).toHaveBeenCalledWith({
+        signal: controller.signal,
+        timeoutMs: 123,
+      })
+    })
   })
 
   describe('deletePasskeyCredential', () => {
