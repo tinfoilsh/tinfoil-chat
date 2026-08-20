@@ -569,20 +569,6 @@ export class CloudStorageService {
     return results
   }
 
-  async loadChatImage(attachment: Attachment): Promise<Uint8Array | null> {
-    if (attachment.base64) return base64ToUint8Array(attachment.base64)
-    if (attachment.encryptionKey) {
-      return enclaveAttachmentGet({
-        id: attachment.id,
-        attKeyB64: attachment.encryptionKey,
-      })
-    }
-    const legacyKey = (attachment as Attachment & { key?: string }).key
-    return legacyKey
-      ? this.fetchLegacyAttachment(attachment.id, legacyKey)
-      : null
-  }
-
   // Part of the v0/v1 → v2 attachment migration. Safe to remove once
   // the controlplane `chat_attachments_legacy` table is drained and
   // no client (web or iOS) still depends on this fallback.

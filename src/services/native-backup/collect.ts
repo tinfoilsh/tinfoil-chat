@@ -1,4 +1,4 @@
-import type { Attachment } from '@/components/chat/types'
+import type { Attachment, Message } from '@/components/chat/types'
 import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
 import { authTokenManager } from '@/services/auth'
 import { requirePrimaryKeyB64 } from '@/services/cloud/cek-encoding'
@@ -21,7 +21,6 @@ import {
   sanitizeNativeBackupRelationships,
   type NativeBackupImageCandidate,
 } from './sanitize'
-
 const PAGE_SIZE = 500
 const CONCURRENCY = 4
 const encoder = new TextEncoder()
@@ -72,7 +71,11 @@ const defaults: NativeBackupCollectionDependencies = {
     return { items: page.conversations, next: page.nextContinuationToken }
   },
   getCloudChat: (id) => cloudStorage.downloadChat(id),
-  getCloudImage: (value) => cloudStorage.loadChatImage(value),
+  getCloudImage: async (value) => {
+    const message = { attachments: [value] } as Message
+    const encoded = (await cloudStorage.loadChatImages('', [message]))[value.id]
+    return encoded ? base64ToUint8Array(encoded) : null
+  },
   listProjects: async (continuationToken) => {
     const page = await projectStorage.listProjects({
       limit: PAGE_SIZE,
@@ -87,9 +90,14 @@ const defaults: NativeBackupCollectionDependencies = {
   getLocalChats: () => indexedDBStorage.getAllChats(),
   getLocalChat: (id) => indexedDBStorage.getChat(id),
 }
-
 function fail(kind: string, id: string, detail: string): never {
   throw new NativeBackupCollectionError(kind, id, detail)
+}
+async function wait<T>(s: AbortSignal | undefined, read: () => Promise<T>) {
+  s?.throwIfAborted()
+  const value = await read()
+  s?.throwIfAborted()
+  return value
 }
 const detail = (error: unknown) =>
   error instanceof Error ? error.message : String(error)
@@ -111,24 +119,32 @@ function unique<T extends Listed>(values: T[]): T[] {
   }
   return [...byId.values()]
 }
-async function pages<T extends Listed>(read: (token?: string) => Page<T>) {
+async function pages<T extends Listed>(
+  fn: (t?: string) => Page<T>,
+  s?: AbortSignal,
+) {
   const values: T[] = []
   let token: string | undefined
   do {
-    const page = await read(token)
+    const page = await wait(s, () => fn(token))
     values.push(...page.items)
     token = page.next
   } while (token)
   return unique(values)
 }
-async function mapLimit<T, R>(values: T[], read: (value: T) => Promise<R>) {
-  const output = new Array<R>(values.length)
+async function mapLimit<T, R>(
+  v: T[],
+  fn: (v: T) => Promise<R>,
+  s?: AbortSignal,
+) {
+  const output = new Array<R>(v.length)
   let next = 0
   await Promise.all(
-    Array.from({ length: Math.min(CONCURRENCY, values.length) }, async () => {
-      while (next < values.length) {
+    Array.from({ length: Math.min(CONCURRENCY, v.length) }, async () => {
+      while (next < v.length) {
+        s?.throwIfAborted()
         const index = next++
-        output[index] = await read(values[index])
+        output[index] = await wait(s, () => fn(v[index]))
       }
     }),
   )
@@ -151,17 +167,11 @@ class Budget {
   }
   chat(value: ReturnType<typeof sanitizeNativeBackupChat>): Pending {
     const bytes = jsonSize(value)
-    const attachments = value.messages.reduce(
+    const count = value.messages.reduce(
       (sum, item) => sum + (item.attachments?.length ?? 0),
       0,
     )
-    const pending: Pending = [
-      value.messages.length,
-      attachments,
-      bytes,
-      bytes,
-      1,
-    ]
+    const pending: Pending = [value.messages.length, count, bytes, bytes, 1]
     this.check(pending)
     return pending
   }
@@ -195,32 +205,34 @@ async function readRecord<T>(
   kind: string,
   id: string,
   read: () => Promise<T | null>,
+  signal?: AbortSignal,
 ) {
   try {
-    return (await read()) ?? fail(kind, id, 'record is missing or invalid')
+    const value = await wait(signal, read)
+    return value ?? fail(kind, id, 'record is missing or invalid')
   } catch (error) {
+    signal?.throwIfAborted()
     if (error instanceof NativeBackupCollectionError) throw error
     return fail(kind, id, `read failed: ${detail(error)}`)
   }
 }
-
 async function stable<T extends { syncVersion?: number }, I extends Listed>(
   kind: string,
   initial: I,
   read: () => Promise<T | null>,
   refresh: () => Promise<I[]>,
+  signal?: AbortSignal,
 ): Promise<{ value: T; item: I }> {
   let item = initial
   for (let attempt = 0; attempt < 2; attempt++) {
-    const value = await readRecord(kind, item.id, read)
+    const value = await readRecord(kind, item.id, read, signal)
     if (value.syncVersion === item.syncVersion) return { value, item }
     item =
-      unique(await refresh()).find(({ id }) => id === item.id) ??
+      unique(await wait(signal, refresh)).find(({ id }) => id === item.id) ??
       fail(kind, item.id, 'record is missing or invalid')
   }
   return fail(kind, item.id, 'version changed during collection')
 }
-
 async function timed<T extends { syncVersion?: number }, I extends Timed, R>(
   kind: string,
   item: I,
@@ -228,8 +240,9 @@ async function timed<T extends { syncVersion?: number }, I extends Timed, R>(
   refresh: () => Promise<I[]>,
   sanitize: (value: unknown) => R,
   budget: Budget,
+  signal?: AbortSignal,
 ) {
-  const current = await stable(kind, item, read, refresh)
+  const current = await stable(kind, item, read, refresh, signal)
   const value = valid(kind, item.id, () =>
     sanitize({
       ...current.value,
@@ -240,7 +253,6 @@ async function timed<T extends { syncVersion?: number }, I extends Timed, R>(
   budget.json(value)
   return value
 }
-
 function portable(chat: StoredChat, images?: NativeBackupImageCandidate[]) {
   return sanitizeNativeBackupChat(chat, (candidate) => {
     images?.push(candidate)
@@ -267,58 +279,89 @@ function localEligible(chat: StoredChat, userId: string) {
       'local'
   )
 }
-
 async function collectChat(
   chat: StoredChat,
   cloud: boolean,
   deps: NativeBackupCollectionDependencies,
   budget: Budget,
+  signal?: AbortSignal,
 ) {
   const candidates: NativeBackupImageCandidate[] = []
   const value = valid(cloud ? 'cloud chat' : 'local chat', chat.id, () =>
     portable(chat, candidates),
   )
   const pending = budget.chat(value)
-  const images = await mapLimit(candidates, async (candidate) => {
-    const message = chat.messages[candidate.messageIndex]
-    const attachment = message.attachments?.find(
-      ({ id }) => id === candidate.attachmentId,
-    )
-    const base64 =
-      candidate.legacyIndex !== undefined
-        ? message.imageData?.[candidate.legacyIndex]?.base64
-        : candidate.page !== undefined
-          ? attachment?.pages?.find(({ page }) => page === candidate.page)
-              ?.image
-          : attachment?.base64
-    let bytes: Uint8Array | null = null
-    try {
-      bytes = base64
-        ? base64ToUint8Array(base64)
-        : cloud && attachment
-          ? await deps.getCloudImage(attachment)
-          : null
-    } catch {
-      fail('image', candidate.sourceKey, 'image bytes are invalid')
-    }
-    if (!bytes) fail('image', candidate.sourceKey, 'image bytes are missing')
-    const metadata = valid('image', candidate.sourceKey, () =>
-      sanitizeNativeBackupImage({
-        ...candidate,
-        id: candidate.sourceKey,
-        sizeBytes: bytes.length,
-      }),
-    )
-    budget.image(pending, metadata, bytes)
-    return { metadata, bytes }
-  })
+  const images = await mapLimit(
+    candidates,
+    async (candidate) => {
+      const message = chat.messages[candidate.messageIndex]
+      const attachment = message.attachments?.find(
+        ({ id }) => id === candidate.attachmentId,
+      )
+      const base64 =
+        candidate.legacyIndex !== undefined
+          ? message.imageData?.[candidate.legacyIndex]?.base64
+          : candidate.page !== undefined
+            ? attachment?.pages?.find(({ page }) => page === candidate.page)
+                ?.image
+            : attachment?.base64
+      let bytes: Uint8Array | null = null
+      try {
+        bytes = base64
+          ? base64ToUint8Array(base64)
+          : cloud && attachment
+            ? await wait(signal, () => deps.getCloudImage(attachment))
+            : null
+      } catch {
+        signal?.throwIfAborted()
+        fail('image', candidate.sourceKey, 'image bytes are invalid')
+      }
+      if (!bytes) fail('image', candidate.sourceKey, 'image bytes are missing')
+      const metadata = valid('image', candidate.sourceKey, () =>
+        sanitizeNativeBackupImage({
+          ...candidate,
+          id: candidate.sourceKey,
+          sizeBytes: bytes.length,
+        }),
+      )
+      budget.image(pending, metadata, bytes)
+      return { metadata, bytes }
+    },
+    signal,
+  )
   return { chat: value, images, pending }
 }
-
+async function retryChat<K>(
+  kind: string,
+  id: string,
+  expected: K,
+  read: () => Promise<StoredChat | null>,
+  revision: (chat: StoredChat) => K,
+  eligible: (chat: StoredChat) => boolean,
+  refresh: (chat: StoredChat) => Promise<K>,
+  collect: (chat: StoredChat) => ReturnType<typeof collectChat>,
+  signal?: AbortSignal,
+) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const chat = await readRecord(kind, id, read, signal)
+    const current = revision(chat)
+    if (current !== expected) {
+      expected = await wait(signal, () => refresh(chat))
+      continue
+    }
+    if (!eligible(chat)) return null
+    const result = await collect(chat)
+    const verify = await readRecord(kind, id, read, signal)
+    if (revision(verify) === current) return result
+    expected = await wait(signal, () => refresh(verify))
+  }
+  return fail(kind, id, 'version changed during collection')
+}
 export async function collectNativeBackupV1(
   deps: NativeBackupCollectionDependencies = defaults,
+  signal?: AbortSignal,
 ): Promise<NativeBackupV1Input> {
-  if (!(await deps.isAuthenticated()))
+  if (!(await wait(signal, () => deps.isAuthenticated())))
     fail('account', 'active', 'signed-in user is required')
   const userId = deps.activeUserId()
   if (!userId) fail('account', 'active', 'signed-in owner is unavailable')
@@ -327,109 +370,84 @@ export async function collectNativeBackupV1(
   } catch {
     fail('account', userId, 'cloud encryption key is locked or unavailable')
   }
-
   const [chatItems, projectItems, localSnapshots] = await Promise.all([
-    pages(deps.listChats),
-    pages(deps.listProjects),
-    deps.getLocalChats(),
+    pages(deps.listChats, signal),
+    pages(deps.listProjects, signal),
+    wait(signal, () => deps.getLocalChats()),
   ])
   const documentItems = unique(
-    (await mapLimit(projectItems, ({ id }) => deps.listDocuments(id))).flat(),
+    (
+      await mapLimit(projectItems, ({ id }) => deps.listDocuments(id), signal)
+    ).flat(),
   )
   const budget = new Budget()
   budget.entities(projectItems.length + documentItems.length)
-
-  const projects = await mapLimit(projectItems, (item) =>
-    timed(
-      'project',
-      item,
-      () => deps.getProject(item.id),
-      () => pages(deps.listProjects),
-      sanitizeNativeBackupProject,
-      budget,
-    ),
+  const projects = await mapLimit(
+    projectItems,
+    (item) =>
+      timed(
+        'project',
+        item,
+        () => deps.getProject(item.id),
+        () => pages(deps.listProjects, signal),
+        sanitizeNativeBackupProject,
+        budget,
+        signal,
+      ),
+    signal,
   )
-  const projectDocuments = await mapLimit(documentItems, (item) =>
-    timed(
-      'project document',
-      item,
-      () => deps.getDocument(item.projectId, item.id),
-      () => deps.listDocuments(item.projectId),
-      sanitizeNativeBackupProjectDocument,
-      budget,
-    ),
+  const projectDocuments = await mapLimit(
+    documentItems,
+    (item) =>
+      timed(
+        'project document',
+        item,
+        () => deps.getDocument(item.projectId, item.id),
+        () => deps.listDocuments(item.projectId),
+        sanitizeNativeBackupProjectDocument,
+        budget,
+        signal,
+      ),
+    signal,
   )
-
   const cloudResults = []
   for (const listed of chatItems) {
-    let item = listed
-    let result: Awaited<ReturnType<typeof collectChat>> | null = null
-    let excluded = false
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const chat = await readRecord('cloud chat', item.id, () =>
-        deps.getCloudChat(item.id),
-      )
-      if (chat.syncVersion !== item.syncVersion) {
-        item =
-          (await pages(deps.listChats)).find(({ id }) => id === item.id) ??
-          fail('cloud chat', item.id, 'record is missing or invalid')
-        continue
-      }
-      if (classifyNativeBackupChat(chat, 'cloud') === null) {
-        excluded = true
-        break
-      }
-      result = await collectChat(chat, true, deps, budget)
-      const verify = await readRecord('cloud chat', item.id, () =>
-        deps.getCloudChat(item.id),
-      )
-      if (verify.syncVersion === chat.syncVersion) break
-      item =
-        (await pages(deps.listChats)).find(({ id }) => id === item.id) ??
-        fail('cloud chat', item.id, 'record is missing or invalid')
-      result = null
-    }
-    if (excluded) continue
-    if (!result)
-      fail('cloud chat', item.id, 'version changed during collection')
+    const result = await retryChat(
+      'cloud chat',
+      listed.id,
+      listed.syncVersion,
+      () => deps.getCloudChat(listed.id),
+      ({ syncVersion }) => syncVersion,
+      (chat) => classifyNativeBackupChat(chat, 'cloud') !== null,
+      async () =>
+        (await pages(deps.listChats, signal)).find(({ id }) => id === listed.id)
+          ?.syncVersion ??
+        fail('cloud chat', listed.id, 'record is missing or invalid'),
+      (chat) => collectChat(chat, true, deps, budget, signal),
+      signal,
+    )
+    if (!result) continue
     budget.commit(result.pending, true)
     cloudResults.push(result)
   }
-
   const localResults = []
   for (const snapshot of localSnapshots) {
     if (!localEligible(snapshot, userId)) continue
-    let expected = localToken(snapshot)
-    let result: Awaited<ReturnType<typeof collectChat>> | null = null
-    let excluded = false
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const chat = await readRecord('local chat', snapshot.id, () =>
-        deps.getLocalChat(snapshot.id),
-      )
-      const token = localToken(chat)
-      if (token !== expected) {
-        expected = token
-        continue
-      }
-      if (!localEligible(chat, userId)) {
-        excluded = true
-        break
-      }
-      result = await collectChat(chat, false, deps, budget)
-      const verify = await readRecord('local chat', snapshot.id, () =>
-        deps.getLocalChat(snapshot.id),
-      )
-      if (localToken(verify) === token) break
-      expected = localToken(verify)
-      result = null
-    }
-    if (excluded) continue
-    if (!result)
-      fail('local chat', snapshot.id, 'version changed during collection')
+    const result = await retryChat(
+      'local chat',
+      snapshot.id,
+      localToken(snapshot),
+      () => deps.getLocalChat(snapshot.id),
+      localToken,
+      (chat) => localEligible(chat, userId),
+      async (chat) => localToken(chat),
+      (chat) => collectChat(chat, false, deps, budget, signal),
+      signal,
+    )
+    if (!result) continue
     budget.commit(result.pending, true)
     localResults.push(result)
   }
-
   const cloudChats = cloudResults.map(({ chat }) => chat)
   const localChats = localResults.map(({ chat }) => chat)
   const images = [...cloudResults, ...localResults].flatMap(
@@ -459,6 +477,7 @@ export async function collectNativeBackupV1(
     relationships,
     images,
   }
+  signal?.throwIfAborted()
   formatNativeBackupV1(input)
   return input
 }
