@@ -48,7 +48,11 @@ import {
 } from '../sync-enclave/sync-api'
 import { SyncEnclaveError } from '../sync-enclave/sync-enclave-client'
 import { IF_MATCH_SENTINELS, WIRE_CODES } from '../sync-enclave/wire-contract'
-import { fetchLegacyPasskeyCredentials } from './legacy-passkey-credentials'
+import {
+  fetchLegacyPasskeyCredentials,
+  LEGACY_PASSKEY_CREDENTIALS_TIMEOUT_MS,
+  LegacyPasskeyCredentialsTimeoutError,
+} from './legacy-passkey-credentials'
 
 const AES_GCM_IV_BYTES = 12
 
@@ -264,23 +268,57 @@ async function loadLegacyFallback(
 export async function loadRecoveryCandidates(
   options: LoadPasskeyCredentialsOptions = {},
 ): Promise<PasskeyCredentialEntry[]> {
-  let enclaveEntries: PasskeyCredentialEntry[] = []
-  try {
-    const resp = await enclaveKeyCurrent()
-    if (resp.key_id) {
-      enclaveEntries = Object.values(resp.bundles).map((bundle) => ({
+  const enclavePromise = (async () => {
+    try {
+      const resp = await enclaveKeyCurrent()
+      if (!resp.key_id) return []
+      return Object.values(resp.bundles).map((bundle) => ({
         ...reshapeBundleToEntry(bundle),
         source: 'enclave' as const,
       }))
+    } catch (err) {
+      if (err instanceof SyncEnclaveError && err.status === 404) return []
+      throw err
     }
-  } catch (err) {
-    if (!(err instanceof SyncEnclaveError) || err.status !== 404) throw err
+  })()
+  const legacyPromise = withLegacyRecoveryTimeout(options)
+  const [enclaveResult, legacyResult] = await Promise.allSettled([
+    enclavePromise,
+    legacyPromise,
+  ])
+  const enclaveEntries =
+    enclaveResult.status === 'fulfilled' ? enclaveResult.value : []
+  const legacyEntries =
+    legacyResult.status === 'fulfilled' ? legacyResult.value : []
+
+  if (enclaveEntries.length === 0 && legacyEntries.length === 0) {
+    if (legacyResult.status === 'rejected') throw legacyResult.reason
+    if (enclaveResult.status === 'rejected') throw enclaveResult.reason
   }
-  const legacyEntries = await loadLegacyFallback(options)
+
   const byId = new Map<string, PasskeyCredentialEntry>()
   for (const entry of legacyEntries) byId.set(entry.id, entry)
   for (const entry of enclaveEntries) byId.set(entry.id, entry)
   return [...byId.values()]
+}
+
+async function withLegacyRecoveryTimeout(
+  options: LoadPasskeyCredentialsOptions,
+): Promise<PasskeyCredentialEntry[]> {
+  const timeoutMs =
+    options.legacyTimeoutMs ?? LEGACY_PASSKEY_CREDENTIALS_TIMEOUT_MS
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new LegacyPasskeyCredentialsTimeoutError()),
+      timeoutMs,
+    )
+  })
+  try {
+    return await Promise.race([loadLegacyFallback(options), timeout])
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId)
+  }
 }
 
 /**

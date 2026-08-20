@@ -188,9 +188,7 @@ export function CloudSyncSetupModal({
       return
     }
     setCurrentStep(
-      passkeyRecoveryNeeded || isContinuePending
-        ? 'passkey-recovery'
-        : 'generate-or-restore',
+      passkeyRecoveryNeeded ? 'passkey-recovery' : 'generate-or-restore',
     )
   }
 
@@ -515,7 +513,7 @@ ${generatedKey.replace('key_', '')}
           size="landing"
           chevron
           onClick={handleContinue}
-          disabled={isPasskeySetupBusy}
+          disabled={isPasskeySetupBusy || isContinuePending}
           className="w-full min-w-[7rem]"
         >
           {isPasskeySetupBusy ? 'Setting up...' : 'Continue'}

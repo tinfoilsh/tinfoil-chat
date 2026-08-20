@@ -48,10 +48,20 @@ vi.mock('@/services/sync-enclave/sync-api', async () => {
   }
 })
 
-vi.mock('@/services/passkey/legacy-passkey-credentials', () => ({
-  fetchLegacyPasskeyCredentials: (...args: unknown[]) =>
-    mockFetchLegacy(...args),
-}))
+vi.mock(
+  '@/services/passkey/legacy-passkey-credentials',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@/services/passkey/legacy-passkey-credentials')
+      >()
+    return {
+      ...actual,
+      fetchLegacyPasskeyCredentials: (...args: unknown[]) =>
+        mockFetchLegacy(...args),
+    }
+  },
+)
 
 describe('passkey-key-storage load + delete (enclave wire)', () => {
   beforeEach(() => {
@@ -62,6 +72,7 @@ describe('passkey-key-storage load + delete (enclave wire)', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.clearAllMocks()
   })
 
@@ -267,6 +278,55 @@ describe('passkey-key-storage load + delete (enclave wire)', () => {
       const entries = await loadRecoveryCandidates()
       expect(entries).toHaveLength(1)
       expect(entries[0].source).toBe('legacy')
+    })
+
+    it('returns enclave entries when legacy inventory fails', async () => {
+      mockKeyCurrent.mockResolvedValue({
+        key_id: 'abc',
+        bundles: {
+          'cred-a': {
+            credential_id: 'cred-a',
+            kek_iv: '000102030405060708090a0b',
+            encrypted_keys: '0a'.repeat(16),
+          },
+        },
+      })
+      mockFetchLegacy.mockRejectedValue(new Error('legacy unavailable'))
+
+      const entries = await loadRecoveryCandidates()
+
+      expect(entries.map((entry) => entry.id)).toEqual(['cred-a'])
+      expect(entries[0].source).toBe('enclave')
+    })
+
+    it('returns enclave entries when legacy inventory hangs past its timeout', async () => {
+      vi.useFakeTimers()
+      mockKeyCurrent.mockResolvedValue({
+        key_id: 'abc',
+        bundles: {
+          'cred-a': {
+            credential_id: 'cred-a',
+            kek_iv: '000102030405060708090a0b',
+            encrypted_keys: '0a'.repeat(16),
+          },
+        },
+      })
+      mockFetchLegacy.mockReturnValue(new Promise(() => {}))
+
+      const candidatesPromise = loadRecoveryCandidates({ legacyTimeoutMs: 50 })
+      await vi.advanceTimersByTimeAsync(50)
+
+      await expect(candidatesPromise).resolves.toMatchObject([
+        { id: 'cred-a', source: 'enclave' },
+      ])
+    })
+
+    it('rejects for retry when only legacy inventory could recover', async () => {
+      mockKeyCurrent.mockResolvedValue({ key_id: null, bundles: {} })
+      const legacyError = new Error('legacy unavailable')
+      mockFetchLegacy.mockRejectedValue(legacyError)
+
+      await expect(loadRecoveryCandidates()).rejects.toBe(legacyError)
     })
 
     it('propagates cancellation and timeout options to legacy loading', async () => {

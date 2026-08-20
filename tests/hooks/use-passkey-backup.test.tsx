@@ -182,6 +182,34 @@ describe('usePasskeyBackup', () => {
     expect(result.current.passkeyRetryAvailable).toBe(true)
   })
 
+  it('bounds the cold-load PRF probe and leaves initialization retryable', async () => {
+    vi.useFakeTimers()
+    mocks.isPrfSupported.mockReturnValue(new Promise(() => {}))
+    const { result, rerender } = renderHook(
+      (options) => usePasskeyBackup(options),
+      { initialProps: baseOptions },
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+      vi.advanceTimersByTime(3_000)
+    })
+
+    expect(result.current.passkeySetupFailed).toBe(true)
+    expect(result.current.passkeyRetryAvailable).toBe(true)
+    expect(result.current.manualRecoveryNeeded).toBe(true)
+    expect(result.current.passkeyFirstTimePromptAvailable).toBe(false)
+
+    mocks.isPrfSupported.mockResolvedValue(true)
+    rerender({ ...baseOptions, initialized: false })
+    rerender(baseOptions)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(mocks.getPasskeyCredentialState).toHaveBeenCalled()
+  })
+
   it('routes unknown remote state to passkey recovery', async () => {
     mocks.inspectRemoteEncryptedState.mockResolvedValue('unknown')
     const { result } = renderHook(() =>
@@ -277,6 +305,24 @@ describe('usePasskeyBackup', () => {
     })
 
     await expect(recoveryPromise).resolves.toBeNull()
+    expect(result.current.passkeyRecoveryFailure).toBe('inventory_timeout')
+    expect(mocks.authenticatePrfPasskey).not.toHaveBeenCalled()
+  })
+
+  it('makes failed legacy-only recovery inventory retryable', async () => {
+    mocks.loadRecoveryCandidates.mockRejectedValue(
+      new Error('legacy inventory unavailable'),
+    )
+    const { result } = renderHook(() =>
+      usePasskeyBackup({ ...baseOptions, initialized: false }),
+    )
+
+    let recovered: string | null = 'pending'
+    await act(async () => {
+      recovered = await result.current.recoverWithPasskey()
+    })
+
+    expect(recovered).toBeNull()
     expect(result.current.passkeyRecoveryFailure).toBe('inventory_timeout')
     expect(mocks.authenticatePrfPasskey).not.toHaveBeenCalled()
   })

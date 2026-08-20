@@ -31,6 +31,7 @@ import {
   loadPasskeyCredentials,
   loadRecoveryCandidates,
   PasskeyCredentialConflictError,
+  type PasskeyCredentialEntry,
   PasskeyTimeoutError,
   PrfNotSupportedError,
   retrieveEncryptedKeys,
@@ -135,6 +136,13 @@ class PasskeyRoutingProbeTimeoutError extends Error {
   constructor() {
     super('Passkey routing probe timed out')
     this.name = 'PasskeyRoutingProbeTimeoutError'
+  }
+}
+
+class PasskeyRecoveryInventoryError extends Error {
+  constructor() {
+    super('Passkey recovery candidate inventory could not be loaded')
+    this.name = 'PasskeyRecoveryInventoryError'
   }
 }
 
@@ -477,10 +485,15 @@ export function usePasskeyBackup({
     bundleVersion: number
     legacyKek?: CryptoKey
   } | null> => {
-    const entries = await withPasskeyRoutingProbeTimeout(
-      (signal) => loadRecoveryCandidates({ signal }),
-      PASSKEY_RECOVERY_INVENTORY_TIMEOUT_MS,
-    )
+    let entries: PasskeyCredentialEntry[]
+    try {
+      entries = await withPasskeyRoutingProbeTimeout(
+        (signal) => loadRecoveryCandidates({ signal }),
+        PASSKEY_RECOVERY_INVENTORY_TIMEOUT_MS,
+      )
+    } catch {
+      throw new PasskeyRecoveryInventoryError()
+    }
     if (entries.length === 0) return null
 
     const credentialIds = entries.map((e) => e.id)
@@ -952,8 +965,8 @@ export function usePasskeyBackup({
       })
       return recovery.keyBundle.primary
     } catch (error) {
-      if (error instanceof PasskeyRoutingProbeTimeoutError) {
-        logInfo('Passkey recovery candidate inventory timed out', {
+      if (error instanceof PasskeyRecoveryInventoryError) {
+        logInfo('Passkey recovery candidate inventory is unavailable', {
           component: 'usePasskeyBackup',
           action: 'recoverWithPasskey',
         })
@@ -999,7 +1012,29 @@ export function usePasskeyBackup({
     hasInitializedPasskeyRef.current = true
 
     const initializePasskey = async () => {
-      const prfSupported = await isPrfSupported()
+      let prfSupported: boolean
+      try {
+        prfSupported = await withPasskeyRoutingProbeTimeout(() =>
+          isPrfSupported(),
+        )
+      } catch (error) {
+        hasInitializedPasskeyRef.current = false
+        logError('Could not determine passkey PRF support', error, {
+          component: 'usePasskeyBackup',
+          action: 'initializePasskey',
+        })
+        if (isMountedRef.current) {
+          setState((prev) => ({
+            ...prev,
+            manualRecoveryNeeded:
+              !encryptionKey && !manualRecoveryDismissedFlag.isSet(),
+            passkeyFirstTimePromptAvailable: false,
+            passkeySetupFailed: true,
+            passkeyRetryAvailable: true,
+          }))
+        }
+        return
+      }
 
       if (encryptionKey) {
         // A local key that derives a different key id than the
