@@ -282,7 +282,6 @@ export function useProjects(
     if (!isSignedIn || !userId) return
 
     return subscribeToProjectInvalidation(() => {
-      loadGenerationRef.current += 1
       setProjects([])
       setProjectsUserId(userId)
       setError(null)

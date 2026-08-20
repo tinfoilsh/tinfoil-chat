@@ -20,6 +20,7 @@ import {
   newIdempotencyKey,
   pullItemPlaintext,
 } from '../sync-enclave/sync-api'
+import type { AccountOperationGuard } from './account-operation'
 import { pullKey, requirePrimaryKeyB64 } from './cek-encoding'
 import { canWriteToCloud } from './cloud-key-authorization'
 import { ProjectDataSchema, ProjectDocumentPlaintextSchema } from './schemas'
@@ -361,17 +362,20 @@ export class ProjectStorageService {
     })
   }
 
-  async deleteAllProjects(): Promise<number> {
+  async deleteAllProjects(guard: AccountOperationGuard): Promise<number> {
+    guard.assertCurrent()
     if (!(await canWriteToCloud())) {
       throw new Error(
         'Cloud writes are blocked until your encryption key is verified',
       )
     }
 
+    guard.assertCurrent()
     const response = await enclaveDeleteAllProjects({
       keyB64: requirePrimaryKeyB64(),
       idempotencyKey: newIdempotencyKey(),
     })
+    guard.assertCurrent()
     return response.deleted
   }
 

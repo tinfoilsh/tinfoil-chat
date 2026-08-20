@@ -1,3 +1,4 @@
+import type { AccountOperationGuard } from '@/services/cloud/account-operation'
 import { ProjectStorageService } from '@/services/cloud/project-storage'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -32,18 +33,25 @@ vi.mock('@/services/sync-enclave/sync-api', () => ({
 }))
 
 describe('ProjectStorageService.deleteAllProjects', () => {
+  let guard: AccountOperationGuard
+
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.canWriteToCloud.mockResolvedValue(true)
     mocks.requirePrimaryKeyB64.mockReturnValue('current-cek')
     mocks.newIdempotencyKey.mockReturnValue('delete-projects-idempotency')
     mocks.deleteAllProjects.mockResolvedValue({ ok: true, deleted: 4 })
+    guard = {
+      userId: 'project-user',
+      assertCurrent: vi.fn(),
+      isCurrent: vi.fn().mockReturnValue(true),
+    }
   })
 
   it('deletes all projects in one atomic enclave request', async () => {
     const storage = new ProjectStorageService()
 
-    await expect(storage.deleteAllProjects()).resolves.toBe(4)
+    await expect(storage.deleteAllProjects(guard)).resolves.toBe(4)
     expect(mocks.deleteAllProjects).toHaveBeenCalledOnce()
     expect(mocks.deleteAllProjects).toHaveBeenCalledWith({
       keyB64: 'current-cek',
@@ -51,15 +59,25 @@ describe('ProjectStorageService.deleteAllProjects', () => {
     })
     expect(mocks.requirePrimaryKeyB64).toHaveBeenCalledOnce()
     expect(mocks.newIdempotencyKey).toHaveBeenCalledOnce()
+    expect(guard.assertCurrent).toHaveBeenCalledTimes(3)
   })
 
   it('does not request deletion when cloud writes are blocked', async () => {
     mocks.canWriteToCloud.mockResolvedValue(false)
     const storage = new ProjectStorageService()
 
-    await expect(storage.deleteAllProjects()).rejects.toThrow(
+    await expect(storage.deleteAllProjects(guard)).rejects.toThrow(
       'Cloud writes are blocked until your encryption key is verified',
     )
     expect(mocks.deleteAllProjects).not.toHaveBeenCalled()
+  })
+
+  it('propagates enclave failures without reporting a deletion', async () => {
+    const failure = new Error('Enclave unavailable')
+    mocks.deleteAllProjects.mockRejectedValue(failure)
+    const storage = new ProjectStorageService()
+
+    await expect(storage.deleteAllProjects(guard)).rejects.toBe(failure)
+    expect(guard.assertCurrent).toHaveBeenCalledTimes(2)
   })
 })

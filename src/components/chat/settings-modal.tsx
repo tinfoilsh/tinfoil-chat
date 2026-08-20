@@ -1917,10 +1917,11 @@ export function SettingsModal({
     }
 
     setIsDeletingAllProjects(true)
+    const guard = cloudSync.createAccountOperationGuard()
     try {
-      const deleted = await projectStorage.deleteAllProjects()
+      const deleted = await projectStorage.deleteAllProjects(guard)
+      guard.assertCurrent()
       setProjectExportResult(null)
-      invalidateProjects()
       try {
         await projectCache.clear()
       } catch (cacheError) {
@@ -1929,12 +1930,12 @@ export function SettingsModal({
           action: 'handleDeleteAllProjects.clearCache',
         })
       }
+      guard.assertCurrent()
+      invalidateProjects()
       toast({
         title: 'All projects deleted',
         description: `Deleted ${deleted} ${deleted === 1 ? 'project' : 'projects'}.`,
       })
-
-      await refreshProjects()
 
       // Project deletion detaches chats from projects on the server, so the
       // chat list in the sidebar may need to refresh too.
