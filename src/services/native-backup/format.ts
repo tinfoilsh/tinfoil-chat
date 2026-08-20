@@ -131,15 +131,26 @@ function zipUpperBound(path: string, size: number): number {
   return size + Math.ceil(size / 16_383) * 5 + 104 + pathBytes * 2
 }
 
-function assertArchiveLimits(
-  manifest: Uint8Array,
-  files: NativeBackupFileEntry[],
+export function assertNativeBackupSizeLimits(
+  manifestSizeBytes: number,
+  files: readonly { path: string; sizeBytes: number }[],
 ) {
   if (files.length + 1 > NATIVE_BACKUP_LIMITS.entries)
     fail('archive entry limit exceeded')
-  let total = 22 + zipUpperBound(MANIFEST_PATH, manifest.length)
-  for (const file of files) total += zipUpperBound(file.path, file.bytes.length)
-  if (total > NATIVE_BACKUP_LIMITS.archiveBytes)
+  let aggregateJsonBytes = manifestSizeBytes
+  let archiveBytes = 22 + zipUpperBound(MANIFEST_PATH, manifestSizeBytes)
+  for (const file of files) {
+    archiveBytes += zipUpperBound(file.path, file.sizeBytes)
+    if (file.path.endsWith('.bin')) {
+      if (file.sizeBytes > NATIVE_BACKUP_LIMITS.imageBytes)
+        fail('image size limit exceeded')
+    } else {
+      aggregateJsonBytes += file.sizeBytes
+    }
+  }
+  if (aggregateJsonBytes > NATIVE_BACKUP_LIMITS.aggregateJsonBytes)
+    fail('aggregate JSON size limit exceeded')
+  if (archiveBytes > NATIVE_BACKUP_LIMITS.archiveBytes)
     fail('archive size limit exceeded')
 }
 
@@ -410,6 +421,10 @@ export function assertValidNativeBackupV1(
   files: readonly NativeBackupFileEntry[],
 ): NativeBackupManifestV1 {
   const manifest = manifestSchema.parse(parseJson(manifestBytes, MANIFEST_PATH))
+  assertNativeBackupSizeLimits(
+    manifestBytes.length,
+    files.map(({ path, bytes }) => ({ path, sizeBytes: bytes.length })),
+  )
   const listed = new Map(manifest.files.map((file) => [file.path, file]))
   if (
     listed.size !== manifest.files.length ||
@@ -417,7 +432,6 @@ export function assertValidNativeBackupV1(
   )
     fail('file list contains missing or duplicate paths')
   const seenPaths = new Set<string>()
-  let aggregateJsonBytes = manifestBytes.length
   const projects: NativeBackupProject[] = []
   const documents: NativeBackupProjectDocument[] = []
   const chats: NativeBackupChat[] = []
@@ -442,12 +456,9 @@ export function assertValidNativeBackupV1(
     )
       fail(`size or hash mismatch for ${file.path}`)
     if (file.path.endsWith('.bin')) {
-      if (file.bytes.length > NATIVE_BACKUP_LIMITS.imageBytes)
-        fail('image size limit exceeded')
       imageBytes.set(file.path.slice(0, -4), file.bytes.length)
       continue
     }
-    aggregateJsonBytes += file.bytes.length
     const value = parseJson(file.bytes, file.path)
     if (file.kind === 'projects') {
       const project = NativeBackupProjectSchema.parse(value)
@@ -479,8 +490,6 @@ export function assertValidNativeBackupV1(
       images.push(image)
     }
   }
-  if (aggregateJsonBytes > NATIVE_BACKUP_LIMITS.aggregateJsonBytes)
-    fail('aggregate JSON size limit exceeded')
   if (relationships.length !== 1)
     fail('exactly one relationships file is required')
   for (const image of images) {
@@ -504,6 +513,5 @@ export function assertValidNativeBackupV1(
   const entities = projects.length + documents.length + chats.length
   if (entities > NATIVE_BACKUP_LIMITS.entities) fail('entity limit exceeded')
   assertSemanticContent(projects, documents, chats, relationships[0], images)
-  assertArchiveLimits(manifestBytes, [...files])
   return manifest as NativeBackupManifestV1
 }

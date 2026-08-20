@@ -1,5 +1,6 @@
 import {
   NATIVE_BACKUP_LIMITS,
+  assertNativeBackupSizeLimits,
   assertValidNativeBackupV1,
   formatNativeBackupV1,
   type NativeBackupFormatInput,
@@ -205,45 +206,41 @@ describe('native backup v1 manifest', () => {
   it('enforces parser-aligned image and archive safety limits', () => {
     expect(NATIVE_BACKUP_LIMITS.archiveBytes).toBe(512 * 1024 * 1024)
     expect(NATIVE_BACKUP_LIMITS.aggregateJsonBytes).toBe(256 * 1024 * 1024)
-    const valid = input()
-    const oversized = {
-      ...valid,
-      images: [
+    expect(() =>
+      assertNativeBackupSizeLimits(1, [
         {
-          ...valid.images[0],
-          bytes: new Uint8Array(NATIVE_BACKUP_LIMITS.imageBytes + 1),
+          path: 'images/id-image.bin',
+          sizeBytes: NATIVE_BACKUP_LIMITS.imageBytes + 1,
         },
-      ],
-    }
-    expect(() => formatNativeBackupV1(oversized)).toThrow(
-      'image size limit exceeded',
-    )
+      ]),
+    ).toThrow('image size limit exceeded')
+    expect(() =>
+      assertNativeBackupSizeLimits(1, [
+        {
+          path: 'projects/id-project.json',
+          sizeBytes: NATIVE_BACKUP_LIMITS.aggregateJsonBytes,
+        },
+      ]),
+    ).toThrow('aggregate JSON size limit exceeded')
 
-    const archiveLimited = input()
-    const maxImage = new Uint8Array(NATIVE_BACKUP_LIMITS.imageBytes)
-    const imageIds = Array.from({ length: 16 }, (_, index) => `i-${index}`)
-    archiveLimited.cloudChats[0].messages[0].attachments = imageIds.map(
-      (imageId) => ({ id: `a-${imageId}`, type: 'image', imageId }),
-    )
-    archiveLimited.relationships.chatImages = imageIds.map((imageId) => ({
-      chatId: 'c',
-      imageId,
+    const imageSizes = Array.from({ length: 16 }, (_, index) => ({
+      path: `images/id-${index}.bin`,
+      sizeBytes: NATIVE_BACKUP_LIMITS.imageBytes,
     }))
-    archiveLimited.images = imageIds.map((imageId) => ({
-      metadata: {
-        id: imageId,
-        chatId: 'c',
-        messageIndex: 0,
-        attachmentId: `a-${imageId}`,
-        fileName: `${imageId}.png`,
-        mimeType: 'image/png',
-      },
-      bytes: maxImage,
-    }))
-    expect(() => formatNativeBackupV1(archiveLimited)).toThrow(
+    expect(() => assertNativeBackupSizeLimits(1, imageSizes)).toThrow(
       'archive size limit exceeded',
     )
-  }, 15_000)
+  })
+
+  it('hashes and validates small image byte payloads', () => {
+    const formatted = formatNativeBackupV1(input())
+    const image = formatted.files.find(({ path }) => path.endsWith('.bin'))!
+    image.bytes[0] ^= 1
+
+    expect(() =>
+      assertValidNativeBackupV1(formatted.manifestBytes, formatted.files),
+    ).toThrow('size or hash mismatch')
+  })
 
   it('rejects unsafe or noncanonical paths', () => {
     const formatted = formatNativeBackupV1(input())
