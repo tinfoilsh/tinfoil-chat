@@ -1,13 +1,4 @@
-import { ACCOUNT_RESET_FAILED_EVENT } from '@/constants/auth-events'
-import {
-  AUTH_ACCOUNT_RESET_FAILED,
-  AUTH_ACCOUNT_RESET_SIGNAL,
-} from '@/constants/storage-keys'
-import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
-import {
-  handleIndexedDBAccountResetStorageEvent,
-  IndexedDBStorage,
-} from '@/services/storage/indexed-db'
+import { IndexedDBStorage } from '@/services/storage/indexed-db'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 interface FakeResetTransaction {
@@ -126,57 +117,6 @@ describe('IndexedDBStorage account reset', () => {
     await Promise.all([firstReset, secondReset])
 
     expect(clear).toHaveBeenCalledTimes(1)
-  })
-
-  it('resets storage when another tab signals an account change', async () => {
-    const storage = new IndexedDBStorage()
-    const reset = vi
-      .spyOn(storage, 'resetForAccountChange')
-      .mockResolvedValue(undefined)
-    const reload = vi
-      .spyOn(window.location, 'reload')
-      .mockImplementation(() => {})
-    const clearDeletedChats = vi.spyOn(deletedChatsTracker, 'clear')
-    sessionStorage.setItem(AUTH_ACCOUNT_RESET_FAILED, 'true')
-
-    handleIndexedDBAccountResetStorageEvent(
-      storage,
-      new StorageEvent('storage', {
-        key: AUTH_ACCOUNT_RESET_SIGNAL,
-        newValue: 'reset_123',
-      }),
-    )
-
-    expect(reset).toHaveBeenCalledWith(false)
-    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1))
-    expect(clearDeletedChats).toHaveBeenCalledTimes(1)
-    expect(clearDeletedChats.mock.invocationCallOrder[0]).toBeLessThan(
-      reload.mock.invocationCallOrder[0],
-    )
-    expect(sessionStorage.getItem(AUTH_ACCOUNT_RESET_FAILED)).toBeNull()
-  })
-
-  it('reports cross-tab reset failures without re-enabling writes', async () => {
-    const storage = new IndexedDBStorage()
-    vi.spyOn(storage, 'resetForAccountChange').mockRejectedValue(
-      new Error('reset failed'),
-    )
-    const handleFailure = vi.fn()
-    const clearDeletedChats = vi.spyOn(deletedChatsTracker, 'clear')
-    window.addEventListener(ACCOUNT_RESET_FAILED_EVENT, handleFailure)
-
-    handleIndexedDBAccountResetStorageEvent(
-      storage,
-      new StorageEvent('storage', {
-        key: AUTH_ACCOUNT_RESET_SIGNAL,
-        newValue: 'reset_123',
-      }),
-    )
-
-    await vi.waitFor(() => expect(handleFailure).toHaveBeenCalledTimes(1))
-    expect(sessionStorage.getItem(AUTH_ACCOUNT_RESET_FAILED)).toBe('true')
-    expect(clearDeletedChats).not.toHaveBeenCalled()
-    window.removeEventListener(ACCOUNT_RESET_FAILED_EVENT, handleFailure)
   })
 
   it('cancels writes that were queued before the account reset', async () => {

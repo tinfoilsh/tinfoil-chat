@@ -1,7 +1,10 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
+import { ACCOUNT_RESET_FAILED_EVENT } from '@/constants/auth-events'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
+  AUTH_ACCOUNT_RESET_SIGNAL,
   AUTH_ACTIVE_USER_ID,
+  AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP,
   SECRET_PASSKEY_BACKED_UP,
   SETTINGS_HAS_SEEN_ONBOARDING,
   USER_ENCRYPTION_KEY,
@@ -36,10 +39,17 @@ interface ClearUserDataOptions {
   skipProgressReporting?: boolean
   /** Logging context label */
   context: string
+  notifyOtherTabs?: boolean
 }
 
+let accountCleanupPromise: Promise<void> | null = null
+
 async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
-  const { context, skipProgressReporting = false } = options
+  const {
+    context,
+    notifyOtherTabs = true,
+    skipProgressReporting = false,
+  } = options
 
   const reportStep = (step: number) => {
     if (!skipProgressReporting) reportSignoutStep(step)
@@ -98,6 +108,11 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
       AUTH_ACTIVE_USER_ID,
       SETTINGS_HAS_SEEN_ONBOARDING,
     ])
+    if (
+      localStorage.getItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP) === 'true'
+    ) {
+      preservedKeys.add(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP)
+    }
     const keys = Array.from({ length: localStorage.length }, (_, index) =>
       localStorage.key(index),
     )
@@ -122,7 +137,7 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   reportStep(SIGNOUT_STEPS.CLEAR_BROWSING_DATA)
   projectCache.invalidate()
   try {
-    await indexedDBStorage.resetForAccountChange()
+    await indexedDBStorage.resetForAccountChange(notifyOtherTabs)
   } catch (error) {
     logError('Failed to clear IndexedDB', error, {
       component: context,
@@ -136,13 +151,34 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
     try {
       const cacheNames = await caches.keys()
       await Promise.all(cacheNames.map((name) => caches.delete(name)))
-    } catch {
-      // best-effort
+    } catch (error) {
+      logError('Failed to clear browser caches', error, {
+        component: context,
+        action: 'clearAllUserData',
+      })
+      throw error
     }
   }
   completeStep(SIGNOUT_STEPS.CLEAR_BROWSING_DATA)
 
   localStorage.removeItem(AUTH_ACTIVE_USER_ID)
+  localStorage.removeItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP)
+}
+
+function performAccountCleanup(options: ClearUserDataOptions): Promise<void> {
+  if (accountCleanupPromise) return accountCleanupPromise
+
+  const cleanup = clearAllUserData(options)
+  accountCleanupPromise = cleanup
+  void cleanup.then(
+    () => {
+      if (accountCleanupPromise === cleanup) accountCleanupPromise = null
+    },
+    () => {
+      if (accountCleanupPromise === cleanup) accountCleanupPromise = null
+    },
+  )
+  return cleanup
 }
 
 export async function performSignoutCleanup(): Promise<void> {
@@ -152,7 +188,7 @@ export async function performSignoutCleanup(): Promise<void> {
       action: 'performSignoutCleanup',
     })
 
-    await clearAllUserData({
+    await performAccountCleanup({
       context: 'signoutCleanup',
     })
 
@@ -179,7 +215,7 @@ export async function performUserSwitchCleanup(
   })
 
   try {
-    await clearAllUserData({
+    await performAccountCleanup({
       context: 'AuthCleanupHandler',
       skipProgressReporting: true,
     })
@@ -254,7 +290,47 @@ export async function getUserInitiatedSignoutWarnings(
 }
 
 export async function retryFailedStorageCleanup(): Promise<void> {
-  await indexedDBStorage.resetForAccountChange(/* notifyOtherTabs */ false)
-  deletedChatsTracker.clear()
-  sessionStorage.removeItem(AUTH_ACCOUNT_RESET_FAILED)
+  try {
+    await performAccountCleanup({
+      context: 'crossTabAccountReset',
+      notifyOtherTabs: false,
+      skipProgressReporting: true,
+    })
+    sessionStorage.removeItem(AUTH_ACCOUNT_RESET_FAILED)
+  } catch (error) {
+    sessionStorage.setItem(AUTH_ACCOUNT_RESET_FAILED, 'true')
+    throw error
+  }
+}
+
+export async function performUserInitiatedSignout(
+  signOut: () => Promise<unknown>,
+): Promise<void> {
+  await signOut()
+  completeSignoutStep(SIGNOUT_STEPS.SIGN_OUT)
+  await performSignoutCleanup()
+  reportSignoutStep(SIGNOUT_STEPS.RELOAD)
+  window.location.reload()
+}
+
+export function handleAccountResetStorageEvent(event: StorageEvent): void {
+  if (event.key !== AUTH_ACCOUNT_RESET_SIGNAL || !event.newValue) return
+
+  void retryFailedStorageCleanup()
+    .then(() => window.location.reload())
+    .catch((error) => {
+      logError(
+        'Failed to clear local data after cross-tab account change',
+        error,
+        {
+          component: 'signoutCleanup',
+          action: 'crossTabAccountReset',
+        },
+      )
+      window.dispatchEvent(new CustomEvent(ACCOUNT_RESET_FAILED_EVENT))
+    })
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', handleAccountResetStorageEvent)
 }

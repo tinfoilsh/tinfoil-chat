@@ -1,7 +1,10 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
+import { ACCOUNT_RESET_FAILED_EVENT } from '@/constants/auth-events'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
+  AUTH_ACCOUNT_RESET_SIGNAL,
   AUTH_ACTIVE_USER_ID,
+  AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP,
   SECRET_PASSKEY_BACKED_UP,
   SETTINGS_HAS_SEEN_ONBOARDING,
   USER_ENCRYPTION_KEY,
@@ -20,12 +23,14 @@ import { resetSyncEnclaveClient } from '@/services/sync-enclave'
 import { logError } from '@/utils/error-handling'
 import {
   getUserInitiatedSignoutWarnings,
+  handleAccountResetStorageEvent,
   performSignoutCleanup,
+  performUserInitiatedSignout,
   performUserSwitchCleanup,
   retryFailedStorageCleanup,
   shouldWarnAboutLocalOnlyChats,
 } from '@/utils/signout-cleanup'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/components/chat/renderers', () => ({
   resetRendererRegistry: vi.fn(),
@@ -86,8 +91,17 @@ vi.mock('@/utils/error-handling', () => ({
 describe('performSignoutCleanup', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(indexedDBStorage.resetForAccountChange).mockReset()
+    vi.mocked(indexedDBStorage.resetForAccountChange).mockResolvedValue(
+      undefined,
+    )
     localStorage.clear()
     sessionStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('preserves the browser onboarding flag while clearing user data', async () => {
@@ -126,6 +140,40 @@ describe('performSignoutCleanup', () => {
     expect(resetEditClockCache).toHaveBeenCalled()
     expect(projectEvents.clear).toHaveBeenCalled()
     expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalled()
+  })
+
+  it('cleans up immediately after user-initiated sign-out succeeds', async () => {
+    const signOut = vi.fn().mockResolvedValue(undefined)
+    const reload = vi
+      .spyOn(window.location, 'reload')
+      .mockImplementation(() => {})
+
+    await performUserInitiatedSignout(signOut)
+
+    expect(signOut).toHaveBeenCalledTimes(1)
+    expect(encryptionService.clearKey).toHaveBeenCalledTimes(1)
+    expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalledTimes(1)
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('coalesces concurrent user and auth-handler cleanup', async () => {
+    let finishReset!: () => void
+    vi.mocked(indexedDBStorage.resetForAccountChange).mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishReset = resolve
+      }),
+    )
+    vi.spyOn(window.location, 'reload').mockImplementation(() => {})
+
+    const userCleanup = performUserInitiatedSignout(() => Promise.resolve())
+    await Promise.resolve()
+    const authCleanup = performSignoutCleanup()
+
+    expect(encryptionService.clearKey).toHaveBeenCalledTimes(1)
+    expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalledTimes(1)
+
+    finishReset()
+    await Promise.all([userCleanup, authCleanup])
   })
 
   it('deletes legacy pending recovery without preserving its key', async () => {
@@ -188,14 +236,89 @@ describe('performSignoutCleanup', () => {
     expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_old')
   })
 
-  it('retries a failed cross-tab reset without notifying other tabs', async () => {
+  it('keeps anonymous restore cleanup pending until all async work succeeds', async () => {
+    localStorage.setItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP, 'true')
+    vi.stubGlobal('caches', {
+      keys: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('cache reset failed'))
+        .mockResolvedValueOnce([]),
+      delete: vi.fn(),
+    })
+
+    await expect(performUserSwitchCleanup('user_new')).rejects.toThrow(
+      'cache reset failed',
+    )
+    expect(localStorage.getItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP)).toBe(
+      'true',
+    )
+
+    await performUserSwitchCleanup('user_new')
+    expect(
+      localStorage.getItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP),
+    ).toBeNull()
+  })
+
+  it('retries full cross-tab cleanup without notifying other tabs', async () => {
     sessionStorage.setItem(AUTH_ACCOUNT_RESET_FAILED, 'true')
+    localStorage.setItem(USER_ENCRYPTION_KEY, 'key_primary')
 
     await retryFailedStorageCleanup()
 
     expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalledWith(false)
+    expect(encryptionService.clearKey).toHaveBeenCalledWith({ persist: true })
+    expect(localStorage.getItem(USER_ENCRYPTION_KEY)).toBeNull()
     expect(deletedChatsTracker.clear).toHaveBeenCalledTimes(1)
     expect(sessionStorage.getItem(AUTH_ACCOUNT_RESET_FAILED)).toBeNull()
+  })
+
+  it('clears in-memory and persisted data on a cross-tab reset signal', async () => {
+    localStorage.setItem(USER_ENCRYPTION_KEY, 'key_primary')
+    localStorage.setItem('account-data', 'value')
+    sessionStorage.setItem('session-data', 'value')
+    const reload = vi
+      .spyOn(window.location, 'reload')
+      .mockImplementation(() => {})
+
+    handleAccountResetStorageEvent(
+      new StorageEvent('storage', {
+        key: AUTH_ACCOUNT_RESET_SIGNAL,
+        newValue: 'reset_123',
+      }),
+    )
+
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1))
+    expect(encryptionService.clearKey).toHaveBeenCalledWith({ persist: true })
+    expect(localStorage.getItem(USER_ENCRYPTION_KEY)).toBeNull()
+    expect(localStorage.getItem('account-data')).toBeNull()
+    expect(sessionStorage.getItem('session-data')).toBeNull()
+    expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalledWith(false)
+  })
+
+  it('keeps a full cleanup retry path after a cross-tab failure', async () => {
+    vi.mocked(indexedDBStorage.resetForAccountChange)
+      .mockRejectedValueOnce(new Error('reset failed'))
+      .mockResolvedValueOnce(undefined)
+    const handleFailure = vi.fn()
+    window.addEventListener(ACCOUNT_RESET_FAILED_EVENT, handleFailure)
+
+    handleAccountResetStorageEvent(
+      new StorageEvent('storage', {
+        key: AUTH_ACCOUNT_RESET_SIGNAL,
+        newValue: 'reset_123',
+      }),
+    )
+    await vi.waitFor(() => expect(handleFailure).toHaveBeenCalledTimes(1))
+
+    expect(sessionStorage.getItem(AUTH_ACCOUNT_RESET_FAILED)).toBe('true')
+    await retryFailedStorageCleanup()
+    expect(encryptionService.clearKey).toHaveBeenCalledTimes(2)
+    expect(indexedDBStorage.resetForAccountChange).toHaveBeenNthCalledWith(
+      2,
+      false,
+    )
+    expect(sessionStorage.getItem(AUTH_ACCOUNT_RESET_FAILED)).toBeNull()
+    window.removeEventListener(ACCOUNT_RESET_FAILED_EVENT, handleFailure)
   })
 
   it('warns only when actual local-only rows exist', async () => {

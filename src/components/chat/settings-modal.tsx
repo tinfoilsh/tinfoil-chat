@@ -72,7 +72,10 @@ import {
 } from '@/utils/cloud-sync-settings'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { generateReverseId } from '@/utils/reverse-id'
-import { getUserInitiatedSignoutWarnings } from '@/utils/signout-cleanup'
+import {
+  getUserInitiatedSignoutWarnings,
+  performUserInitiatedSignout,
+} from '@/utils/signout-cleanup'
 import {
   hideSignoutProgress,
   showSignoutProgress,
@@ -1310,7 +1313,7 @@ export function SettingsModal({
     setIsSigningOut(true)
     showSignoutProgress()
     try {
-      await signOut()
+      await performUserInitiatedSignout(signOut)
     } catch (error) {
       logError('Sign out failed', error, {
         component: 'SettingsModal',

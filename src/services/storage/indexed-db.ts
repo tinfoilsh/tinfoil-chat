@@ -4,9 +4,7 @@ import type {
   Message,
   PendingRecoveryEnvelope,
 } from '@/components/chat/types'
-import { ACCOUNT_RESET_FAILED_EVENT } from '@/constants/auth-events'
 import {
-  AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACCOUNT_RESET_SIGNAL,
   AUTH_ACTIVE_USER_ID,
 } from '@/constants/storage-keys'
@@ -15,7 +13,6 @@ import type { Project } from '@/types/project'
 import { logError, logWarning } from '@/utils/error-handling'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
-import { deletedChatsTracker } from './deleted-chats-tracker'
 
 export interface Chat extends Omit<ChatType, 'createdAt'> {
   createdAt: string
@@ -3655,35 +3652,3 @@ export class IndexedDBStorage {
 }
 
 export const indexedDBStorage = new IndexedDBStorage()
-
-export function handleIndexedDBAccountResetStorageEvent(
-  storage: IndexedDBStorage,
-  event: StorageEvent,
-): void {
-  if (event.key !== AUTH_ACCOUNT_RESET_SIGNAL || !event.newValue) return
-  void storage
-    .resetForAccountChange(false)
-    .then(() => {
-      sessionStorage.removeItem(AUTH_ACCOUNT_RESET_FAILED)
-      deletedChatsTracker.clear()
-      window.location.reload()
-    })
-    .catch((error) => {
-      logError(
-        'Failed to reset IndexedDB after cross-tab account change',
-        error,
-        {
-          component: 'IndexedDBStorage',
-          action: 'crossTabAccountReset',
-        },
-      )
-      sessionStorage.setItem(AUTH_ACCOUNT_RESET_FAILED, 'true')
-      window.dispatchEvent(new CustomEvent(ACCOUNT_RESET_FAILED_EVENT))
-    })
-}
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (event) => {
-    handleIndexedDBAccountResetStorageEvent(indexedDBStorage, event)
-  })
-}
