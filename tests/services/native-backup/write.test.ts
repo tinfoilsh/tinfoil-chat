@@ -27,6 +27,8 @@ function mockDependencies(
     compressedBytes?: number
     uncompressedBytes?: number
     afterAdd?: (path: string) => void
+    duringClose?: () => void
+    onOutputClose?: () => void
   } = {},
 ) {
   const events = {
@@ -37,11 +39,14 @@ function mockDependencies(
     blobOutputs: 0,
     fileOutputs: 0,
     zipCloses: 0,
+    zipDateComponents: [] as number[][],
+    zipEpochs: [] as number[],
   }
   const output = () =>
     new WritableStream<Uint8Array>({
       close: () => {
         events.outputCloses++
+        options.onOutputClose?.()
       },
       abort: () => {
         events.outputAborts++
@@ -65,7 +70,14 @@ function mockDependencies(
         },
       }
     },
-    createZipWriter: (writable) => {
+    createZipWriter: (writable, zipOptions) => {
+      events.zipDateComponents.push([
+        zipOptions.lastModDate.getFullYear(),
+        zipOptions.lastModDate.getMonth(),
+        zipOptions.lastModDate.getDate(),
+        zipOptions.lastModDate.getHours(),
+      ])
+      events.zipEpochs.push(zipOptions.lastModDate.getTime())
       const writer = writable.getWriter()
       return {
         add: async (path) => {
@@ -75,6 +87,8 @@ function mockDependencies(
         },
         close: async () => {
           events.zipCloses++
+          await writer.write(new Uint8Array([1]))
+          options.duringClose?.()
           await writer.close()
         },
       }
@@ -177,6 +191,64 @@ describe('native backup archive writer', () => {
     expect(events.blobReads).toBe(0)
   })
 
+  it('aborts a file destination when canceled during ZIP finalization', async () => {
+    const controller = new AbortController()
+    const { dependencies, events } = mockDependencies({
+      file: true,
+      duringClose: () => controller.abort(),
+    })
+
+    await expect(
+      writeNativeBackupArchive(
+        input([]),
+        { signal: controller.signal },
+        dependencies,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(events.outputAborts).toBe(1)
+    expect(events.outputCloses).toBe(0)
+  })
+
+  it('reports cancellation during destination commit without returning a Blob', async () => {
+    const controller = new AbortController()
+    const { dependencies, events } = mockDependencies({
+      onOutputClose: () => controller.abort(),
+    })
+
+    await expect(
+      writeNativeBackupArchive(
+        input([]),
+        { signal: controller.signal },
+        dependencies,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(events.outputCloses).toBe(1)
+    expect(events.blobReads).toBe(0)
+  })
+
+  it('uses the same local ZIP date components across timezones', async () => {
+    const originalTimezone = process.env.TZ
+    const components: number[][] = []
+    const epochs: number[] = []
+    try {
+      for (const timezone of ['UTC', 'America/Los_Angeles']) {
+        process.env.TZ = timezone
+        const { dependencies, events } = mockDependencies()
+        await writeNativeBackupArchive(input([]), {}, dependencies)
+        components.push(events.zipDateComponents[0])
+        epochs.push(events.zipEpochs[0])
+      }
+    } finally {
+      process.env.TZ = originalTimezone
+    }
+
+    expect(components).toEqual([
+      [1980, 0, 1, 0],
+      [1980, 0, 1, 0],
+    ])
+    expect(epochs[0]).not.toBe(epochs[1])
+  })
+
   it.each(['../escape.json', '/absolute.json', 'C:/drive.json', 'a\\b.json'])(
     'rejects unsafe archive path %s before opening output',
     async (path) => {
@@ -187,6 +259,24 @@ describe('native backup archive writer', () => {
       ).rejects.toMatchObject<Partial<NativeBackupWriterError>>({
         code: 'unsafe_path',
       })
+      expect(events.blobOutputs).toBe(0)
+    },
+  )
+
+  it.each([
+    [' a.json', 'a.json'],
+    ['a.json ', 'a.json'],
+  ])(
+    'rejects whitespace-normalized path collision %s with %s',
+    async (path, other) => {
+      const { dependencies, events } = mockDependencies()
+
+      await expect(
+        writeNativeBackupArchive(input([other, path]), {}, dependencies),
+      ).rejects.toMatchObject<Partial<NativeBackupWriterError>>({
+        code: 'unsafe_path',
+      })
+      expect(events.paths).toEqual([])
       expect(events.blobOutputs).toBe(0)
     },
   )
