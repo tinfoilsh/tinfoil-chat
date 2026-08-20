@@ -1071,24 +1071,21 @@ export function usePasskeyBackup({
           // different device. Surface a prompt so they can enroll a
           // passkey on this device too — the enclave / CP already
           // support many bundles per key.
-          localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
           if (isMountedRef.current) {
             setState((prev) => ({
               ...prev,
-              passkeyActive: true,
               passkeyAddDeviceAvailable: true,
               passkeySetupAvailable: false,
+              passkeyActive: false,
             }))
           }
         } else if (
           deviceState === 'empty' &&
           !passkeyFlowInProgressRef.current
         ) {
-          localStorage.removeItem(SECRET_PASSKEY_BACKED_UP)
           if (isMountedRef.current) {
             setState((prev) => ({
               ...prev,
-              passkeyActive: false,
               passkeySetupAvailable: true,
               passkeyAddDeviceAvailable: false,
             }))
@@ -1102,10 +1099,6 @@ export function usePasskeyBackup({
         const credentialState = await getPasskeyCredentialState()
 
         if (credentialState === 'exists') {
-          localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
-          if (isMountedRef.current) {
-            setState((prev) => ({ ...prev, passkeyActive: true }))
-          }
           // If the user explicitly dismissed the recovery prompt on a
           // previous visit, stay silent on reload — they can re-trigger
           // recovery from Settings when they're ready.
@@ -1119,10 +1112,6 @@ export function usePasskeyBackup({
             }))
           }
         } else if (credentialState === 'empty') {
-          localStorage.removeItem(SECRET_PASSKEY_BACKED_UP)
-          if (isMountedRef.current) {
-            setState((prev) => ({ ...prev, passkeyActive: false }))
-          }
           const remoteState = await inspectRemoteEncryptedState()
 
           if (remoteState === 'empty') {
@@ -1630,49 +1619,37 @@ export function usePasskeyBackup({
    * promoted a CEK, the user removed a credential from settings).
    * Pure read: never triggers a WebAuthn prompt.
    */
-  const refreshBundleState = useCallback(
-    async (options?: { clearOnUnknown?: boolean }): Promise<boolean | null> => {
-      if (passkeyFlowInProgressRef.current) return null
-      const localCredentialId = getLocalPasskeyCredentialId()
-      const deviceState = await getPasskeyDeviceState(localCredentialId)
-      if (!isMountedRef.current) return null
+  const refreshBundleState = useCallback(async (): Promise<void> => {
+    if (!encryptionKey) return
+    if (passkeyFlowInProgressRef.current) return
+    const localCredentialId = getLocalPasskeyCredentialId()
+    const deviceState = await getPasskeyDeviceState(localCredentialId)
+    if (!isMountedRef.current) return
 
-      if (deviceState === 'this-device') {
-        localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
-        setState((prev) => ({
-          ...prev,
-          passkeyActive: true,
-          passkeySetupAvailable: false,
-          passkeyAddDeviceAvailable: false,
-          manualRecoveryNeeded: false,
-        }))
-        return true
-      } else if (deviceState === 'other-device-only') {
-        localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
-        setState((prev) => ({
-          ...prev,
-          passkeyActive: true,
-          passkeyAddDeviceAvailable: true,
-          passkeySetupAvailable: false,
-        }))
-        return true
-      } else if (deviceState === 'empty') {
-        localStorage.removeItem(SECRET_PASSKEY_BACKED_UP)
-        setState((prev) => ({
-          ...prev,
-          passkeyActive: false,
-          passkeySetupAvailable: true,
-          passkeyAddDeviceAvailable: false,
-        }))
-        return false
-      } else if (options?.clearOnUnknown) {
-        localStorage.removeItem(SECRET_PASSKEY_BACKED_UP)
-        setState((prev) => ({ ...prev, passkeyActive: false }))
-      }
-      return null
-    },
-    [],
-  )
+    if (deviceState === 'this-device') {
+      localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
+      setState((prev) => ({
+        ...prev,
+        passkeyActive: true,
+        passkeySetupAvailable: false,
+        passkeyAddDeviceAvailable: false,
+        manualRecoveryNeeded: false,
+      }))
+    } else if (deviceState === 'other-device-only') {
+      setState((prev) => ({
+        ...prev,
+        passkeyAddDeviceAvailable: true,
+        passkeySetupAvailable: false,
+        passkeyActive: false,
+      }))
+    } else if (deviceState === 'empty') {
+      setState((prev) => ({
+        ...prev,
+        passkeySetupAvailable: true,
+        passkeyAddDeviceAvailable: false,
+      }))
+    }
+  }, [encryptionKey])
 
   // Subscribe to bundle-state-maybe-changed events so the hook stays in
   // sync after the legacy-blob migration finishes, a different tab adds

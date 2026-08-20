@@ -1,7 +1,4 @@
-import {
-  SECRET_PASSKEY_BACKED_UP,
-  SETTINGS_MANUAL_RECOVERY_DISMISSED,
-} from '@/constants/storage-keys'
+import { SETTINGS_MANUAL_RECOVERY_DISMISSED } from '@/constants/storage-keys'
 import { usePasskeyBackup } from '@/hooks/use-passkey-backup'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -284,82 +281,6 @@ describe('usePasskeyBackup', () => {
       )
       expect(result.current.passkeyRecoveryNeeded).toBe(false)
       expect(result.current.manualRecoveryNeeded).toBe(false)
-    })
-  })
-
-  describe('bundle inventory reconciliation', () => {
-    it('clears a stale final-bundle marker after a successful empty inventory', async () => {
-      localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
-      mocks.getPasskeyDeviceState.mockResolvedValue('empty')
-      const { result } = renderHook(() =>
-        usePasskeyBackup({
-          ...baseOptions,
-          initialized: false,
-          encryptionKey: 'key_local',
-        }),
-      )
-
-      await act(async () => {
-        await result.current.refreshBundleState()
-      })
-
-      expect(localStorage.getItem(SECRET_PASSKEY_BACKED_UP)).toBeNull()
-      expect(result.current.passkeyActive).toBe(false)
-    })
-
-    it('sets backup state for any non-empty bundle inventory', async () => {
-      mocks.getPasskeyDeviceState.mockResolvedValue('other-device-only')
-      const { result } = renderHook(() =>
-        usePasskeyBackup({
-          ...baseOptions,
-          initialized: false,
-          encryptionKey: 'key_local',
-        }),
-      )
-
-      await act(async () => {
-        await result.current.refreshBundleState()
-      })
-
-      expect(localStorage.getItem(SECRET_PASSKEY_BACKED_UP)).toBe('true')
-      expect(result.current.passkeyActive).toBe(true)
-    })
-
-    it('preserves prior state on background inventory failure', async () => {
-      localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
-      mocks.getPasskeyDeviceState.mockResolvedValue('unknown')
-      const { result } = renderHook(() =>
-        usePasskeyBackup({
-          ...baseOptions,
-          initialized: false,
-          encryptionKey: 'key_local',
-        }),
-      )
-
-      await act(async () => {
-        await result.current.refreshBundleState()
-      })
-
-      expect(localStorage.getItem(SECRET_PASSKEY_BACKED_UP)).toBe('true')
-    })
-
-    it('treats inventory failure immediately before signout as unverified', async () => {
-      localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
-      mocks.getPasskeyDeviceState.mockResolvedValue('unknown')
-      const { result } = renderHook(() =>
-        usePasskeyBackup({
-          ...baseOptions,
-          initialized: false,
-          encryptionKey: 'key_local',
-        }),
-      )
-
-      await act(async () => {
-        await result.current.refreshBundleState({ clearOnUnknown: true })
-      })
-
-      expect(localStorage.getItem(SECRET_PASSKEY_BACKED_UP)).toBeNull()
-      expect(result.current.passkeyActive).toBe(false)
     })
   })
 

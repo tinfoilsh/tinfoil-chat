@@ -37,7 +37,6 @@
     "@tailwindcss/typography": "^0.5.16",
     "@tinfoilsh/passkey-kit": "^0.1.0",
     "@tinfoilsh/tinfoil-icons": "^2.0.4",
-    "@zip.js/zip.js": "^2.8.53",
     "autoprefixer": "^10.4.21",
     "boring-avatars": "^2.0.4",
     "class-variance-authority": "^0.7.1",

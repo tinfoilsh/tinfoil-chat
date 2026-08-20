@@ -13,7 +13,6 @@ const mocks = vi.hoisted(() => ({
   deleteDocument: vi.fn(),
   loadMemory: vi.fn(),
   processMessages: vi.fn(),
-  projectEventHandlers: new Map<string, (event: unknown) => void>(),
 }))
 
 vi.mock('@clerk/nextjs', () => ({
@@ -28,12 +27,7 @@ vi.mock('@/hooks/use-memory', () => ({
 }))
 
 vi.mock('@/services/project/project-events', () => ({
-  projectEvents: {
-    on: vi.fn((type: string, handler: (event: unknown) => void) => {
-      mocks.projectEventHandlers.set(type, handler)
-      return () => mocks.projectEventHandlers.delete(type)
-    }),
-  },
+  projectEvents: { on: vi.fn(() => vi.fn()) },
 }))
 
 vi.mock('@/services/cloud/project-storage', () => ({
@@ -98,7 +92,6 @@ async function renderInProject() {
 describe('ProjectProvider documents', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.projectEventHandlers.clear()
     mocks.getProject.mockResolvedValue(project)
     mocks.listDocuments.mockResolvedValue({ documents: [listedDocument] })
     mocks.getDocuments.mockResolvedValue(
@@ -113,21 +106,6 @@ describe('ProjectProvider documents', () => {
     })
 
     expect(result.current.projectDocuments[0].sizeBytes).toBe(2048)
-  })
-
-  it('invalidates active and loading project state after a bulk delete', async () => {
-    const { result } = await renderInProject()
-
-    act(() => {
-      mocks.projectEventHandlers.get('projects-invalidated')?.({
-        type: 'projects-invalidated',
-      })
-    })
-
-    expect(result.current.activeProject).toBeNull()
-    expect(result.current.loadingProject).toBeNull()
-    expect(result.current.loading).toBe(false)
-    expect(result.current.projectDocuments).toEqual([])
   })
 
   it('does not let a stale refresh remove a completed upload', async () => {
