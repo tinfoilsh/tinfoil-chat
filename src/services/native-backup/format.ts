@@ -113,7 +113,9 @@ function parseJson(bytes: Uint8Array, label: string): unknown {
 const idComponent = (id: string) => `id-${bytesToHex(encoder.encode(id))}`
 const hash = (bytes: Uint8Array) => bytesToHex(sha256(bytes))
 const relationshipCount = (value: NativeBackupRelationships) =>
-  Object.values(value).reduce((count, relations) => count + relations.length, 0)
+  value.projectChats.length +
+  value.projectDocuments.length +
+  value.chatImages.length
 
 function expectedPathKind(path: string): NativeBackupEntityKind | null {
   if (path === 'relationships.json') return 'relationships'
