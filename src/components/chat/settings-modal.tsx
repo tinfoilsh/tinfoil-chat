@@ -42,6 +42,7 @@ import {
 import {
   buildClaudeProjectExport,
   ClaudeProjectExportSizeError,
+  formatClaudeProjectExportCounts,
   type ClaudeProjectExportCounts,
 } from '@/services/project-export/claude-project-export'
 import { chatStorage } from '@/services/storage/chat-storage'
@@ -4350,15 +4351,9 @@ ${encryptionKey.replace('key_', '')}
                           >
                             {projectExportResult.counts && (
                               <div>
-                                Exported{' '}
-                                {projectExportResult.counts.exportedProjects}{' '}
-                                projects and{' '}
-                                {projectExportResult.counts.exportedDocuments}{' '}
-                                documents. Skipped{' '}
-                                {projectExportResult.counts.skippedProjects}{' '}
-                                projects and{' '}
-                                {projectExportResult.counts.skippedDocuments}{' '}
-                                documents.
+                                {formatClaudeProjectExportCounts(
+                                  projectExportResult.counts,
+                                )}
                               </div>
                             )}
                             {projectExportResult.error && (

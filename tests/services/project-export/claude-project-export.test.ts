@@ -1,6 +1,7 @@
 import {
   buildClaudeProjectExport,
   ClaudeProjectExportSizeError,
+  formatClaudeProjectExportCounts,
 } from '@/services/project-export/claude-project-export'
 import type {
   Project,
@@ -134,6 +135,7 @@ describe('buildClaudeProjectExport', () => {
       skippedProjects: 0,
       exportedDocuments: 1,
       skippedDocuments: 0,
+      failedDocumentListings: 0,
     })
     expect(result.json).not.toContain('memory')
     expect(result.json).not.toContain('color')
@@ -209,9 +211,24 @@ describe('buildClaudeProjectExport', () => {
       skippedProjects: 1,
       exportedDocuments: 1,
       skippedDocuments: 1,
+      failedDocumentListings: 1,
     })
     expect(result.warnings).toHaveLength(3)
     expect(JSON.parse(result.json)).toHaveLength(2)
+  })
+
+  it('reports unknown skipped documents when a document listing fails', () => {
+    const summary = formatClaudeProjectExportCounts({
+      exportedProjects: 2,
+      skippedProjects: 0,
+      exportedDocuments: 3,
+      skippedDocuments: 0,
+      failedDocumentListings: 1,
+    })
+
+    expect(summary).toContain('The skipped document total is unknown')
+    expect(summary).toContain('document listing failed for 1 project')
+    expect(summary).not.toContain('Skipped 0 projects and 0 documents')
   })
 
   it('never reads more than four documents concurrently', async () => {

@@ -17,6 +17,7 @@ export interface ClaudeProjectExportCounts {
   skippedProjects: number
   exportedDocuments: number
   skippedDocuments: number
+  failedDocumentListings: number
 }
 
 export interface ClaudeProjectExportResult {
@@ -31,6 +32,24 @@ export class ClaudeProjectExportSizeError extends Error {
     super('The Claude-compatible project export exceeds the 64 MiB limit.')
     this.name = 'ClaudeProjectExportSizeError'
   }
+}
+
+export function formatClaudeProjectExportCounts(
+  counts: ClaudeProjectExportCounts,
+): string {
+  const count = (value: number, noun: string) =>
+    `${value} ${noun}${value === 1 ? '' : 's'}`
+  const exported = `Exported ${count(counts.exportedProjects, 'project')} and ${count(counts.exportedDocuments, 'document')}.`
+  if (counts.failedDocumentListings === 0) {
+    return `${exported} Skipped ${count(counts.skippedProjects, 'project')} and ${count(counts.skippedDocuments, 'document')}.`
+  }
+
+  const failedListings = count(counts.failedDocumentListings, 'project')
+  const knownSkippedDocuments =
+    counts.skippedDocuments > 0
+      ? ` Of the documents that were listed, ${count(counts.skippedDocuments, 'document')} ${counts.skippedDocuments === 1 ? 'was' : 'were'} skipped.`
+      : ''
+  return `${exported} Skipped ${count(counts.skippedProjects, 'project')}. The skipped document total is unknown because document listing failed for ${failedListings}.${knownSkippedDocuments}`
 }
 
 interface ExportOptions {
@@ -126,6 +145,7 @@ export async function buildClaudeProjectExport(
     skippedProjects: 0,
     exportedDocuments: 0,
     skippedDocuments: 0,
+    failedDocumentListings: 0,
   }
   const warnings: string[] = []
 
@@ -146,6 +166,7 @@ export async function buildClaudeProjectExport(
     try {
       listedDocuments = (await storage.listDocuments(project.id)).documents
     } catch {
+      counts.failedDocumentListings++
       warnings.push(
         `Documents for project ${project.id} could not be listed, so their skipped count is unknown.`,
       )
