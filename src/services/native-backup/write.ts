@@ -239,10 +239,11 @@ function zipTimestamp(): Date {
 async function commitOutput(
   output: ReturnType<typeof boundedWritable>,
   signal?: AbortSignal,
+  checkAfterCommit = true,
 ) {
   signal?.throwIfAborted()
   await output.commit()
-  signal?.throwIfAborted()
+  if (checkAfterCommit) signal?.throwIfAborted()
 }
 
 export async function writeNativeBackupArchive(
@@ -282,7 +283,7 @@ export async function writeNativeBackupArchive(
     }
     await zip.close()
     options.signal?.throwIfAborted()
-    await commitOutput(bounded, options.signal)
+    await commitOutput(bounded, options.signal, kind === 'blob')
     if (blobOutput)
       return { kind: 'blob', filename, blob: await blobOutput.getData() }
     return { kind: 'file', filename }
