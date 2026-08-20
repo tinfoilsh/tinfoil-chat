@@ -32,6 +32,7 @@ function chat(id: string, isLocalOnly: boolean, image = false): Chat {
     reasoningEffort: 'high',
     thinkingEnabled: true,
     toolsEnabled: ['web_search', 'code_execution'],
+    unexpectedSecret: 'must-not-be-forwarded',
     messages: [
       {
         role: 'user',
@@ -70,6 +71,7 @@ function chat(id: string, isLocalOnly: boolean, image = false): Chat {
         ],
         searchReasoning: 'Search rationale',
         quote: 'Quoted text',
+        apiKey: 'must-not-be-forwarded',
         timeline: [
           {
             type: 'thinking',
@@ -125,6 +127,7 @@ function chat(id: string, isLocalOnly: boolean, image = false): Chat {
                     `\x89PNG\r\n\x1a\n${String.fromCharCode(0x42).repeat(64)}`,
                   ),
                   encryptionKey: 'must-not-be-exported',
+                  accessToken: 'must-not-be-forwarded',
                 },
               ]
             : []),
@@ -244,6 +247,9 @@ describe('native Tinfoil backup', () => {
     expect(JSON.stringify(validated.cloudChats)).not.toContain('source-user')
     expect(JSON.stringify(validated.cloudChats)).not.toContain(
       'must-not-be-exported',
+    )
+    expect(JSON.stringify(validated.cloudChats)).not.toContain(
+      'must-not-be-forwarded',
     )
     expect(validated.cloudChats[0]).toMatchObject({
       titleState: 'manual',
@@ -433,6 +439,11 @@ describe('native Tinfoil backup', () => {
     expect(
       cloudManifest.blobs.map((blob: { path: string }) => blob.path),
     ).toEqual(contractFixture.blobs.map((blob) => blob.path))
+    expect(
+      cloudManifest.entities
+        .map((entity: { path: string }) => strFromU8(cloudFiles[entity.path]))
+        .join(''),
+    ).not.toContain('must-not-be-forwarded')
     expect(
       cloudManifest.blobs.map((blob: { path: string }) =>
         uint8ArrayToBase64(cloudFiles[blob.path]),

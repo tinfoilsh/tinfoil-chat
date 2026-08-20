@@ -1,6 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
-import { Uint8ArrayReader, ZipReader } from '@zip.js/zip.js'
+import { Uint8ArrayReader, ZipReader, ZipWriter } from '@zip.js/zip.js'
 import { strFromU8, strToU8, zipSync } from 'fflate'
 import { z } from 'zod'
 
@@ -44,98 +44,193 @@ const MAX_CLOUD_ATTACHMENTS = 100_000
 
 class BackupLimitError extends Error {}
 
-const CHAT_TRANSIENT_FIELDS = [
-  'clock',
-  'clockVersion',
-  'codeExecutionAccessToken',
-  'dataCorrupted',
-  'decryptionFailed',
-  'formatVersion',
-  'isBlankChat',
-  'isMetadataOnly',
-  'isTemporary',
-  'lastAccessedAt',
-  'loadedAt',
-  'locallyModified',
-  'messageCount',
-  'pendingRecoveries',
-  'pendingSave',
-  'pendingUpload',
-  'projectLocallyModified',
-  'syncPending',
-  'syncUserId',
-  'syncedAt',
-  'syncVersion',
-  'version',
-  'writer',
-] as const
+const JsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueSchema),
+    z.record(JsonValueSchema),
+  ]),
+)
 
-const ProjectSchema = z
-  .object({
-    id: z.string().min(1),
-    name: z.string(),
-    description: z.string(),
-    systemInstructions: z.string(),
-    color: z.string().optional(),
-    memory: z.array(
-      z
-        .object({
-          id: z.string(),
-          fact: z.string(),
-          date: z.string(),
-          category: z.string(),
-          confidence: z.number(),
-        })
-        .passthrough(),
-    ),
-    createdAt: z.string().datetime(),
-    updatedAt: z.string().datetime(),
-    syncVersion: z.number(),
-    decryptionFailed: z.literal(false).optional(),
-  })
-  .passthrough()
-const ProjectDocumentSchema = z
-  .object({
-    id: z.string().min(1),
-    projectId: z.string().min(1),
-    filename: z.string(),
-    contentType: z.string(),
-    sizeBytes: z.number().nonnegative(),
-    syncVersion: z.number(),
-    createdAt: z.string().datetime(),
-    updatedAt: z.string().datetime(),
-    content: z.string().optional(),
-    decryptionFailed: z.literal(false).optional(),
-  })
-  .passthrough()
-const BackupAttachmentSchema = z
-  .object({
-    id: z.string().min(1),
-    type: z.enum(['image', 'document']),
-    fileName: z.string(),
-    backup_path: z.string().optional(),
-    encryptionKey: z.never().optional(),
-    base64: z.never().optional(),
-    thumbnailBase64: z.never().optional(),
-  })
-  .passthrough()
-const BackupMessageSchema = z
-  .object({
-    role: z.enum(['user', 'assistant']),
+const URLFetchSchema = z.object({
+  id: z.string(),
+  url: z.string(),
+  status: z.enum(['fetching', 'completed', 'failed']),
+})
+const WebSearchSchema = z.object({
+  query: z.string().optional(),
+  status: z.enum(['searching', 'completed', 'failed', 'blocked']),
+  sources: z.array(z.object({ title: z.string(), url: z.string() })).optional(),
+  reason: z.string().optional(),
+})
+const ToolCallStateSchema = z.object({
+  id: z.string(),
+  toolName: z.string(),
+  arguments: z.record(JsonValueSchema).optional(),
+  status: z.enum(['running', 'completed', 'failed']),
+  output: z.string().optional(),
+})
+const TimelineBlockSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('thinking'),
+    id: z.string(),
     content: z.string(),
-    timestamp: z.union([z.string().datetime(), z.date()]),
-    attachments: z.array(BackupAttachmentSchema).optional(),
-  })
-  .passthrough()
-const BackupChatSchema = z
-  .object({
-    id: z.string().min(1),
-    title: z.string(),
-    createdAt: z.string().datetime(),
-    messages: z.array(BackupMessageSchema),
-    decryptionFailed: z.literal(false).optional(),
-  })
-  .passthrough()
+    isThinking: z.boolean(),
+    duration: z.number().optional(),
+  }),
+  z.object({
+    type: z.literal('web_search'),
+    id: z.string(),
+    state: WebSearchSchema,
+  }),
+  z.object({
+    type: z.literal('url_fetches'),
+    id: z.string(),
+    fetches: z.array(URLFetchSchema),
+  }),
+  z.object({
+    type: z.literal('content'),
+    id: z.string(),
+    content: z.string(),
+  }),
+  z.object({
+    type: z.literal('tool_call'),
+    id: z.string(),
+    toolCallId: z.string(),
+    name: z.string(),
+    arguments: z.string(),
+    resolvedAt: z.number().optional(),
+    resolution: z
+      .object({ text: z.string(), data: JsonValueSchema.optional() })
+      .optional(),
+  }),
+  z.object({
+    type: z.literal('code_exec'),
+    id: z.string(),
+    calls: z.array(ToolCallStateSchema),
+  }),
+])
+
+const ProjectSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  description: z.string(),
+  systemInstructions: z.string(),
+  color: z.string().optional(),
+  memory: z.array(
+    z.object({
+      id: z.string(),
+      fact: z.string(),
+      date: z.string(),
+      category: z.string(),
+      confidence: z.number(),
+    }),
+  ),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  syncVersion: z.number(),
+  decryptionFailed: z.literal(false).optional(),
+})
+const ProjectDocumentSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  filename: z.string(),
+  contentType: z.string(),
+  sizeBytes: z.number().nonnegative(),
+  syncVersion: z.number(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  content: z.string().optional(),
+  decryptionFailed: z.literal(false).optional(),
+})
+const BackupAttachmentSchema = z.object({
+  id: z.string().min(1),
+  type: z.enum(['image', 'document']),
+  fileName: z.string(),
+  mimeType: z.string().optional(),
+  textContent: z.string().optional(),
+  description: z.string().optional(),
+  fileSize: z.number().optional(),
+  pages: z
+    .array(
+      z.object({
+        page: z.number(),
+        text: z.string(),
+        image: z.string(),
+        is_scanned: z.boolean(),
+      }),
+    )
+    .optional(),
+  backup_path: z.string().optional(),
+  encryptionKey: z.never().optional(),
+  base64: z.never().optional(),
+  thumbnailBase64: z.never().optional(),
+})
+const BackupMessageSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string(),
+  turnId: z.string().optional(),
+  modelDisplayName: z.string().optional(),
+  documentContent: z.string().optional(),
+  multimodalText: z.string().optional(),
+  documents: z.array(z.object({ name: z.string() })).optional(),
+  imageData: z
+    .array(z.object({ base64: z.string(), mimeType: z.string() }))
+    .optional(),
+  timestamp: z.union([z.string().datetime(), z.date()]),
+  thoughts: z.string().optional(),
+  isThinking: z.boolean().optional(),
+  thinkingDuration: z.number().optional(),
+  isError: z.boolean().optional(),
+  isRateLimitError: z.boolean().optional(),
+  isHourlyRateLimitError: z.boolean().optional(),
+  urlFetches: z.array(URLFetchSchema).optional(),
+  webSearch: WebSearchSchema.optional(),
+  webSearchBeforeThinking: z.boolean().optional(),
+  annotations: z
+    .array(
+      z.object({
+        type: z.literal('url_citation'),
+        url_citation: z.object({
+          title: z.string(),
+          url: z.string(),
+          start_index: z.number().optional(),
+          end_index: z.number().optional(),
+        }),
+      }),
+    )
+    .optional(),
+  searchReasoning: z.string().optional(),
+  quote: z.string().optional(),
+  timeline: z.array(TimelineBlockSchema).optional(),
+  toolCalls: z
+    .array(
+      z.object({ id: z.string(), name: z.string(), arguments: z.string() }),
+    )
+    .optional(),
+  codeExecCalls: z.array(ToolCallStateSchema).optional(),
+  attachments: z.array(BackupAttachmentSchema).optional(),
+})
+const BackupChatSchema = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  titleState: z.enum(['placeholder', 'generated', 'manual']).optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().optional(),
+  isLocalOnly: z.boolean().optional(),
+  projectId: z.string().optional(),
+  presetId: z.string().optional(),
+  model: z.string().optional(),
+  webSearchEnabled: z.boolean().optional(),
+  reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
+  thinkingEnabled: z.boolean().optional(),
+  toolsEnabled: z.array(z.string()).optional(),
+  messages: z.array(BackupMessageSchema),
+  decryptionFailed: z.literal(false).optional(),
+})
 const RelationshipSchema = z.object({
   chat_id: z.string().min(1),
   project_id: z.string().min(1),
@@ -297,6 +392,45 @@ function jsonBytes(value: unknown): Uint8Array {
   return strToU8(JSON.stringify(value, null, 2))
 }
 
+async function createBoundedZip(
+  files: Record<string, Uint8Array>,
+  limitMessage: string,
+): Promise<Blob> {
+  const chunks: Uint8Array<ArrayBuffer>[] = []
+  const abortController = new AbortController()
+  let size = 0
+  let limitExceeded = false
+  const output = new WritableStream<Uint8Array>({
+    write(chunk) {
+      if (size + chunk.byteLength > MAX_BACKUP_ARCHIVE_BYTES) {
+        limitExceeded = true
+        abortController.abort()
+        throw new BackupLimitError(limitMessage)
+      }
+      chunks.push(new Uint8Array(chunk))
+      size += chunk.byteLength
+    },
+  })
+  const writer = new ZipWriter(output, {
+    bufferedWrite: false,
+    signal: abortController.signal,
+  })
+  try {
+    for (const [path, bytes] of Object.entries(files)) {
+      await writer.add(path, new Uint8ArrayReader(bytes), {
+        bufferedWrite: false,
+        signal: abortController.signal,
+      })
+    }
+    await writer.close()
+  } catch (error) {
+    abortController.abort()
+    if (limitExceeded) throw new Error(limitMessage)
+    throw error
+  }
+  return new Blob(chunks, { type: 'application/zip' })
+}
+
 function parseJson<T>(files: Record<string, Uint8Array>, path: string): T {
   const bytes = files[path]
   if (!bytes) throw new Error(`Backup is missing ${path}`)
@@ -311,19 +445,16 @@ function asDateString(value: Date | string): string {
   return new Date(value).toISOString()
 }
 
-function portableChatFields(chat: Chat): Omit<Chat, 'messages' | 'createdAt'> {
-  const portable = { ...chat } as Record<string, unknown>
-  for (const field of CHAT_TRANSIENT_FIELDS) delete portable[field]
-  delete portable.messages
-  delete portable.createdAt
-  return portable as Omit<Chat, 'messages' | 'createdAt'>
+function sanitizeBackupAttachment(value: unknown): BackupAttachment {
+  return BackupAttachmentSchema.parse(value) as BackupAttachment
 }
 
-function portableCloudChatFields(chat: Chat): Record<string, unknown> {
-  const portable = portableChatFields(chat) as Record<string, unknown>
-  delete portable.id
-  delete portable.projectId
-  return portable
+function sanitizeBackupMessage(value: unknown): BackupMessage {
+  return BackupMessageSchema.parse(value) as BackupMessage
+}
+
+function sanitizeBackupChat(value: unknown): BackupChat {
+  return BackupChatSchema.parse(value) as BackupChat
 }
 
 async function imageBytes(attachment: Attachment): Promise<Uint8Array | null> {
@@ -355,7 +486,7 @@ async function serializeChats(
           encryptionKey: _encryptionKey,
           ...safeAttachment
         } = attachment
-        const exported: BackupAttachment = { ...safeAttachment }
+        const exported = sanitizeBackupAttachment(safeAttachment)
         if (attachment.type === 'image') {
           try {
             const bytes = await imageBytes(attachment)
@@ -391,19 +522,23 @@ async function serializeChats(
             })
           }
         }
-        attachments.push(exported)
+        attachments.push(sanitizeBackupAttachment(exported))
       }
-      messages.push({
-        ...message,
-        timestamp: new Date(message.timestamp),
-        ...(attachments.length > 0 ? { attachments } : {}),
-      })
+      messages.push(
+        sanitizeBackupMessage({
+          ...message,
+          timestamp: new Date(message.timestamp),
+          ...(attachments.length > 0 ? { attachments } : {}),
+        }),
+      )
     }
-    output.push({
-      ...portableChatFields(chat),
-      createdAt: asDateString(chat.createdAt),
-      messages,
-    })
+    output.push(
+      sanitizeBackupChat({
+        ...chat,
+        createdAt: asDateString(chat.createdAt),
+        messages,
+      }),
+    )
   }
   return { chats: output, imageCount }
 }
@@ -444,8 +579,10 @@ export async function buildNativeBackup(
       })),
   ]
 
-  files[PROJECTS_PATH] = jsonBytes(data.projects)
-  files[DOCUMENTS_PATH] = jsonBytes(data.projectDocuments)
+  files[PROJECTS_PATH] = jsonBytes(z.array(ProjectSchema).parse(data.projects))
+  files[DOCUMENTS_PATH] = jsonBytes(
+    z.array(ProjectDocumentSchema).parse(data.projectDocuments),
+  )
   files[CLOUD_CHATS_PATH] = jsonBytes(cloud.chats)
   files[LOCAL_CHATS_PATH] = jsonBytes(local.chats)
   files[RELATIONSHIPS_PATH] = jsonBytes(relationships)
@@ -845,7 +982,9 @@ function cloudEntity(
   })
 }
 
-function buildCloudImport(validated: ValidatedNativeBackup): File | null {
+async function buildCloudImport(
+  validated: ValidatedNativeBackup,
+): Promise<File | null> {
   const cloudFiles: Record<string, Uint8Array> = {}
   const entities: NativeCloudEntityManifest[] = []
   const blobs: NativeCloudBlobManifest[] = []
@@ -897,37 +1036,50 @@ function buildCloudImport(validated: ValidatedNativeBackup): File | null {
     )
   }
   for (const chat of validated.cloudChats) {
-    const messages = chat.messages.map((message) => ({
-      ...message,
-      ...(message.attachments
-        ? {
-            attachments: message.attachments.map((attachment) => {
-              const sourcePath = attachment.backup_path
-              let archivePath: string | undefined
-              if (sourcePath) {
-                archivePath = blobPathForSource.get(sourcePath)
-                if (!archivePath) {
-                  archivePath = `blobs/${blobs.length}`
-                  const data = validated.files[sourcePath]
-                  cloudFiles[archivePath] = data
-                  blobs.push({
-                    path: archivePath,
-                    sha256: hash(data),
-                    size_bytes: data.byteLength,
-                  })
-                  blobPathForSource.set(sourcePath, archivePath)
+    const sanitizedChat = sanitizeBackupChat(chat)
+    const messages = sanitizedChat.messages.map((message) => {
+      const sanitizedMessage = sanitizeBackupMessage(message)
+      const { attachments, ...portableMessage } = sanitizedMessage
+      return {
+        ...portableMessage,
+        ...(attachments
+          ? {
+              attachments: attachments.map((attachment) => {
+                const sanitizedAttachment = sanitizeBackupAttachment(attachment)
+                const sourcePath = sanitizedAttachment.backup_path
+                let archivePath: string | undefined
+                if (sourcePath) {
+                  archivePath = blobPathForSource.get(sourcePath)
+                  if (!archivePath) {
+                    archivePath = `blobs/${blobs.length}`
+                    const data = validated.files[sourcePath]
+                    cloudFiles[archivePath] = data
+                    blobs.push({
+                      path: archivePath,
+                      sha256: hash(data),
+                      size_bytes: data.byteLength,
+                    })
+                    blobPathForSource.set(sourcePath, archivePath)
+                  }
                 }
-              }
-              const { backup_path: _backupPath, ...portableAttachment } =
-                attachment
-              return {
-                ...portableAttachment,
-                ...(archivePath ? { archivePath } : {}),
-              }
-            }),
-          }
-        : {}),
-    }))
+                const { backup_path: _backupPath, ...portableAttachment } =
+                  sanitizedAttachment
+                return {
+                  ...portableAttachment,
+                  ...(archivePath ? { archivePath } : {}),
+                }
+              }),
+            }
+          : {}),
+      }
+    })
+    const {
+      id: _id,
+      projectId: _projectId,
+      messages: _messages,
+      decryptionFailed: _decryptionFailed,
+      ...portableChat
+    } = sanitizedChat
     cloudEntity(
       cloudFiles,
       entities,
@@ -935,9 +1087,8 @@ function buildCloudImport(validated: ValidatedNativeBackup): File | null {
       chat.id,
       projectForChat.get(chat.id),
       {
-        ...portableCloudChatFields(chat as unknown as Chat),
+        ...portableChat,
         messages,
-        createdAt: chat.createdAt,
         isLocalOnly: false,
       },
     )
@@ -980,11 +1131,11 @@ function buildCloudImport(validated: ValidatedNativeBackup): File | null {
       throw new Error('Cloud restore package exceeds its uncompressed limit')
     }
   }
-  const archiveData = zipSync(cloudFiles)
-  if (archiveData.byteLength > MAX_BACKUP_ARCHIVE_BYTES) {
-    throw new Error('Cloud restore package exceeds the 512 MiB upload limit')
-  }
-  return new File([new Uint8Array(archiveData)], 'tinfoil-cloud-import.zip', {
+  const archive = await createBoundedZip(
+    cloudFiles,
+    'Cloud restore package exceeds the 512 MiB upload limit',
+  )
+  return new File([archive], 'tinfoil-cloud-import.zip', {
     type: 'application/zip',
   })
 }
@@ -998,7 +1149,7 @@ export async function restoreNativeBackup(
   },
 ): Promise<NativeRestoreResult> {
   const validated = await validateNativeBackup(bytes)
-  const cloudArchive = buildCloudImport(validated)
+  const cloudArchive = await buildCloudImport(validated)
   const localRelationship = new Map(
     validated.relationships
       .filter((relationship) => relationship.location === 'local')
