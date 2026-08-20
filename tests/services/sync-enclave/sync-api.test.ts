@@ -203,6 +203,24 @@ describe('sync-api (enclave JSON-RPC)', () => {
     expect(body.idempotency_key).toBe('del-1')
   })
 
+  it('deleteAllProjects posts one atomic request', async () => {
+    const api = await import('@/services/sync-enclave/sync-api')
+    mockFetch.mockResolvedValueOnce(ok({ ok: true, deleted: 12 }))
+
+    await expect(
+      api.deleteAllProjects({
+        keyB64: 'project-key',
+        idempotencyKey: 'delete-projects-1',
+      }),
+    ).resolves.toEqual({ ok: true, deleted: 12 })
+    expect(mockFetch).toHaveBeenCalledOnce()
+    expect(lastRequest()[0]).toBe('/v1/sync/delete-all-projects')
+    expect(lastBody()).toEqual({
+      key: 'project-key',
+      idempotency_key: 'delete-projects-1',
+    })
+  })
+
   it('attachmentPut posts idempotency key', async () => {
     const api = await import('@/services/sync-enclave/sync-api')
     mockFetch.mockResolvedValueOnce(
@@ -437,6 +455,25 @@ describe('sync-api (enclave JSON-RPC)', () => {
     expect(status.errors).toEqual([])
     expect(lastRequest()[0]).toBe('/v1/import/status')
     expect(lastBody()).toEqual({ job_id: 'job-1' })
+  })
+
+  it('uses the native backup import source on the wire', async () => {
+    const api = await import('@/services/sync-enclave/sync-api')
+    mockFetch.mockResolvedValueOnce(ok({ job_id: 'job-2', upload_id: 'up-2' }))
+
+    await api.importCreate({
+      source: 'tinfoil_backup',
+      totalBytes: 10,
+      totalChunks: 1,
+      archiveSha256: 'ef'.repeat(32),
+    })
+
+    expect(lastBody()).toEqual({
+      source: 'tinfoil_backup',
+      total_bytes: 10,
+      total_chunks: 1,
+      archive_sha256: 'ef'.repeat(32),
+    })
   })
 
   it('searchQuery posts /v1/search/query and normalizes null results', async () => {

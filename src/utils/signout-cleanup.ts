@@ -1,7 +1,10 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
+import { ACCOUNT_RESET_FAILED_EVENT } from '@/constants/auth-events'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
+  AUTH_ACCOUNT_RESET_SIGNAL,
   AUTH_ACTIVE_USER_ID,
+  AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP,
   SECRET_PASSKEY_BACKED_UP,
   SETTINGS_HAS_SEEN_ONBOARDING,
   USER_ENCRYPTION_KEY,
@@ -29,10 +32,6 @@ import {
 } from '@/utils/signout-progress'
 
 interface ClearUserDataOptions {
-  /** If set, preserve this user ID in localStorage after clearing */
-  preserveUserId?: string
-  /** If true, keep the encryption key in localStorage (for signout without passkey backup) */
-  preserveEncryptionKey?: boolean
   /**
    * If true, don't surface progress in the signout overlay. Used for
    * user-switch cleanup, which is not a signout.
@@ -40,13 +39,15 @@ interface ClearUserDataOptions {
   skipProgressReporting?: boolean
   /** Logging context label */
   context: string
+  notifyOtherTabs?: boolean
 }
+
+let accountCleanupPromise: Promise<void> | null = null
 
 async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   const {
     context,
-    preserveUserId,
-    preserveEncryptionKey,
+    notifyOtherTabs = true,
     skipProgressReporting = false,
   } = options
 
@@ -66,9 +67,7 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   // Clear encryption key immediately (in-memory + localStorage) before any
   // async work, so concurrent code cannot re-persist a stale key.
   reportStep(SIGNOUT_STEPS.CLEAR_KEY)
-  if (!preserveEncryptionKey) {
-    encryptionService.clearKey({ persist: true })
-  }
+  encryptionService.clearKey({ persist: true })
   completeStep(SIGNOUT_STEPS.CLEAR_KEY)
 
   // Reset renderer registry to clear any cached renderers
@@ -108,8 +107,12 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
     const preservedKeys = new Set([
       AUTH_ACTIVE_USER_ID,
       SETTINGS_HAS_SEEN_ONBOARDING,
-      ...(preserveEncryptionKey ? [USER_ENCRYPTION_KEY] : []),
     ])
+    if (
+      localStorage.getItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP) === 'true'
+    ) {
+      preservedKeys.add(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP)
+    }
     const keys = Array.from({ length: localStorage.length }, (_, index) =>
       localStorage.key(index),
     )
@@ -134,7 +137,7 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   reportStep(SIGNOUT_STEPS.CLEAR_BROWSING_DATA)
   projectCache.invalidate()
   try {
-    await indexedDBStorage.resetForAccountChange()
+    await indexedDBStorage.resetForAccountChange(notifyOtherTabs)
   } catch (error) {
     logError('Failed to clear IndexedDB', error, {
       component: context,
@@ -148,63 +151,58 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
     try {
       const cacheNames = await caches.keys()
       await Promise.all(cacheNames.map((name) => caches.delete(name)))
-    } catch {
-      // best-effort
+    } catch (error) {
+      logError('Failed to clear browser caches', error, {
+        component: context,
+        action: 'clearAllUserData',
+      })
+      throw error
     }
   }
   completeStep(SIGNOUT_STEPS.CLEAR_BROWSING_DATA)
 
-  if (preserveUserId) {
-    localStorage.setItem(AUTH_ACTIVE_USER_ID, preserveUserId)
-  } else {
-    localStorage.removeItem(AUTH_ACTIVE_USER_ID)
-  }
+  localStorage.removeItem(AUTH_ACTIVE_USER_ID)
+  localStorage.removeItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP)
 }
 
-export async function performSignoutCleanup(opts?: {
-  preserveEncryptionKey?: boolean
-}): Promise<void> {
-  const preserveKey = opts?.preserveEncryptionKey ?? false
-  const action = preserveKey
-    ? 'performSignoutCleanup(preserveKey)'
-    : 'performSignoutCleanup'
+function performAccountCleanup(options: ClearUserDataOptions): Promise<void> {
+  if (accountCleanupPromise) return accountCleanupPromise
 
+  const cleanup = clearAllUserData(options)
+  accountCleanupPromise = cleanup
+  void cleanup.then(
+    () => {
+      if (accountCleanupPromise === cleanup) accountCleanupPromise = null
+    },
+    () => {
+      if (accountCleanupPromise === cleanup) accountCleanupPromise = null
+    },
+  )
+  return cleanup
+}
+
+export async function performSignoutCleanup(): Promise<void> {
   try {
-    logInfo(
-      `Starting signout cleanup${preserveKey ? ' (preserving encryption key)' : ''}`,
-      {
-        component: 'signoutCleanup',
-        action,
-      },
-    )
-
-    await clearAllUserData({
-      context: 'signoutCleanup',
-      preserveEncryptionKey: preserveKey,
+    logInfo('Starting signout cleanup', {
+      component: 'signoutCleanup',
+      action: 'performSignoutCleanup',
     })
 
-    logInfo(
-      `Signout cleanup completed${preserveKey ? ' (encryption key preserved)' : ''}`,
-      {
-        component: 'signoutCleanup',
-        action,
-      },
-    )
+    await performAccountCleanup({
+      context: 'signoutCleanup',
+    })
+
+    logInfo('Signout cleanup completed', {
+      component: 'signoutCleanup',
+      action: 'performSignoutCleanup',
+    })
   } catch (error) {
     logError('Error during signout cleanup', error, {
       component: 'signoutCleanup',
-      action,
+      action: 'performSignoutCleanup',
     })
     throw error
   }
-}
-
-/**
- * Delete just the encryption key from localStorage and clear the in-memory copy.
- * Called after the user downloads their key from the signout modal.
- */
-export function deleteEncryptionKey(): void {
-  encryptionService.clearKey({ persist: true })
 }
 
 export async function performUserSwitchCleanup(
@@ -217,9 +215,8 @@ export async function performUserSwitchCleanup(
   })
 
   try {
-    await clearAllUserData({
+    await performAccountCleanup({
       context: 'AuthCleanupHandler',
-      preserveUserId: newUserId,
       skipProgressReporting: true,
     })
   } catch (error) {
@@ -241,8 +238,101 @@ export function hasPasskeyBackup(): boolean {
   return localStorage.getItem(SECRET_PASSKEY_BACKED_UP) === 'true'
 }
 
+export async function shouldWarnAboutLocalOnlyChats(): Promise<boolean> {
+  try {
+    return (await indexedDBStorage.getLocalOnlyChatCount()) > 0
+  } catch (error) {
+    logError('Failed to count local-only chats', error, {
+      component: 'signoutCleanup',
+      action: 'shouldWarnAboutLocalOnlyChats',
+    })
+    return true
+  }
+}
+
+export interface UserInitiatedSignoutWarnings {
+  localOnlyChats: boolean
+  missingPasskeyBackup: boolean
+}
+
+export async function getUserInitiatedSignoutWarnings(
+  encryptionKey: string | null,
+  refreshPasskeyBackup?: (options: {
+    clearOnUnknown: boolean
+  }) => Promise<boolean | null>,
+): Promise<UserInitiatedSignoutWarnings> {
+  const currentEncryptionKey = encryptionKey ?? encryptionService.getKey()
+  const refreshBackup = refreshPasskeyBackup
+    ? refreshPasskeyBackup({ clearOnUnknown: true }).catch((error) => {
+        logError('Failed to verify passkey backup before sign out', error, {
+          component: 'signoutCleanup',
+          action: 'getUserInitiatedSignoutWarnings',
+        })
+        return null
+      })
+    : Promise.resolve(null)
+  const [localOnlyChats, backupVerified] = await Promise.all([
+    shouldWarnAboutLocalOnlyChats(),
+    refreshBackup,
+  ])
+
+  if (backupVerified !== true) {
+    try {
+      localStorage.removeItem(SECRET_PASSKEY_BACKED_UP)
+    } catch {
+      // Best-effort cleanup when browser storage is unavailable.
+    }
+  }
+
+  return {
+    localOnlyChats,
+    missingPasskeyBackup:
+      currentEncryptionKey !== null && backupVerified !== true,
+  }
+}
+
 export async function retryFailedStorageCleanup(): Promise<void> {
-  await indexedDBStorage.resetForAccountChange(/* notifyOtherTabs */ false)
-  deletedChatsTracker.clear()
-  sessionStorage.removeItem(AUTH_ACCOUNT_RESET_FAILED)
+  try {
+    await performAccountCleanup({
+      context: 'crossTabAccountReset',
+      notifyOtherTabs: false,
+      skipProgressReporting: true,
+    })
+    sessionStorage.removeItem(AUTH_ACCOUNT_RESET_FAILED)
+  } catch (error) {
+    sessionStorage.setItem(AUTH_ACCOUNT_RESET_FAILED, 'true')
+    throw error
+  }
+}
+
+export async function performUserInitiatedSignout(
+  signOut: () => Promise<unknown>,
+): Promise<void> {
+  await signOut()
+  completeSignoutStep(SIGNOUT_STEPS.SIGN_OUT)
+  await performSignoutCleanup()
+  reportSignoutStep(SIGNOUT_STEPS.RELOAD)
+  window.location.reload()
+}
+
+export function handleAccountResetStorageEvent(event: StorageEvent): void {
+  if (event.key !== AUTH_ACCOUNT_RESET_SIGNAL || !event.newValue) return
+
+  void retryFailedStorageCleanup()
+    .then(() => window.location.reload())
+    .catch((error) => {
+      logError(
+        'Failed to clear local data after cross-tab account change',
+        error,
+        {
+          component: 'signoutCleanup',
+          action: 'crossTabAccountReset',
+        },
+      )
+      window.dispatchEvent(new CustomEvent(ACCOUNT_RESET_FAILED_EVENT))
+    })
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', handleAccountResetStorageEvent)
 }

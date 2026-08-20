@@ -23,9 +23,21 @@ import { useProjects } from '@/hooks/use-projects'
 import { useSyncHealthAttention } from '@/hooks/use-sync-health'
 import { useToast } from '@/hooks/use-toast'
 import { authTokenManager } from '@/services/auth'
+import { buildClaudeProjectExport } from '@/services/backup/claude-project-export'
+import {
+  ANONYMOUS_BACKUP_RESTORE_USER_ID,
+  createNativeBackup,
+  NATIVE_BACKUP_MAX_ARCHIVE_BYTES,
+  restoreNativeBackup,
+  validateNativeBackup,
+  type BackupWarning,
+} from '@/services/backup/native-backup'
 import { buildChatExport } from '@/services/chat-export/export-archive'
 import { parseLocalTinfoilExport } from '@/services/chat-import/local-tinfoil-import'
-import { runOffDeviceImport } from '@/services/chat-import/off-device-import'
+import {
+  runOffDeviceImport,
+  waitForOffDeviceImport,
+} from '@/services/chat-import/off-device-import'
 import { hasPrimaryKey } from '@/services/cloud/cek-encoding'
 import { validateCurrentPrimaryKey } from '@/services/cloud/cloud-key-preflight'
 import { cloudStorage } from '@/services/cloud/cloud-storage'
@@ -39,6 +51,7 @@ import {
   PrfNotSupportedError,
   type PasskeyCredentialEntry,
 } from '@/services/passkey'
+import { projectEvents } from '@/services/project/project-events'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { projectCache } from '@/services/storage/project-cache'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -60,6 +73,10 @@ import {
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { generateReverseId } from '@/utils/reverse-id'
 import {
+  getUserInitiatedSignoutWarnings,
+  performUserInitiatedSignout,
+} from '@/utils/signout-cleanup'
+import {
   hideSignoutProgress,
   showSignoutProgress,
 } from '@/utils/signout-progress'
@@ -74,6 +91,7 @@ import {
   ChevronDownIcon,
   ComputerDesktopIcon,
   CreditCardIcon,
+  ExclamationTriangleIcon,
   EyeIcon,
   EyeSlashIcon,
   MoonIcon,
@@ -116,6 +134,26 @@ const DASHBOARD_URL = 'https://dash.tinfoil.sh'
 
 const DELETE_ALL_CHATS_CONFIRM_PHRASE = 'delete all chats'
 const DELETE_ALL_PROJECTS_CONFIRM_PHRASE = 'delete all projects'
+
+interface ImportWarning {
+  code: string
+  message: string
+  kind?: string
+  id?: string
+}
+
+function statusWarnings(warnings: string[] = []): ImportWarning[] {
+  return warnings.map((message) => ({ code: 'import_warning', message }))
+}
+
+function backupWarnings(warnings: BackupWarning[]): ImportWarning[] {
+  return warnings.map(({ code, kind, id, message }) => ({
+    code,
+    kind,
+    id,
+    message,
+  }))
+}
 
 const ScrambleText = ({
   text,
@@ -334,7 +372,9 @@ type SettingsModalProps = {
   passkeyAddDeviceAvailable?: boolean
   onSetupPasskey?: () => Promise<boolean>
   onAddPasskeyToThisDevice?: () => Promise<boolean>
-  onRefreshBundleState?: () => Promise<void>
+  onRefreshBundleState?: (options?: {
+    clearOnUnknown?: boolean
+  }) => Promise<boolean | null>
   initialTab?: SettingsTab
   chats?: Chat[]
 }
@@ -380,11 +420,7 @@ export function SettingsModal({
   const { toast } = useToast()
 
   // Projects for export functionality
-  const {
-    projects,
-    loading: projectsLoading,
-    refresh: refreshProjects,
-  } = useProjects({
+  const { refresh: refreshProjects } = useProjects({
     autoLoad: isSignedIn && isPremium,
   })
   // Encryption key management state
@@ -402,7 +438,10 @@ export function SettingsModal({
     'match' | 'mismatch' | 'unverified'
   >('unverified')
   const passkeyRefreshSeqRef = useRef(0)
-  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
+  const [signOutWarnings, setSignOutWarnings] = useState<{
+    localOnlyChats: boolean
+    missingPasskeyBackup: boolean
+  } | null>(null)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -503,7 +542,7 @@ export function SettingsModal({
 
   // Import state
   const [importSource, setImportSource] = useState<
-    'chatgpt' | 'claude' | 'tinfoil' | null
+    'chatgpt' | 'claude' | 'tinfoil' | 'tinfoil_backup' | null
   >(null)
   const [isImporting, setIsImporting] = useState(false)
   const [importProgress, setImportProgress] = useState<{
@@ -515,7 +554,10 @@ export function SettingsModal({
     success: boolean
     chatsImported: number
     projectsImported: number
+    documentsImported?: number
     errors: string[]
+    warnings?: ImportWarning[]
+    partial?: boolean
     pending?: boolean
     message?: string
   } | null>(null)
@@ -523,6 +565,7 @@ export function SettingsModal({
   const claudeConversationsFileInputRef = useRef<HTMLInputElement>(null)
   const claudeProjectsFileInputRef = useRef<HTMLInputElement>(null)
   const tinfoilFileInputRef = useRef<HTMLInputElement>(null)
+  const nativeBackupFileInputRef = useRef<HTMLInputElement>(null)
   const localTinfoilImportAbortControllerRef = useRef<AbortController | null>(
     null,
   )
@@ -530,7 +573,10 @@ export function SettingsModal({
   // Export state
   const [isExporting, setIsExporting] = useState(false)
   const [isPreparingExport, setIsPreparingExport] = useState(false)
-  const [exportType, setExportType] = useState<'chats' | 'projects' | null>(
+  const [exportType, setExportType] = useState<
+    'chats' | 'projects' | 'backup' | null
+  >(null)
+  const [nativeBackupWarning, setNativeBackupWarning] = useState<string | null>(
     null,
   )
 
@@ -1267,7 +1313,7 @@ export function SettingsModal({
     setIsSigningOut(true)
     showSignoutProgress()
     try {
-      await signOut()
+      await performUserInitiatedSignout(signOut)
     } catch (error) {
       logError('Sign out failed', error, {
         component: 'SettingsModal',
@@ -1278,6 +1324,27 @@ export function SettingsModal({
       setIsSigningOut(false)
     }
   }, [signOut])
+
+  const requestSignOut = useCallback(async () => {
+    setIsSigningOut(true)
+    let shouldSignOut = false
+    try {
+      const { localOnlyChats, missingPasskeyBackup } =
+        await getUserInitiatedSignoutWarnings(
+          encryptionKey,
+          onRefreshBundleState,
+        )
+      if (localOnlyChats || missingPasskeyBackup) {
+        setSignOutWarnings({ localOnlyChats, missingPasskeyBackup })
+        return
+      }
+      shouldSignOut = true
+    } finally {
+      setIsSigningOut(false)
+    }
+
+    if (shouldSignOut) await handleSignOut()
+  }, [encryptionKey, handleSignOut, onRefreshBundleState])
 
   // Import handlers
   const generateChatId = (createdAt?: Date) => {
@@ -1353,7 +1420,7 @@ export function SettingsModal({
     Boolean(isSignedIn) && isCloudSyncEnabled() && hasPrimaryKey()
 
   const importOffDevice = async (
-    source: 'chatgpt' | 'claude' | 'tinfoil',
+    source: 'chatgpt' | 'claude' | 'tinfoil' | 'tinfoil_backup',
     file: File,
     sourceLabel: string,
   ) => {
@@ -1361,22 +1428,42 @@ export function SettingsModal({
     setIsImporting(true)
     setImportResult(null)
     try {
-      const { status } = await runOffDeviceImport(source, file)
+      const started = await runOffDeviceImport(source, file)
+      const status = await waitForOffDeviceImport(started.jobId, started.status)
       const errors = status.errors ?? []
+      const warnings = statusWarnings(status.warnings)
       const pending = status.status === 'staging' || status.status === 'running'
+      const partial = status.status !== 'failed' && warnings.length > 0
       setImportResult({
-        success: status.status !== 'failed',
+        success: status.status !== 'failed' && errors.length === 0,
+        partial,
         chatsImported: status.imported,
         projectsImported: 0,
         errors,
+        warnings,
         pending,
         message: pending
           ? `Your ${sourceLabel} export is being imported securely. We'll email you when it's done.`
           : undefined,
       })
       toast({
-        title: 'Import started',
-        description: `Your ${sourceLabel} export is being imported securely. We'll email you when it's done.`,
+        title: pending
+          ? 'Import continues securely'
+          : status.status === 'failed'
+            ? 'Import failed'
+            : partial
+              ? 'Import partially complete'
+              : 'Import complete',
+        description: pending
+          ? `We'll email you when the ${sourceLabel} import is done.`
+          : status.status === 'failed'
+            ? `Could not import the ${sourceLabel} export.`
+            : partial
+              ? `Imported ${status.imported} chats with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}.`
+              : `Imported ${status.imported} chats from ${sourceLabel}.`,
+        ...(status.status === 'failed'
+          ? { variant: 'destructive' as const }
+          : {}),
       })
       if (!pending && onChatsUpdated) {
         onChatsUpdated()
@@ -1924,10 +2011,10 @@ export function SettingsModal({
       }
       toast({
         title: 'All projects deleted',
-        description: result.notificationSent
-          ? 'We will email you a confirmation.'
-          : 'Email confirmation could not be sent.',
+        description: `Deleted ${result.deleted} project${result.deleted === 1 ? '' : 's'}.`,
       })
+
+      projectEvents.emit({ type: 'projects-invalidated' })
 
       await refreshProjects()
 
@@ -1953,90 +2040,16 @@ export function SettingsModal({
     }
   }
 
-  // Export projects as projects.json
-  const downloadProjects = async (
-    projectsToExport: Array<{
-      id: string
-      name: string
-      description: string
-      systemInstructions: string
-      memory: Array<{ fact: string }>
-      createdAt: string
-      updatedAt: string
-    }>,
-  ) => {
-    if (projectsToExport.length === 0) {
-      toast({
-        title: 'No projects to export',
-        description: 'You have no projects to export yet.',
-        variant: 'destructive',
-      })
-      return
-    }
-
+  const downloadProjects = async () => {
     setIsExporting(true)
     setExportType('projects')
 
     try {
-      // Fetch documents for each project and convert to Claude-compatible format
-      const projectsWithDocs = await Promise.all(
-        projectsToExport.map(async (project) => {
-          const docs: Array<{
-            uuid: string
-            filename: string
-            content: string
-            created_at: string
-          }> = []
-
-          // Try to fetch documents for this project
-          try {
-            const docsResponse = await projectStorage.listDocuments(
-              project.id,
-              {
-                includeContent: true,
-              },
-            )
-
-            if (docsResponse.documents && docsResponse.documents.length > 0) {
-              await Promise.all(
-                docsResponse.documents.map(async (doc) => {
-                  try {
-                    const fullDoc = await projectStorage.getDocument(
-                      project.id,
-                      doc.id,
-                    )
-                    if (fullDoc && fullDoc.content) {
-                      docs.push({
-                        uuid: doc.id,
-                        filename: fullDoc.filename,
-                        content: fullDoc.content,
-                        created_at: new Date().toISOString(),
-                      })
-                    }
-                  } catch {
-                    // Skip documents that fail to fetch
-                  }
-                }),
-              )
-            }
-          } catch {
-            // Skip documents if we can't fetch them
-          }
-
-          return {
-            uuid: project.id,
-            name: project.name,
-            description: project.description || undefined,
-            prompt_template: project.systemInstructions || undefined,
-            created_at: new Date(project.createdAt).toISOString(),
-            updated_at: new Date(project.updatedAt).toISOString(),
-            docs: docs.length > 0 ? docs : undefined,
-          }
-        }),
-      )
-
-      // Create and download JSON file
-      const jsonContent = JSON.stringify(projectsWithDocs, null, 2)
+      const result = await buildClaudeProjectExport()
+      if (result.projects.length === 0) {
+        throw new Error('No readable projects are available to export')
+      }
+      const jsonContent = JSON.stringify(result.projects, null, 2)
       const blob = new Blob([jsonContent], { type: 'application/json' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -2049,7 +2062,10 @@ export function SettingsModal({
 
       toast({
         title: 'Export complete',
-        description: `Exported ${projectsToExport.length} project${projectsToExport.length !== 1 ? 's' : ''} successfully.`,
+        description:
+          result.skippedProjects + result.skippedDocuments > 0
+            ? `Exported ${result.projects.length} projects. Skipped ${result.skippedProjects} unreadable projects and ${result.skippedDocuments} unreadable documents.`
+            : `Exported ${result.projects.length} project${result.projects.length === 1 ? '' : 's'} for Claude.`,
       })
     } catch (error) {
       logError('Failed to create projects export', error, {
@@ -2064,6 +2080,221 @@ export function SettingsModal({
     } finally {
       setIsExporting(false)
       setExportType(null)
+    }
+  }
+
+  const handleExportNativeBackup = async () => {
+    setIsExporting(true)
+    setExportType('backup')
+    try {
+      const archive = await createNativeBackup({
+        cloudDataExpected: Boolean(isSignedIn),
+      })
+      const blob = new Blob([new Uint8Array(archive.data)], {
+        type: 'application/zip',
+      })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = archive.filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+      toast({
+        title: archive.manifest.complete
+          ? 'Backup complete'
+          : 'Incomplete backup downloaded',
+        description: archive.manifest.complete
+          ? 'Your Tinfoil backup is ready.'
+          : `${archive.manifest.warnings.length} item warning${archive.manifest.warnings.length === 1 ? '' : 's'} require attention. Keep this warning with the backup.`,
+        ...(archive.manifest.complete
+          ? {}
+          : { variant: 'destructive' as const }),
+      })
+      setNativeBackupWarning(
+        archive.manifest.complete
+          ? null
+          : `The downloaded backup is incomplete. ${archive.manifest.warnings.length} structured warning${archive.manifest.warnings.length === 1 ? ' is' : 's are'} recorded in its manifest.`,
+      )
+    } catch (error) {
+      logError('Failed to create native backup', error, {
+        component: 'SettingsModal',
+        action: 'handleExportNativeBackup',
+      })
+      toast({
+        title: 'Backup failed',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Could not create the Tinfoil backup.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsExporting(false)
+      setExportType(null)
+    }
+  }
+
+  const handleRestoreNativeBackup = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportSource('tinfoil_backup')
+    setIsImporting(true)
+    setImportResult(null)
+    let restoredLocal: {
+      imported: number
+      skipped: number
+      conflicts: number
+    } | null = null
+    try {
+      if (file.size > NATIVE_BACKUP_MAX_ARCHIVE_BYTES) {
+        throw new Error('The selected backup archive is too large')
+      }
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      const validated = await validateNativeBackup(bytes)
+      if (!validated.manifest.complete) {
+        setNativeBackupWarning(
+          `This backup is marked incomplete and contains ${validated.manifest.warnings.length} warning${validated.manifest.warnings.length === 1 ? '' : 's'}. Restore will continue with the available data.`,
+        )
+      }
+      const hasCloudEntities =
+        validated.manifest.counts.projects +
+          validated.manifest.counts.project_documents +
+          validated.manifest.counts.cloud_chats +
+          validated.relationships.filter(
+            (relationship) => relationship.location === 'cloud',
+          ).length >
+        0
+      if (
+        !isPremium &&
+        validated.manifest.counts.projects +
+          validated.manifest.counts.project_documents >
+          0
+      ) {
+        throw new Error('Premium is required to restore projects')
+      }
+      if (hasCloudEntities && !shouldImportOffDevice()) {
+        throw new Error(
+          'Sign in, unlock your encryption key, and enable cloud sync to restore cloud data',
+        )
+      }
+      const result = await restoreNativeBackup(
+        bytes,
+        user?.id ?? ANONYMOUS_BACKUP_RESTORE_USER_ID,
+      )
+      restoredLocal = result.cloudArchive ? null : result.local
+      let cloudChatsImported = 0
+      let cloudProjectsImported = 0
+      let cloudDocumentsImported = 0
+      let cloudErrors: string[] = []
+      let cloudWarnings: ImportWarning[] = []
+      let cloudPending = false
+      if (result.cloudArchive) {
+        try {
+          const cloudResult = await runOffDeviceImport(
+            'tinfoil_backup',
+            result.cloudArchive,
+          )
+          const cloudStatus = await waitForOffDeviceImport(
+            cloudResult.jobId,
+            cloudResult.status,
+          )
+          cloudChatsImported = cloudStatus.counts?.chat?.imported ?? 0
+          cloudProjectsImported = cloudStatus.counts?.project?.imported ?? 0
+          cloudDocumentsImported = cloudStatus.counts?.document?.imported ?? 0
+          cloudErrors = cloudStatus.errors ?? []
+          cloudWarnings = statusWarnings(cloudStatus.warnings)
+          cloudPending =
+            cloudStatus.status === 'staging' || cloudStatus.status === 'running'
+          if (cloudStatus.status === 'completed') {
+            restoredLocal = await result.finalizeLocal(
+              cloudStatus.project_mappings ?? {},
+            )
+            const detachedLocalChats = result.warnings.filter(
+              (warning) => warning.code === 'local_chat_project_not_restored',
+            ).length
+            if (detachedLocalChats > 0) {
+              setNativeBackupWarning(
+                `${detachedLocalChats} local chat${detachedLocalChats === 1 ? ' was' : 's were'} restored without a project because the project could not be restored.`,
+              )
+            }
+          } else if (cloudStatus.status === 'failed') {
+            restoredLocal = await result.finalizeLocal({})
+            if (cloudErrors.length === 0) {
+              cloudErrors = ['Cloud restore failed.']
+            }
+          }
+        } catch (error) {
+          throw error
+        }
+      }
+      const errors = [
+        ...cloudErrors,
+        ...(result.local.conflicts > 0
+          ? [
+              `${result.local.conflicts} local chat ID conflicts were not overwritten.`,
+            ]
+          : []),
+      ]
+      const warnings = [...backupWarnings(result.warnings), ...cloudWarnings]
+      const partial = warnings.length > 0
+      if (partial) {
+        setNativeBackupWarning(
+          `Restore completed with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}. Review the attachment and item details below.`,
+        )
+      }
+      setImportResult({
+        success: errors.length === 0,
+        partial,
+        chatsImported: result.local.imported + cloudChatsImported,
+        projectsImported: cloudProjectsImported,
+        documentsImported: cloudDocumentsImported,
+        errors,
+        warnings,
+        pending: cloudPending,
+        message: cloudPending
+          ? `Local chats are waiting for cloud project mappings and have not been restored yet. The cloud restore continues securely, and we'll email you when it's done. Re-import this backup later to finish restoring them.`
+          : `Local chats: ${result.local.imported} imported, ${result.local.skipped} already restored. Cloud package: ${result.cloudCounts.cloud_chats} chats, ${result.cloudCounts.projects} projects, ${result.cloudCounts.project_documents} documents, ${result.cloudCounts.relationships} relationships, ${result.cloudCounts.images} images.`,
+      })
+      onChatsUpdated?.()
+      await refreshProjects()
+      toast({
+        title: cloudPending
+          ? 'Restore continues securely'
+          : errors.length > 0 || partial
+            ? 'Restore partially complete'
+            : 'Restore complete',
+        description: cloudPending
+          ? "Local chats are still pending. We'll email you when the cloud restore is done."
+          : errors.length > 0
+            ? errors[0]
+            : partial
+              ? `${warnings.length} warning${warnings.length === 1 ? '' : 's'} require attention.`
+              : `${result.local.imported} local chat${result.local.imported === 1 ? '' : 's'} restored.`,
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Could not restore backup'
+      setImportResult({
+        success: false,
+        chatsImported: restoredLocal?.imported ?? 0,
+        projectsImported: 0,
+        errors: [message],
+        message: restoredLocal
+          ? `Local chats: ${restoredLocal.imported} imported, ${restoredLocal.skipped} already restored. Cloud restore did not complete.`
+          : undefined,
+      })
+      toast({
+        title: restoredLocal ? 'Restore partially complete' : 'Restore failed',
+        description: message,
+        variant: 'destructive',
+      })
+    } finally {
+      setIsImporting(false)
+      e.target.value = ''
     }
   }
 
@@ -2088,7 +2319,7 @@ export function SettingsModal({
   useEffect(() => {
     if (!isOpen) {
       setIsQRCodeExpanded(false)
-      setShowSignOutConfirm(false)
+      setSignOutWarnings(null)
       setShowDeleteAllChatsConfirm(false)
       setDeleteAllChatsConfirmText('')
       setShowDeleteAllProjectsConfirm(false)
@@ -3761,8 +3992,7 @@ ${encryptionKey.replace('key_', '')}
                           )}
 
                         {/* Add Passkey on This Device Prompt */}
-                        {!passkeyActive &&
-                          passkeyAddDeviceAvailable &&
+                        {passkeyAddDeviceAvailable &&
                           onAddPasskeyToThisDevice && (
                             <button
                               onClick={async () => {
@@ -3904,13 +4134,17 @@ ${encryptionKey.replace('key_', '')}
                       <div
                         className={cn(
                           'rounded-lg border p-4',
-                          importResult.success
-                            ? 'border-brand-accent-dark/30 bg-brand-accent-dark/10 dark:border-brand-accent-light/30 dark:bg-brand-accent-light/10'
-                            : 'border-red-500/30 bg-red-500/10',
+                          importResult.partial
+                            ? 'border-amber-500/30 bg-amber-500/10'
+                            : importResult.success
+                              ? 'border-brand-accent-dark/30 bg-brand-accent-dark/10 dark:border-brand-accent-light/30 dark:bg-brand-accent-light/10'
+                              : 'border-red-500/30 bg-red-500/10',
                         )}
                       >
                         <div className="flex items-start gap-3">
-                          {importResult.success ? (
+                          {importResult.partial ? (
+                            <ExclamationTriangleIcon className="h-5 w-5 text-amber-500" />
+                          ) : importResult.success ? (
                             <CheckCircleIcon className="h-5 w-5 text-brand-accent-dark dark:text-brand-accent-light" />
                           ) : (
                             <XMarkIcon className="h-5 w-5 text-red-500" />
@@ -3919,16 +4153,20 @@ ${encryptionKey.replace('key_', '')}
                             <div
                               className={cn(
                                 'font-aeonik text-sm font-medium',
-                                importResult.success
-                                  ? 'text-brand-accent-dark dark:text-brand-accent-light'
-                                  : 'text-red-500',
+                                importResult.partial
+                                  ? 'text-amber-500'
+                                  : importResult.success
+                                    ? 'text-brand-accent-dark dark:text-brand-accent-light'
+                                    : 'text-red-500',
                               )}
                             >
                               {importResult.pending
                                 ? 'Import in progress'
-                                : importResult.success
-                                  ? 'Import complete'
-                                  : 'Import completed with errors'}
+                                : importResult.partial
+                                  ? 'Import partially complete'
+                                  : importResult.success
+                                    ? 'Import complete'
+                                    : 'Import completed with errors'}
                             </div>
                             {importResult.message && (
                               <div className="font-aeonik-fono text-xs text-content-muted">
@@ -3936,13 +4174,19 @@ ${encryptionKey.replace('key_', '')}
                               </div>
                             )}
                             <div className="font-aeonik-fono text-xs text-content-muted">
-                              {importResult.chatsImported > 0 &&
-                                `${importResult.chatsImported} chat${importResult.chatsImported !== 1 ? 's' : ''} imported`}
-                              {importResult.chatsImported > 0 &&
-                                importResult.projectsImported > 0 &&
-                                ', '}
-                              {importResult.projectsImported > 0 &&
-                                `${importResult.projectsImported} project${importResult.projectsImported !== 1 ? 's' : ''} imported`}
+                              {[
+                                importResult.chatsImported > 0
+                                  ? `${importResult.chatsImported} chat${importResult.chatsImported !== 1 ? 's' : ''} imported`
+                                  : null,
+                                importResult.projectsImported > 0
+                                  ? `${importResult.projectsImported} project${importResult.projectsImported !== 1 ? 's' : ''} imported`
+                                  : null,
+                                (importResult.documentsImported ?? 0) > 0
+                                  ? `${importResult.documentsImported} document${importResult.documentsImported !== 1 ? 's' : ''} imported`
+                                  : null,
+                              ]
+                                .filter(Boolean)
+                                .join(', ')}
                             </div>
                             {importResult.errors.length > 0 && (
                               <div className="mt-2 text-xs text-red-400">
@@ -3955,6 +4199,34 @@ ${encryptionKey.replace('key_', '')}
                                   <div>
                                     +{importResult.errors.length - 3} more
                                     errors
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {(importResult.warnings?.length ?? 0) > 0 && (
+                              <div className="mt-2 text-xs text-amber-500">
+                                <div>
+                                  {importResult.warnings!.length} warning
+                                  {importResult.warnings!.length === 1
+                                    ? ''
+                                    : 's'}
+                                </div>
+                                {importResult
+                                  .warnings!.slice(0, 3)
+                                  .map((warning, i) => (
+                                    <div
+                                      key={`${warning.code}-${warning.id ?? i}`}
+                                    >
+                                      {warning.code}
+                                      {warning.id
+                                        ? ` (${warning.id})`
+                                        : ''}: {warning.message}
+                                    </div>
+                                  ))}
+                                {importResult.warnings!.length > 3 && (
+                                  <div>
+                                    +{importResult.warnings!.length - 3} more
+                                    warnings
                                   </div>
                                 )}
                               </div>
@@ -4269,10 +4541,83 @@ ${encryptionKey.replace('key_', '')}
                     </div>
                   </div>
 
+                  <div className="space-y-3">
+                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                      Tinfoil Backup and Restore
+                    </h3>
+                    <div
+                      className={cn(
+                        'space-y-3 rounded-lg border border-border-subtle p-4',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
+                    >
+                      <div className="font-aeonik-fono text-xs text-content-muted">
+                        Create one plaintext ZIP with projects, extracted
+                        document text, cloud and local-only chats,
+                        relationships, and images. Store it securely.
+                      </div>
+                      {nativeBackupWarning && (
+                        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 font-aeonik-fono text-xs text-destructive">
+                          {nativeBackupWarning}
+                        </div>
+                      )}
+                      <input
+                        ref={nativeBackupFileInputRef}
+                        type="file"
+                        accept=".zip"
+                        onChange={handleRestoreNativeBackup}
+                        className="hidden"
+                        disabled={isImporting}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => void handleExportNativeBackup()}
+                          disabled={isExporting || isImporting}
+                          className={cn(
+                            'flex flex-1 items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
+                            isExporting || isImporting
+                              ? 'cursor-not-allowed opacity-50'
+                              : 'hover:bg-surface-chat',
+                            isDarkMode
+                              ? 'bg-surface-chat text-content-primary'
+                              : 'bg-surface-sidebar text-content-primary',
+                          )}
+                        >
+                          {isExporting && exportType === 'backup' ? (
+                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <ArrowDownTrayIcon className="h-4 w-4" />
+                          )}
+                          {isExporting && exportType === 'backup'
+                            ? 'Backing up...'
+                            : 'Create backup'}
+                        </button>
+                        <button
+                          onClick={() =>
+                            nativeBackupFileInputRef.current?.click()
+                          }
+                          disabled={isImporting || isExporting}
+                          className={cn(
+                            'flex flex-1 items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
+                            isImporting || isExporting
+                              ? 'cursor-not-allowed opacity-50'
+                              : 'hover:bg-surface-chat',
+                            isDarkMode
+                              ? 'bg-surface-chat text-content-primary'
+                              : 'bg-surface-sidebar text-content-primary',
+                          )}
+                        >
+                          <ArrowUpTrayIcon className="h-4 w-4" />
+                          Restore backup
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Tinfoil Import */}
                   <div className="space-y-3">
                     <h3 className="font-aeonik text-sm font-medium text-content-secondary">
-                      Import from Tinfoil
+                      Import Legacy Tinfoil Chat Export
                     </h3>
                     <div
                       className={cn(
@@ -4306,7 +4651,7 @@ ${encryptionKey.replace('key_', '')}
                         )}
                       >
                         <ArrowUpTrayIcon className="h-4 w-4" />
-                        Select Tinfoil Export
+                        Select Legacy Chat Export
                       </button>
                     </div>
                   </div>
@@ -4358,7 +4703,7 @@ ${encryptionKey.replace('key_', '')}
                   {isPremium && (
                     <div className="space-y-3">
                       <h3 className="font-aeonik text-sm font-medium text-content-secondary">
-                        Export Projects
+                        Export Projects for Claude
                       </h3>
                       <div
                         className={cn(
@@ -4367,21 +4712,15 @@ ${encryptionKey.replace('key_', '')}
                         )}
                       >
                         <div className="font-aeonik-fono text-xs text-content-muted">
-                          Download all your projects including their settings,
-                          system instructions, memory, and documents.
+                          Create a lossy Claude-compatible projects.json file.
+                          Unreadable projects and documents are reported.
                         </div>
                         <button
-                          onClick={() => downloadProjects(projects)}
-                          disabled={
-                            isExporting ||
-                            projects.length === 0 ||
-                            projectsLoading
-                          }
+                          onClick={() => void downloadProjects()}
+                          disabled={isExporting}
                           className={cn(
                             'flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
-                            isExporting ||
-                              projects.length === 0 ||
-                              projectsLoading
+                            isExporting
                               ? 'cursor-not-allowed opacity-50'
                               : 'hover:bg-surface-chat',
                             isDarkMode
@@ -4391,16 +4730,12 @@ ${encryptionKey.replace('key_', '')}
                         >
                           {isExporting && exportType === 'projects' ? (
                             <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                          ) : projectsLoading ? (
-                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
                           ) : (
                             <AiOutlineExport className="h-4 w-4" />
                           )}
                           {isExporting && exportType === 'projects'
                             ? 'Exporting...'
-                            : projectsLoading
-                              ? 'Loading projects...'
-                              : 'Export Projects'}
+                            : 'Export Projects for Claude'}
                         </button>
                       </div>
                     </div>
@@ -4437,11 +4772,7 @@ ${encryptionKey.replace('key_', '')}
                           </div>
                           <button
                             onClick={() => {
-                              if (isLocalOnlyModeEnabled()) {
-                                setShowSignOutConfirm(true)
-                              } else {
-                                void handleSignOut()
-                              }
+                              void requestSignOut()
                             }}
                             disabled={isSigningOut}
                             className={cn(
@@ -4624,8 +4955,7 @@ ${encryptionKey.replace('key_', '')}
         </div>
       </motion.div>
 
-      {/* Sign-out confirmation when local-only mode is enabled */}
-      {showSignOutConfirm && (
+      {signOutWarnings && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
           <div className="mx-4 w-full max-w-sm rounded-site-lg border border-border-subtle bg-surface-card p-6 shadow-xl">
             <h3 className="font-aeonik text-lg font-medium text-content-primary">
@@ -4633,17 +4963,23 @@ ${encryptionKey.replace('key_', '')}
             </h3>
             <div className="mt-3 space-y-2 text-sm text-content-secondary">
               <p>
-                {passkeyActive
-                  ? 'All local data will be cleared. You can recover your cloud chats by signing back in.'
-                  : 'All local data will be cleared. You will need your encryption key to recover your cloud chats.'}
+                All local data, including your encryption key, will be cleared.
               </p>
-              <p className="font-medium text-orange-500">
-                Your local chats will be deleted forever.
-              </p>
+              {signOutWarnings.missingPasskeyBackup && (
+                <p className="font-medium text-orange-500">
+                  No verified passkey backup exists. You will need your manually
+                  backed-up encryption key to regain access to cloud data.
+                </p>
+              )}
+              {signOutWarnings.localOnlyChats && (
+                <p className="font-medium text-orange-500">
+                  Your local chats will be deleted forever.
+                </p>
+              )}
             </div>
             <div className="mt-5 flex gap-3">
               <button
-                onClick={() => setShowSignOutConfirm(false)}
+                onClick={() => setSignOutWarnings(null)}
                 className={cn(
                   'flex-1 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors',
                   isDarkMode
@@ -4655,7 +4991,7 @@ ${encryptionKey.replace('key_', '')}
               </button>
               <button
                 onClick={() => {
-                  setShowSignOutConfirm(false)
+                  setSignOutWarnings(null)
                   void handleSignOut()
                 }}
                 disabled={isSigningOut}
