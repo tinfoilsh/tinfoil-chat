@@ -44,31 +44,34 @@ export function AuthCleanupHandler() {
     isSignedIn,
     userId: user?.id,
   })
-  const previousAuthState = previousAuthStateRef.current
-  if (
-    previousAuthState.isLoaded !== isLoaded ||
-    previousAuthState.isSignedIn !== isSignedIn ||
-    previousAuthState.userId !== user?.id
-  ) {
-    authGenerationRef.current += 1
-    previousAuthStateRef.current = {
-      isLoaded,
-      isSignedIn,
-      userId: user?.id,
-    }
-  }
   const latestAuthStateRef = useRef({
     isLoaded,
     isSignedIn,
     userId: user?.id,
     authGeneration: authGenerationRef.current,
   })
-  latestAuthStateRef.current = {
-    isLoaded,
-    isSignedIn,
-    userId: user?.id,
-    authGeneration: authGenerationRef.current,
-  }
+
+  useEffect(() => {
+    const previousAuthState = previousAuthStateRef.current
+    if (
+      previousAuthState.isLoaded !== isLoaded ||
+      previousAuthState.isSignedIn !== isSignedIn ||
+      previousAuthState.userId !== user?.id
+    ) {
+      authGenerationRef.current += 1
+      previousAuthStateRef.current = {
+        isLoaded,
+        isSignedIn,
+        userId: user?.id,
+      }
+    }
+    latestAuthStateRef.current = {
+      isLoaded,
+      isSignedIn,
+      userId: user?.id,
+      authGeneration: authGenerationRef.current,
+    }
+  }, [isLoaded, isSignedIn, user?.id])
 
   useEffect(() => {
     try {
