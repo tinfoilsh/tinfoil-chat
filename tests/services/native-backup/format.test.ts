@@ -129,6 +129,57 @@ describe('native backup v1 manifest', () => {
     )
   })
 
+  it('uses runtime-independent string ordering', () => {
+    const localeCompare = vi
+      .spyOn(String.prototype, 'localeCompare')
+      .mockImplementation(() => {
+        throw new Error('locale-dependent comparison used')
+      })
+
+    try {
+      expect(() => formatNativeBackupV1(input())).not.toThrow()
+    } finally {
+      localeCompare.mockRestore()
+    }
+  })
+
+  it('supports the same document id in different projects', () => {
+    const value = input()
+    value.projects.push({ ...value.projects[0], id: 'p2' })
+    value.projectDocuments.push({
+      ...value.projectDocuments[0],
+      projectId: 'p2',
+    })
+    value.relationships.projectDocuments.push({
+      projectId: 'p2',
+      documentId: 'd',
+    })
+
+    const formatted = formatNativeBackupV1(value)
+
+    expect(
+      formatted.files.filter(({ path }) =>
+        path.startsWith('project_documents/'),
+      ),
+    ).toHaveLength(2)
+  })
+
+  it('counts legacy attachments when portable attachments are absent', () => {
+    const value = input()
+    value.cloudChats[0].messages[0].attachments = []
+    value.cloudChats[0].messages[0].imageData = []
+    value.cloudChats[0].messages[0].documents = Array.from(
+      { length: NATIVE_BACKUP_LIMITS.attachments + 1 },
+      (_, index) => ({ name: `document-${index}` }),
+    )
+    value.images = []
+    value.relationships.chatImages = []
+
+    expect(() => formatNativeBackupV1(value)).toThrow(
+      'attachment limit exceeded',
+    )
+  })
+
   it('distinguishes relationship IDs containing delimiters', () => {
     const malformed = input()
     malformed.projects = [

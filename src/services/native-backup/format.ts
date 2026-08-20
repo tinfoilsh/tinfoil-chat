@@ -157,12 +157,14 @@ export function assertNativeBackupSizeLimits(
 function sortedUnique<T extends { id: string }>(
   items: readonly T[],
   name: string,
+  key: (item: T) => string = (item) => idComponent(item.id),
 ) {
   const sorted = [...items].sort((a, b) =>
-    idComponent(a.id).localeCompare(idComponent(b.id)),
+    key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0,
   )
   for (let index = 1; index < sorted.length; index++)
-    if (sorted[index - 1].id === sorted[index].id) fail(`duplicate ${name} id`)
+    if (key(sorted[index - 1]) === key(sorted[index]))
+      fail(`duplicate ${name} id`)
   return sorted
 }
 
@@ -184,7 +186,7 @@ function sortedRelationships(
   const byKey =
     <T>(key: (value: T) => string) =>
     (left: T, right: T) =>
-      key(left).localeCompare(key(right))
+      key(left) < key(right) ? -1 : key(left) > key(right) ? 1 : 0
   return {
     projectChats: [...relationships.projectChats].sort(
       byKey(({ projectId, chatId }) => relationKey(projectId, chatId)),
@@ -213,6 +215,7 @@ export function formatNativeBackupV1(input: NativeBackupFormatInput): {
       NativeBackupProjectDocumentSchema.parse(value),
     ),
     'project document',
+    ({ projectId, id }) => `${idComponent(projectId)}/${idComponent(id)}`,
   )
   const cloudChats = sortedUnique(
     input.cloudChats.map((value) => NativeBackupChatSchema.parse(value)),
@@ -318,7 +321,9 @@ function assertSemanticContent(
 ) {
   const projectIds = new Set(projects.map(({ id }) => id))
   const chatIds = new Set(chats.map(({ id }) => id))
-  const documentIds = new Set(documents.map(({ id }) => id))
+  const documentIds = new Set(
+    documents.map(({ projectId, id }) => relationKey(projectId, id)),
+  )
   const imageIds = new Set(images.map(({ id }) => id))
   if (projectIds.size !== projects.length || chatIds.size !== chats.length)
     fail('duplicate entity id')
@@ -340,7 +345,10 @@ function assertSemanticContent(
   )
   exactRelations(
     relationships.projectDocuments.map(({ projectId, documentId }) => {
-      if (!projectIds.has(projectId) || !documentIds.has(documentId))
+      if (
+        !projectIds.has(projectId) ||
+        !documentIds.has(relationKey(projectId, documentId))
+      )
         fail('project document relationship references unknown entity')
       return relationKey(projectId, documentId)
     }),
@@ -392,7 +400,9 @@ function assertSemanticContent(
           fail('image descriptor does not match its message reference')
         referencedImages.add(imageId)
       }
-      attachments += message.attachments?.length ?? 0
+      attachments += message.attachments?.length
+        ? message.attachments.length
+        : (message.imageData?.length ?? 0) + (message.documents?.length ?? 0)
       for (const attachment of message.attachments ?? []) {
         if (attachment.type === 'image')
           referenceImage(attachment.imageId, { attachmentId: attachment.id })
