@@ -103,6 +103,7 @@ import { normalizeChatFont, type ChatFont } from './hooks/use-chat-font'
 import { usePromptLibrary } from './hooks/use-prompt-library'
 import { MfaSettingsCard } from './mfa-settings-card'
 import { NativeBackupExport } from './native-backup-export'
+import { NativeBackupRestore } from './native-backup-restore'
 import {
   EMPTY_PRESET_EDITOR_STATE,
   PresetEditor,
@@ -114,6 +115,8 @@ import type { Attachment, Chat } from './types'
 const CHARS = '0123456789ABCDEF!@#$%^&*()_+<>?/'
 
 const DASHBOARD_URL = 'https://dash.tinfoil.sh'
+const NATIVE_RESTORE_ENABLED =
+  process.env.NEXT_PUBLIC_NATIVE_BACKUP_RESTORE_ENABLED === 'true'
 
 const DELETE_ALL_CHATS_CONFIRM_PHRASE = 'delete all chats'
 const DELETE_ALL_PROJECTS_CONFIRM_PHRASE = 'delete all projects'
@@ -3419,6 +3422,13 @@ ${encryptionKey.replace('key_', '')}
                         process.env.NEXT_PUBLIC_NATIVE_BACKUP_EXPORT_ENABLED ===
                           'true',
                       )}
+                    />
+                    <NativeBackupRestore
+                      available={Boolean(
+                        isSignedIn && encryptionKey && NATIVE_RESTORE_ENABLED,
+                      )}
+                      ownerId={user?.id}
+                      onChatsUpdated={onChatsUpdated}
                     />
                   </div>
 
