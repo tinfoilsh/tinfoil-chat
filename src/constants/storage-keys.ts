@@ -11,8 +11,6 @@ export const LEGACY_ENCRYPTION_KEY = 'tinfoil-encryption-key'
 export const LEGACY_ENCRYPTION_KEY_HISTORY = 'tinfoil-encryption-key-history'
 export const SECRET_PASSKEY_PRF_OUTPUT = 'tinfoil-secret-passkey-prf-output'
 export const SECRET_PASSKEY_BACKED_UP = 'tinfoil-secret-passkey-backed-up'
-export const PENDING_ENCRYPTION_KEY_RECOVERY =
-  'tinfoil-pending-encryption-key-recovery'
 // Per-device record of the WebAuthn credential id the user most recently
 // authenticated or registered on this browser/installation. Used by the
 // passkey hook to distinguish "this device has its own bundle" from

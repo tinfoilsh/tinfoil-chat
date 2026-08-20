@@ -4,7 +4,6 @@ import { UserAvatar } from '@/components/user-avatar'
 import { API_BASE_URL } from '@/config'
 import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
 import {
-  SECRET_PASSKEY_BACKED_UP,
   SETTINGS_CHAT_FONT,
   SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED,
   SETTINGS_GENUI_ENABLED,
@@ -73,7 +72,7 @@ import {
 } from '@/utils/cloud-sync-settings'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { generateReverseId } from '@/utils/reverse-id'
-import { shouldWarnAboutLocalOnlyChats } from '@/utils/signout-cleanup'
+import { getUserInitiatedSignoutWarnings } from '@/utils/signout-cleanup'
 import {
   hideSignoutProgress,
   showSignoutProgress,
@@ -436,7 +435,10 @@ export function SettingsModal({
     'match' | 'mismatch' | 'unverified'
   >('unverified')
   const passkeyRefreshSeqRef = useRef(0)
-  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
+  const [signOutWarnings, setSignOutWarnings] = useState<{
+    localOnlyChats: boolean
+    missingPasskeyBackup: boolean
+  } | null>(null)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -1308,12 +1310,6 @@ export function SettingsModal({
     setIsSigningOut(true)
     showSignoutProgress()
     try {
-      const backupVerified = await onRefreshBundleState?.({
-        clearOnUnknown: true,
-      })
-      if (backupVerified !== true) {
-        localStorage.removeItem(SECRET_PASSKEY_BACKED_UP)
-      }
       await signOut()
     } catch (error) {
       logError('Sign out failed', error, {
@@ -1324,21 +1320,28 @@ export function SettingsModal({
     } finally {
       setIsSigningOut(false)
     }
-  }, [onRefreshBundleState, signOut])
+  }, [signOut])
 
   const requestSignOut = useCallback(async () => {
     setIsSigningOut(true)
+    let shouldSignOut = false
     try {
-      if (await shouldWarnAboutLocalOnlyChats()) {
-        setShowSignOutConfirm(true)
+      const { localOnlyChats, missingPasskeyBackup } =
+        await getUserInitiatedSignoutWarnings(
+          encryptionKey,
+          onRefreshBundleState,
+        )
+      if (localOnlyChats || missingPasskeyBackup) {
+        setSignOutWarnings({ localOnlyChats, missingPasskeyBackup })
         return
       }
+      shouldSignOut = true
     } finally {
       setIsSigningOut(false)
     }
 
-    await handleSignOut()
-  }, [handleSignOut])
+    if (shouldSignOut) await handleSignOut()
+  }, [encryptionKey, handleSignOut, onRefreshBundleState])
 
   // Import handlers
   const generateChatId = (createdAt?: Date) => {
@@ -2313,7 +2316,7 @@ export function SettingsModal({
   useEffect(() => {
     if (!isOpen) {
       setIsQRCodeExpanded(false)
-      setShowSignOutConfirm(false)
+      setSignOutWarnings(null)
       setShowDeleteAllChatsConfirm(false)
       setDeleteAllChatsConfirmText('')
       setShowDeleteAllProjectsConfirm(false)
@@ -4949,8 +4952,7 @@ ${encryptionKey.replace('key_', '')}
         </div>
       </motion.div>
 
-      {/* Sign-out confirmation when local-only mode is enabled */}
-      {showSignOutConfirm && (
+      {signOutWarnings && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
           <div className="mx-4 w-full max-w-sm rounded-site-lg border border-border-subtle bg-surface-card p-6 shadow-xl">
             <h3 className="font-aeonik text-lg font-medium text-content-primary">
@@ -4958,17 +4960,23 @@ ${encryptionKey.replace('key_', '')}
             </h3>
             <div className="mt-3 space-y-2 text-sm text-content-secondary">
               <p>
-                {passkeyActive
-                  ? 'All local data will be cleared. You can recover your cloud chats by signing back in.'
-                  : 'All local data will be cleared. You will need your encryption key to recover your cloud chats.'}
+                All local data, including your encryption key, will be cleared.
               </p>
-              <p className="font-medium text-orange-500">
-                Your local chats will be deleted forever.
-              </p>
+              {signOutWarnings.missingPasskeyBackup && (
+                <p className="font-medium text-orange-500">
+                  No verified passkey backup exists. You will need your manually
+                  backed-up encryption key to regain access to cloud data.
+                </p>
+              )}
+              {signOutWarnings.localOnlyChats && (
+                <p className="font-medium text-orange-500">
+                  Your local chats will be deleted forever.
+                </p>
+              )}
             </div>
             <div className="mt-5 flex gap-3">
               <button
-                onClick={() => setShowSignOutConfirm(false)}
+                onClick={() => setSignOutWarnings(null)}
                 className={cn(
                   'flex-1 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors',
                   isDarkMode
@@ -4980,7 +4988,7 @@ ${encryptionKey.replace('key_', '')}
               </button>
               <button
                 onClick={() => {
-                  setShowSignOutConfirm(false)
+                  setSignOutWarnings(null)
                   void handleSignOut()
                 }}
                 disabled={isSigningOut}

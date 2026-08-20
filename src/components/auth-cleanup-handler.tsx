@@ -1,4 +1,3 @@
-import { SignoutConfirmationModal } from '@/components/modals/signout-confirmation-modal'
 import {
   ACCOUNT_RESET_FAILED_EVENT,
   AUTH_ACTIVE_USER_CHANGED_EVENT,
@@ -7,17 +6,9 @@ import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
   AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP,
-  PENDING_ENCRYPTION_KEY_RECOVERY,
 } from '@/constants/storage-keys'
 import { logError, logInfo } from '@/utils/error-handling'
 import {
-  deletePendingKeyRecovery,
-  getPendingKeyRecovery,
-  restorePendingKeyForOwner,
-} from '@/utils/pending-key-recovery'
-import {
-  getEncryptionKey,
-  hasPasskeyBackup,
   performSignoutCleanup,
   performUserSwitchCleanup,
   retryFailedStorageCleanup,
@@ -32,34 +23,21 @@ import { useAuth, useUser } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 const SIGNOUT_CLEANUP_GRACE_MS = 2000
+const LEGACY_PENDING_ENCRYPTION_KEY_RECOVERY_STORAGE_KEY =
+  'tinfoil-pending-encryption-key-recovery'
 
 export function AuthCleanupHandler() {
   const { isSignedIn, isLoaded } = useAuth()
   const { user } = useUser()
-  const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
-  const [showModal, setShowModal] = useState(false)
-  const [isDarkMode, setIsDarkMode] = useState(false)
   const [cleanupError, setCleanupError] = useState<{
     message: string
     retryStorage: boolean
-    recovery?: boolean
   } | null>(null)
   const [cleanupRetrying, setCleanupRetrying] = useState(false)
   const hasCheckedRef = useRef(false)
+  const hadSignedInSessionRef = useRef(false)
   const pendingSignoutCleanupRef = useRef<number | null>(null)
   const pendingUserSwitchCleanupRef = useRef<Promise<void> | null>(null)
-  const pendingKeyRestoreRef = useRef<{
-    promise: Promise<void>
-    userId: string
-    authGeneration: number
-  } | null>(null)
-  const pendingFreshSignInRef = useRef<{
-    userId: string
-    authGeneration: number
-    reloadAfterRestore: boolean
-  } | null>(null)
-  const cleanupErrorRef = useRef(cleanupError)
-  cleanupErrorRef.current = cleanupError
   const authGenerationRef = useRef(0)
   const previousAuthStateRef = useRef({
     isLoaded,
@@ -92,129 +70,15 @@ export function AuthCleanupHandler() {
     authGeneration: authGenerationRef.current,
   }
 
-  const refreshSignedOutRecovery = useCallback(() => {
-    setRecoveryKey(null)
-    setShowModal(false)
-
-    const latestAuthState = latestAuthStateRef.current
-    if (!latestAuthState.isLoaded || latestAuthState.isSignedIn !== false)
-      return
-
-    if (cleanupErrorRef.current?.recovery && !hasCheckedRef.current) return
-    setCleanupError((current) => (current?.recovery ? null : current))
-    const pending = getPendingKeyRecovery()
-    const departingUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
-    if (departingUserId && pending?.ownerUserId !== departingUserId) return
-    setRecoveryKey(pending?.encryptionKey ?? null)
-    setShowModal(pending !== null)
-  }, [])
-
-  const restorePendingRecoveryForFreshSignIn = useCallback(async () => {
-    if (pendingKeyRestoreRef.current) {
-      await pendingKeyRestoreRef.current.promise
-      return
-    }
-
-    setRecoveryKey(null)
-    setShowModal(false)
-
-    const latestAuthState = latestAuthStateRef.current
-    let pendingSignIn = pendingFreshSignInRef.current
-    if (
-      !latestAuthState.isLoaded ||
-      !latestAuthState.isSignedIn ||
-      !latestAuthState.userId
-    ) {
-      return
-    }
-
-    if (
-      !pendingSignIn ||
-      pendingSignIn.userId !== latestAuthState.userId ||
-      pendingSignIn.authGeneration !== latestAuthState.authGeneration
-    ) {
-      pendingSignIn = {
-        userId: latestAuthState.userId,
-        authGeneration: latestAuthState.authGeneration,
-        reloadAfterRestore: pendingSignIn?.reloadAfterRestore ?? false,
-      }
-      pendingFreshSignInRef.current = pendingSignIn
-      setCleanupError((current) => (current?.recovery ? null : current))
-    }
-
-    if (localStorage.getItem(AUTH_ACTIVE_USER_ID) === pendingSignIn.userId) {
-      pendingFreshSignInRef.current = null
-      setCleanupError((current) => (current?.recovery ? null : current))
-      return
-    }
-
-    const restore = (async () => {
-      try {
-        await restorePendingKeyForOwner(pendingSignIn.userId)
-      } catch (error) {
-        const currentAuthState = latestAuthStateRef.current
-        if (
-          !currentAuthState.isLoaded ||
-          !currentAuthState.isSignedIn ||
-          currentAuthState.userId !== pendingSignIn.userId ||
-          currentAuthState.authGeneration !== pendingSignIn.authGeneration
-        ) {
-          return
-        }
-        logError('Failed to restore pending encryption key', error, {
-          component: 'AuthCleanupHandler',
-          action: 'restorePendingRecoveryForFreshSignIn',
-        })
-        setCleanupError({
-          message:
-            'Your encryption key could not be restored. Your recovery remains available.',
-          retryStorage: false,
-          recovery: true,
-        })
-        return
-      }
-
-      const currentAuthState = latestAuthStateRef.current
-      if (
-        !currentAuthState.isLoaded ||
-        !currentAuthState.isSignedIn ||
-        currentAuthState.userId !== pendingSignIn.userId ||
-        currentAuthState.authGeneration !== pendingSignIn.authGeneration
-      ) {
-        return
-      }
-
-      localStorage.setItem(AUTH_ACTIVE_USER_ID, pendingSignIn.userId)
-      window.dispatchEvent(new Event(AUTH_ACTIVE_USER_CHANGED_EVENT))
-      pendingFreshSignInRef.current = null
-      setCleanupError((current) => (current?.recovery ? null : current))
-      if (pendingSignIn.reloadAfterRestore) window.location.reload()
-    })()
-
-    const pendingRestore = {
-      promise: restore,
-      userId: pendingSignIn.userId,
-      authGeneration: pendingSignIn.authGeneration,
-    }
-    pendingKeyRestoreRef.current = pendingRestore
-    try {
-      await restore
-    } finally {
-      if (pendingKeyRestoreRef.current === pendingRestore) {
-        pendingKeyRestoreRef.current = null
-      }
-    }
-  }, [])
-
   useEffect(() => {
-    const handlePendingRecoveryChange = (event: StorageEvent) => {
-      if (event.key !== PENDING_ENCRYPTION_KEY_RECOVERY) return
-      refreshSignedOutRecovery()
+    try {
+      localStorage.removeItem(
+        LEGACY_PENDING_ENCRYPTION_KEY_RECOVERY_STORAGE_KEY,
+      )
+    } catch {
+      // Best-effort migration cleanup when browser storage is unavailable.
     }
-    window.addEventListener('storage', handlePendingRecoveryChange)
-    return () =>
-      window.removeEventListener('storage', handlePendingRecoveryChange)
-  }, [refreshSignedOutRecovery])
+  }, [])
 
   useEffect(() => {
     const handleCrossTabResetFailure = () => {
@@ -245,6 +109,11 @@ export function AuthCleanupHandler() {
     }
   }, [])
 
+  const activateUser = useCallback((userId: string) => {
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, userId)
+    window.dispatchEvent(new Event(AUTH_ACTIVE_USER_CHANGED_EVENT))
+  }, [])
+
   const runUserSwitchCleanup = useCallback(
     (initialUserId: string, initialAuthGeneration: number) => {
       if (pendingUserSwitchCleanupRef.current) return
@@ -252,20 +121,6 @@ export function AuthCleanupHandler() {
       const cleanup = (async () => {
         let targetUserId = initialUserId
         let targetAuthGeneration = initialAuthGeneration
-
-        if (pendingKeyRestoreRef.current) {
-          await pendingKeyRestoreRef.current.promise
-          const latestAuthState = latestAuthStateRef.current
-          if (
-            !latestAuthState.isLoaded ||
-            !latestAuthState.isSignedIn ||
-            !latestAuthState.userId
-          ) {
-            return
-          }
-          targetUserId = latestAuthState.userId
-          targetAuthGeneration = latestAuthState.authGeneration
-        }
 
         while (true) {
           try {
@@ -298,6 +153,7 @@ export function AuthCleanupHandler() {
             !latestAuthState.isSignedIn ||
             !latestAuthState.userId
           ) {
+            hadSignedInSessionRef.current = false
             return
           }
           if (
@@ -309,25 +165,8 @@ export function AuthCleanupHandler() {
             continue
           }
 
-          pendingFreshSignInRef.current = {
-            userId: targetUserId,
-            authGeneration: targetAuthGeneration,
-            reloadAfterRestore: true,
-          }
-          await restorePendingRecoveryForFreshSignIn()
-
-          const currentAuthState = latestAuthStateRef.current
-          if (
-            currentAuthState.isLoaded &&
-            currentAuthState.isSignedIn &&
-            currentAuthState.userId &&
-            (currentAuthState.userId !== targetUserId ||
-              currentAuthState.authGeneration !== targetAuthGeneration)
-          ) {
-            targetUserId = currentAuthState.userId
-            targetAuthGeneration = currentAuthState.authGeneration
-            continue
-          }
+          activateUser(targetUserId)
+          window.location.reload()
           return
         }
       })()
@@ -339,76 +178,25 @@ export function AuthCleanupHandler() {
         }
       })
     },
-    [restorePendingRecoveryForFreshSignIn],
+    [activateUser],
   )
 
   const runSignoutCleanup = useCallback(() => {
     completeSignoutStep(SIGNOUT_STEPS.SIGN_OUT)
-    const ownerUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
-    const pendingRecovery = getPendingKeyRecovery()
-    if (pendingRecovery?.ownerUserId === ownerUserId) {
-      logInfo('Preserving pending encryption key recovery after signout', {
-        component: 'AuthCleanupHandler',
-        action: 'resumePendingRecovery',
-      })
-      hideSignoutProgress()
-      refreshSignedOutRecovery()
-      return
-    }
-    const encryptionKey = getEncryptionKey()
-
-    if (hasPasskeyBackup() || !encryptionKey) {
-      const action = hasPasskeyBackup()
-        ? 'signoutWithPasskey'
-        : 'signoutWithoutKey'
-      logInfo('Auto-clearing all data on signout', {
-        component: 'AuthCleanupHandler',
-        action,
-      })
-      performSignoutCleanup()
-        .then(() => {
-          reportSignoutStep(SIGNOUT_STEPS.RELOAD)
-          window.location.reload()
-        })
-        .catch((error) => {
-          logError('Failed to cleanup on signout', error, {
-            component: 'AuthCleanupHandler',
-            action,
-          })
-          hideSignoutProgress()
-          setCleanupError({
-            message: 'Local data could not be cleared after signing out.',
-            retryStorage: false,
-          })
-        })
-      return
-    }
-
-    logInfo('No passkey backup, preserving key for download prompt', {
+    logInfo('Clearing all data after signout', {
       component: 'AuthCleanupHandler',
-      action: 'signoutWithoutPasskey',
+      action: 'signout',
     })
-    if (!ownerUserId) {
-      hideSignoutProgress()
-      setCleanupError({
-        message: 'The encryption key owner could not be verified.',
-        retryStorage: false,
-      })
-      return
-    }
-
-    performSignoutCleanup({ recoverEncryptionKeyForOwner: ownerUserId })
+    void performSignoutCleanup()
       .then(() => {
-        hideSignoutProgress()
-        // Check theme from data-theme attribute (source of truth)
-        const dataTheme = document.documentElement.getAttribute('data-theme')
-        setIsDarkMode(dataTheme === 'dark')
-        refreshSignedOutRecovery()
+        hadSignedInSessionRef.current = false
+        reportSignoutStep(SIGNOUT_STEPS.RELOAD)
+        window.location.reload()
       })
       .catch((error) => {
-        logError('Failed to cleanup on signout (preserving key)', error, {
+        logError('Failed to cleanup on signout', error, {
           component: 'AuthCleanupHandler',
-          action: 'signoutWithoutPasskey',
+          action: 'signout',
         })
         hideSignoutProgress()
         setCleanupError({
@@ -416,91 +204,50 @@ export function AuthCleanupHandler() {
           retryStorage: false,
         })
       })
-  }, [refreshSignedOutRecovery])
+  }, [])
 
   useEffect(() => {
-    if (!isLoaded) {
-      refreshSignedOutRecovery()
-      return
-    }
-    if (cleanupError && !cleanupError.recovery) {
+    if (!isLoaded) return
+    if (cleanupError) {
       clearPendingSignoutCleanup()
       return
     }
 
     if (isSignedIn && user?.id) {
-      clearPendingSignoutCleanup()
-      setRecoveryKey(null)
-      setShowModal(false)
+      hadSignedInSessionRef.current = true
       hasCheckedRef.current = false
+      clearPendingSignoutCleanup()
       const storedUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
       const hasAnonymousRestore =
         localStorage.getItem(AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP) === 'true'
-      const pendingKeyRestore = pendingKeyRestoreRef.current
-      const hasStaleKeyRestore =
-        pendingKeyRestore !== null &&
-        (pendingKeyRestore.userId !== user.id ||
-          pendingKeyRestore.authGeneration !==
-            latestAuthStateRef.current.authGeneration)
 
-      if (
-        hasAnonymousRestore ||
-        (storedUserId && storedUserId !== user.id) ||
-        hasStaleKeyRestore
-      ) {
-        // Different user signed in — clear all previous user data before recovery.
-        if (!cleanupError || cleanupError.recovery) {
-          setCleanupError((current) => (current?.recovery ? null : current))
-          runUserSwitchCleanup(
-            user.id,
-            latestAuthStateRef.current.authGeneration,
-          )
-        }
+      if (hasAnonymousRestore || (storedUserId && storedUserId !== user.id)) {
+        runUserSwitchCleanup(user.id, authGenerationRef.current)
         return
       }
 
-      if (storedUserId === user.id) {
-        pendingFreshSignInRef.current = null
-        setCleanupError((current) => (current?.recovery ? null : current))
-        return
-      }
-
-      if (pendingUserSwitchCleanupRef.current) return
-
-      const pendingFreshSignIn = pendingFreshSignInRef.current
-      if (
-        !pendingFreshSignIn ||
-        pendingFreshSignIn.userId !== user.id ||
-        pendingFreshSignIn.authGeneration !==
-          latestAuthStateRef.current.authGeneration
-      ) {
-        pendingFreshSignInRef.current = {
-          userId: user.id,
-          authGeneration: latestAuthStateRef.current.authGeneration,
-          reloadAfterRestore: false,
-        }
-        setCleanupError((current) => (current?.recovery ? null : current))
-        void restorePendingRecoveryForFreshSignIn()
-      }
+      if (!storedUserId) activateUser(user.id)
       return
     }
 
-    refreshSignedOutRecovery()
-
-    // Check if user just signed out (stored user ID exists but no longer signed in)
     const storedUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
-    if (!isSignedIn && storedUserId && !hasCheckedRef.current) {
+    const shouldCleanup =
+      isSignedIn === false &&
+      (storedUserId !== null || hadSignedInSessionRef.current)
+
+    if (shouldCleanup && !hasCheckedRef.current) {
       if (pendingSignoutCleanupRef.current === null) {
         pendingSignoutCleanupRef.current = window.setTimeout(() => {
           pendingSignoutCleanupRef.current = null
-
-          const latestStoredUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
           const latestAuthState = latestAuthStateRef.current
+          const stillHasAccountData =
+            localStorage.getItem(AUTH_ACTIVE_USER_ID) !== null ||
+            hadSignedInSessionRef.current
 
           if (
             !latestAuthState.isLoaded ||
             latestAuthState.isSignedIn ||
-            !latestStoredUserId
+            !stillHasAccountData
           ) {
             return
           }
@@ -512,107 +259,65 @@ export function AuthCleanupHandler() {
     } else {
       clearPendingSignoutCleanup()
     }
-
-    if (!storedUserId) {
-      clearPendingSignoutCleanup()
-    }
   }, [
-    isSignedIn,
-    isLoaded,
-    user?.id,
+    activateUser,
     clearPendingSignoutCleanup,
     cleanupError,
-    refreshSignedOutRecovery,
-    restorePendingRecoveryForFreshSignIn,
-    runUserSwitchCleanup,
+    isLoaded,
+    isSignedIn,
     runSignoutCleanup,
+    runUserSwitchCleanup,
+    user?.id,
   ])
 
   useEffect(() => clearPendingSignoutCleanup, [clearPendingSignoutCleanup])
 
-  const handleDone = () => {
-    deletePendingKeyRecovery()
-    setRecoveryKey(null)
-    setShowModal(false)
-    window.location.reload()
-  }
-
-  if (cleanupError) {
-    return (
-      <div
-        className="fixed inset-0 z-[110] flex items-center justify-center bg-surface-chat-background px-4"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="cleanup-error-title"
-      >
-        <div className="w-full max-w-md rounded-site-lg border border-border-subtle bg-surface-card p-6 text-center shadow-xl">
-          <h2
-            id="cleanup-error-title"
-            className="text-lg font-semibold text-content-primary"
-          >
-            {cleanupError.recovery
-              ? 'Unable to restore encryption key'
-              : 'Unable to clear local data'}
-          </h2>
-          <p className="mt-3 text-sm text-content-secondary">
-            {cleanupError.message}{' '}
-            {cleanupError.recovery
-              ? 'Retry before continuing.'
-              : 'Close any other Tinfoil tabs, then retry before continuing.'}
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              if (cleanupError.recovery) {
-                setCleanupRetrying(true)
-                void restorePendingRecoveryForFreshSignIn().finally(() =>
-                  setCleanupRetrying(false),
-                )
-                return
-              }
-              if (!cleanupError.retryStorage) {
-                window.location.reload()
-                return
-              }
-
-              setCleanupRetrying(true)
-              void retryFailedStorageCleanup()
-                .then(() => window.location.reload())
-                .catch(() => {
-                  setCleanupRetrying(false)
-                  setCleanupError({
-                    message:
-                      'Local data still could not be cleared after another tab changed accounts.',
-                    retryStorage: true,
-                  })
-                })
-            }}
-            disabled={cleanupRetrying}
-            className="mt-6 rounded-lg bg-brand-accent-dark px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-accent-dark/90"
-          >
-            {cleanupRetrying
-              ? cleanupError.recovery
-                ? 'Retrying key restore...'
-                : 'Retrying cleanup...'
-              : cleanupError.recovery
-                ? 'Retry key restore'
-                : 'Retry cleanup'}
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  if (!isLoaded || isSignedIn !== false || !showModal) {
-    return null
-  }
+  if (!cleanupError) return null
 
   return (
-    <SignoutConfirmationModal
-      isOpen={showModal}
-      onDone={handleDone}
-      encryptionKey={recoveryKey}
-      isDarkMode={isDarkMode}
-    />
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-surface-chat-background px-4"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="cleanup-error-title"
+    >
+      <div className="w-full max-w-md rounded-site-lg border border-border-subtle bg-surface-card p-6 text-center shadow-xl">
+        <h2
+          id="cleanup-error-title"
+          className="text-lg font-semibold text-content-primary"
+        >
+          Unable to clear local data
+        </h2>
+        <p className="mt-3 text-sm text-content-secondary">
+          {cleanupError.message} Close any other Tinfoil tabs, then retry before
+          continuing.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            if (!cleanupError.retryStorage) {
+              window.location.reload()
+              return
+            }
+
+            setCleanupRetrying(true)
+            void retryFailedStorageCleanup()
+              .then(() => window.location.reload())
+              .catch(() => {
+                setCleanupRetrying(false)
+                setCleanupError({
+                  message:
+                    'Local data still could not be cleared after another tab changed accounts.',
+                  retryStorage: true,
+                })
+              })
+          }}
+          disabled={cleanupRetrying}
+          className="mt-6 rounded-lg bg-brand-accent-dark px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-accent-dark/90"
+        >
+          {cleanupRetrying ? 'Retrying cleanup...' : 'Retry cleanup'}
+        </button>
+      </div>
+    </div>
   )
 }

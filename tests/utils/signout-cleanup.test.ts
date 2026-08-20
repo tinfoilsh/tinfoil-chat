@@ -2,7 +2,7 @@ import { resetRendererRegistry } from '@/components/chat/renderers'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
-  PENDING_ENCRYPTION_KEY_RECOVERY,
+  SECRET_PASSKEY_BACKED_UP,
   SETTINGS_HAS_SEEN_ONBOARDING,
   USER_ENCRYPTION_KEY,
 } from '@/constants/storage-keys'
@@ -18,8 +18,8 @@ import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { resetSyncEnclaveClient } from '@/services/sync-enclave'
 import { logError } from '@/utils/error-handling'
-import { writePendingKeyRecovery } from '@/utils/pending-key-recovery'
 import {
+  getUserInitiatedSignoutWarnings,
   performSignoutCleanup,
   performUserSwitchCleanup,
   retryFailedStorageCleanup,
@@ -78,23 +78,6 @@ vi.mock('@/services/sync-enclave', () => ({
   resetSyncEnclaveClient: vi.fn(),
 }))
 
-vi.mock('@/utils/pending-key-recovery', () => ({
-  getPendingKeyRecovery: vi.fn(() => {
-    const raw = localStorage.getItem(PENDING_ENCRYPTION_KEY_RECOVERY)
-    return raw ? JSON.parse(raw) : null
-  }),
-  writePendingKeyRecovery: vi.fn(
-    (ownerUserId: string, encryptionKey: string) => {
-      const record = { version: 1, ownerUserId, encryptionKey }
-      localStorage.setItem(
-        PENDING_ENCRYPTION_KEY_RECOVERY,
-        JSON.stringify(record),
-      )
-      return record
-    },
-  ),
-}))
-
 vi.mock('@/utils/error-handling', () => ({
   logError: vi.fn(),
   logInfo: vi.fn(),
@@ -126,9 +109,12 @@ describe('performSignoutCleanup', () => {
   })
 
   it('clears the encryption key and every user data cache', async () => {
+    localStorage.setItem(USER_ENCRYPTION_KEY, 'key_primary')
+
     await performSignoutCleanup()
 
     expect(encryptionService.clearKey).toHaveBeenCalledWith({ persist: true })
+    expect(localStorage.getItem(USER_ENCRYPTION_KEY)).toBeNull()
     expect(resetRendererRegistry).toHaveBeenCalled()
     expect(resetTinfoilClient).toHaveBeenCalled()
     expect(resetSyncEnclaveClient).toHaveBeenCalled()
@@ -142,45 +128,18 @@ describe('performSignoutCleanup', () => {
     expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalled()
   })
 
-  it('moves the primary key into recovery before clearing key storage', async () => {
-    localStorage.setItem(USER_ENCRYPTION_KEY, 'key_primary')
-
-    await performSignoutCleanup({ recoverEncryptionKeyForOwner: 'user_123' })
-
-    expect(writePendingKeyRecovery).toHaveBeenCalledWith(
-      'user_123',
-      'key_primary',
+  it('deletes legacy pending recovery without preserving its key', async () => {
+    localStorage.setItem(
+      'tinfoil-pending-encryption-key-recovery',
+      JSON.stringify({ encryptionKey: 'key_legacy' }),
     )
-    expect(encryptionService.clearKey).toHaveBeenCalledWith({ persist: true })
+
+    await performSignoutCleanup()
+
     expect(
-      vi.mocked(writePendingKeyRecovery).mock.invocationCallOrder[0],
-    ).toBeLessThan(
-      vi.mocked(encryptionService.clearKey).mock.invocationCallOrder[0],
-    )
-    expect(localStorage.getItem(PENDING_ENCRYPTION_KEY_RECOVERY)).not.toBeNull()
-    expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalled()
-  })
-
-  it('does not clear the active key when pending recovery cannot be verified', async () => {
-    localStorage.setItem(USER_ENCRYPTION_KEY, 'key_primary')
-    vi.mocked(writePendingKeyRecovery).mockImplementationOnce(() => {
-      throw new Error('verification failed')
-    })
-
-    await expect(
-      performSignoutCleanup({ recoverEncryptionKeyForOwner: 'user_123' }),
-    ).rejects.toThrow('verification failed')
-
-    expect(encryptionService.clearKey).not.toHaveBeenCalled()
-  })
-
-  it('does not reset services when a requested recovery key is missing', async () => {
-    await expect(
-      performSignoutCleanup({ recoverEncryptionKeyForOwner: 'user_123' }),
-    ).rejects.toThrow('No encryption key available')
-
-    expect(cloudSync.resetForAccountChange).not.toHaveBeenCalled()
-    expect(indexedDBStorage.resetForAccountChange).not.toHaveBeenCalled()
+      localStorage.getItem('tinfoil-pending-encryption-key-recovery'),
+    ).toBeNull()
+    expect(localStorage.getItem(USER_ENCRYPTION_KEY)).toBeNull()
   })
 
   it('keeps the active-user marker until browser data is cleared', async () => {
@@ -229,42 +188,6 @@ describe('performSignoutCleanup', () => {
     expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_old')
   })
 
-  it('preserves incoming-owner recovery through user-switch cleanup', async () => {
-    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_old')
-    localStorage.setItem(
-      PENDING_ENCRYPTION_KEY_RECOVERY,
-      JSON.stringify({
-        version: 1,
-        ownerUserId: 'user_new',
-        encryptionKey: 'key_new',
-      }),
-    )
-
-    await performUserSwitchCleanup('user_new')
-
-    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBeNull()
-    expect(
-      JSON.parse(
-        localStorage.getItem(PENDING_ENCRYPTION_KEY_RECOVERY) as string,
-      ),
-    ).toMatchObject({ ownerUserId: 'user_new', encryptionKey: 'key_new' })
-  })
-
-  it('discards different-owner recovery during user-switch cleanup', async () => {
-    localStorage.setItem(
-      PENDING_ENCRYPTION_KEY_RECOVERY,
-      JSON.stringify({
-        version: 1,
-        ownerUserId: 'user_other',
-        encryptionKey: 'key_other',
-      }),
-    )
-
-    await performUserSwitchCleanup('user_new')
-
-    expect(localStorage.getItem(PENDING_ENCRYPTION_KEY_RECOVERY)).toBeNull()
-  })
-
   it('retries a failed cross-tab reset without notifying other tabs', async () => {
     sessionStorage.setItem(AUTH_ACCOUNT_RESET_FAILED, 'true')
 
@@ -294,5 +217,41 @@ describe('performSignoutCleanup', () => {
       expect.any(Error),
       expect.objectContaining({ action: 'shouldWarnAboutLocalOnlyChats' }),
     )
+  })
+
+  it('warns before user sign-out when a key has no verified passkey backup', async () => {
+    const refreshPasskeyBackup = vi.fn().mockResolvedValue(false)
+
+    await expect(
+      getUserInitiatedSignoutWarnings('key_primary', refreshPasskeyBackup),
+    ).resolves.toEqual({
+      localOnlyChats: false,
+      missingPasskeyBackup: true,
+    })
+    expect(refreshPasskeyBackup).toHaveBeenCalledWith({ clearOnUnknown: true })
+  })
+
+  it('does not warn for a key with an authoritatively verified backup', async () => {
+    const refreshPasskeyBackup = vi.fn().mockResolvedValue(true)
+
+    await expect(
+      getUserInitiatedSignoutWarnings('key_primary', refreshPasskeyBackup),
+    ).resolves.toEqual({
+      localOnlyChats: false,
+      missingPasskeyBackup: false,
+    })
+  })
+
+  it('does not warn about backup when no key is present', async () => {
+    localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
+    const refreshPasskeyBackup = vi.fn().mockResolvedValue(null)
+
+    await expect(
+      getUserInitiatedSignoutWarnings(null, refreshPasskeyBackup),
+    ).resolves.toEqual({
+      localOnlyChats: false,
+      missingPasskeyBackup: false,
+    })
+    expect(localStorage.getItem(SECRET_PASSKEY_BACKED_UP)).toBeNull()
   })
 })

@@ -2,7 +2,6 @@ import { resetRendererRegistry } from '@/components/chat/renderers'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
-  PENDING_ENCRYPTION_KEY_RECOVERY,
   SECRET_PASSKEY_BACKED_UP,
   SETTINGS_HAS_SEEN_ONBOARDING,
   USER_ENCRYPTION_KEY,
@@ -24,20 +23,12 @@ import { projectCache } from '@/services/storage/project-cache'
 import { resetSyncEnclaveClient } from '@/services/sync-enclave'
 import { logError, logInfo } from '@/utils/error-handling'
 import {
-  getPendingKeyRecovery,
-  writePendingKeyRecovery,
-} from '@/utils/pending-key-recovery'
-import {
   completeSignoutStep,
   reportSignoutStep,
   SIGNOUT_STEPS,
 } from '@/utils/signout-progress'
 
 interface ClearUserDataOptions {
-  /** Move the primary key into recovery storage owned by this user. */
-  recoverEncryptionKeyForOwner?: string
-  /** Preserve pending recovery only when it belongs to this user. */
-  preservePendingRecoveryForOwner?: string
   /**
    * If true, don't surface progress in the signout overlay. Used for
    * user-switch cleanup, which is not a signout.
@@ -48,25 +39,13 @@ interface ClearUserDataOptions {
 }
 
 async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
-  const {
-    context,
-    recoverEncryptionKeyForOwner,
-    preservePendingRecoveryForOwner,
-    skipProgressReporting = false,
-  } = options
+  const { context, skipProgressReporting = false } = options
 
   const reportStep = (step: number) => {
     if (!skipProgressReporting) reportSignoutStep(step)
   }
   const completeStep = (step: number) => {
     if (!skipProgressReporting) completeSignoutStep(step)
-  }
-
-  if (recoverEncryptionKeyForOwner) {
-    const encryptionKey = getEncryptionKey()
-    if (!encryptionKey)
-      throw new Error('No encryption key available for recovery')
-    writePendingKeyRecovery(recoverEncryptionKeyForOwner, encryptionKey)
   }
 
   invalidateProfileSyncGeneration(true)
@@ -115,15 +94,9 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   // Clear localStorage, preserving only non-user-specific keys
   reportStep(SIGNOUT_STEPS.CLEAR_STORAGE)
   try {
-    const pendingRecovery = getPendingKeyRecovery()
-    const preservePendingRecovery =
-      recoverEncryptionKeyForOwner !== undefined ||
-      (preservePendingRecoveryForOwner !== undefined &&
-        pendingRecovery?.ownerUserId === preservePendingRecoveryForOwner)
     const preservedKeys = new Set([
       AUTH_ACTIVE_USER_ID,
       SETTINGS_HAS_SEEN_ONBOARDING,
-      ...(preservePendingRecovery ? [PENDING_ENCRYPTION_KEY_RECOVERY] : []),
     ])
     const keys = Array.from({ length: localStorage.length }, (_, index) =>
       localStorage.key(index),
@@ -172,50 +145,28 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   localStorage.removeItem(AUTH_ACTIVE_USER_ID)
 }
 
-export async function performSignoutCleanup(opts?: {
-  recoverEncryptionKeyForOwner?: string
-}): Promise<void> {
-  const recoveryOwner = opts?.recoverEncryptionKeyForOwner
-  const action = recoveryOwner
-    ? 'performSignoutCleanup(recoverKey)'
-    : 'performSignoutCleanup'
-
+export async function performSignoutCleanup(): Promise<void> {
   try {
-    logInfo(
-      `Starting signout cleanup${recoveryOwner ? ' (recovering encryption key)' : ''}`,
-      {
-        component: 'signoutCleanup',
-        action,
-      },
-    )
+    logInfo('Starting signout cleanup', {
+      component: 'signoutCleanup',
+      action: 'performSignoutCleanup',
+    })
 
     await clearAllUserData({
       context: 'signoutCleanup',
-      recoverEncryptionKeyForOwner: recoveryOwner,
     })
 
-    logInfo(
-      `Signout cleanup completed${recoveryOwner ? ' (encryption key recoverable)' : ''}`,
-      {
-        component: 'signoutCleanup',
-        action,
-      },
-    )
+    logInfo('Signout cleanup completed', {
+      component: 'signoutCleanup',
+      action: 'performSignoutCleanup',
+    })
   } catch (error) {
     logError('Error during signout cleanup', error, {
       component: 'signoutCleanup',
-      action,
+      action: 'performSignoutCleanup',
     })
     throw error
   }
-}
-
-/**
- * Delete just the encryption key from localStorage and clear the in-memory copy.
- * Called after the user downloads their key from the signout modal.
- */
-export function deleteEncryptionKey(): void {
-  encryptionService.clearKey({ persist: true })
 }
 
 export async function performUserSwitchCleanup(
@@ -230,7 +181,6 @@ export async function performUserSwitchCleanup(
   try {
     await clearAllUserData({
       context: 'AuthCleanupHandler',
-      preservePendingRecoveryForOwner: newUserId,
       skipProgressReporting: true,
     })
   } catch (error) {
@@ -261,6 +211,45 @@ export async function shouldWarnAboutLocalOnlyChats(): Promise<boolean> {
       action: 'shouldWarnAboutLocalOnlyChats',
     })
     return true
+  }
+}
+
+export interface UserInitiatedSignoutWarnings {
+  localOnlyChats: boolean
+  missingPasskeyBackup: boolean
+}
+
+export async function getUserInitiatedSignoutWarnings(
+  encryptionKey: string | null,
+  refreshPasskeyBackup?: (options: {
+    clearOnUnknown: boolean
+  }) => Promise<boolean | null>,
+): Promise<UserInitiatedSignoutWarnings> {
+  const refreshBackup = refreshPasskeyBackup
+    ? refreshPasskeyBackup({ clearOnUnknown: true }).catch((error) => {
+        logError('Failed to verify passkey backup before sign out', error, {
+          component: 'signoutCleanup',
+          action: 'getUserInitiatedSignoutWarnings',
+        })
+        return null
+      })
+    : Promise.resolve(null)
+  const [localOnlyChats, backupVerified] = await Promise.all([
+    shouldWarnAboutLocalOnlyChats(),
+    refreshBackup,
+  ])
+
+  if (backupVerified !== true) {
+    try {
+      localStorage.removeItem(SECRET_PASSKEY_BACKED_UP)
+    } catch {
+      // Best-effort cleanup when browser storage is unavailable.
+    }
+  }
+
+  return {
+    localOnlyChats,
+    missingPasskeyBackup: encryptionKey !== null && backupVerified !== true,
   }
 }
 
