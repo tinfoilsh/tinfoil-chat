@@ -17,6 +17,7 @@ export function NativeBackupRestore({
   const controller = useRef<AbortController | null>(null)
   const started = useRef(false)
   const dismissed = useRef(false)
+  const guard = useRef({ available, ownerId })
   const [busy, setBusy] = useState(false)
   const [phase, setPhase] = useState('uploading')
   const [result, setResult] = useState<NativeRestoreResult | null>(null)
@@ -24,6 +25,12 @@ export function NativeBackupRestore({
 
   // prettier-ignore
   useEffect(() => () => { if (!started.current) controller.current?.abort() }, [])
+  useEffect(() => {
+    const changed =
+      guard.current.available !== available || guard.current.ownerId !== ownerId
+    guard.current = { available, ownerId }
+    if (changed) controller.current?.abort()
+  }, [available, ownerId])
 
   const restore = async (file: File) => {
     if (!ownerId) return
@@ -44,7 +51,7 @@ export function NativeBackupRestore({
         onPhase: (value) => { if (!dismissed.current && value) setPhase(value) },
       })
       if (!dismissed.current) setResult(next)
-      if (!dismissed.current)
+      if (!dismissed.current || next.state === 'failed')
         setMessage(
           next.state === 'pending'
             ? "The cloud restore is still running. We'll email you when it finishes. No local chats were restored; reselect this archive afterward to restore them."
@@ -57,7 +64,7 @@ export function NativeBackupRestore({
       if (next.state === 'completed' || next.state === 'partial')
         onChatsUpdated?.()
     } catch (cause) {
-      if (!current.signal.aborted && !dismissed.current)
+      if (!current.signal.aborted)
         setMessage(cause instanceof Error ? cause.message : 'Restore failed')
     } finally {
       if (controller.current === current) controller.current = null

@@ -132,6 +132,22 @@ describe('restoreNativeBackup', () => {
     expect(saveChat.mock.calls[1][0].id).not.toBe(id)
   })
 
+  it('does not count a skipped storage write as imported', async () => {
+    dependencies.validate.mockResolvedValue(validated(false))
+    saveChat.mockResolvedValue(null)
+
+    const result = await restoreNativeBackup(
+      sourceFile,
+      'owner-a',
+      new AbortController().signal,
+      {},
+      dependencies,
+    )
+
+    expect(result.report.local_chats).toMatchObject({ imported: 0, failed: 1 })
+    expect(result.state).toBe('partial')
+  })
+
   it('uses service counts for an idempotent cloud restore', async () => {
     dependencies.upload.mockResolvedValue({
       jobId: 'job-1',

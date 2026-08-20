@@ -23,7 +23,7 @@ export type NativeRestoreCount = { imported: number; skipped: number; failed: nu
 // prettier-ignore
 export type NativeRestoreResult = { state: 'completed' | 'partial' | 'failed' | 'pending'; jobId?: string; report: Record<NativeRestoreKind, NativeRestoreCount> }
 // prettier-ignore
-type Dependencies = { validate: typeof validateAndPackageNativeBackup; upload: typeof runOffDeviceImport; status: typeof importStatus; forEachImage: typeof forEachNativeBackupLocalImage; getChat(id: string): Promise<Chat | null>; saveChat(chat: Chat, skipCloudSync?: boolean): Promise<Chat>; wait(ms: number, signal: AbortSignal): Promise<void> }
+type Dependencies = { validate: typeof validateAndPackageNativeBackup; upload: typeof runOffDeviceImport; status: typeof importStatus; forEachImage: typeof forEachNativeBackupLocalImage; getChat(id: string): Promise<Chat | null>; saveChat(chat: Chat, skipCloudSync?: boolean): Promise<Chat | null>; wait(ms: number, signal: AbortSignal): Promise<void> }
 // prettier-ignore
 type RestoreEvents = { onStarted?(status: ImportStatusResponse): void; onPhase?(phase?: string): void }
 
@@ -33,19 +33,23 @@ const defaults: Dependencies = {
   status: importStatus,
   forEachImage: forEachNativeBackupLocalImage,
   getChat: chatStorage.getChat.bind(chatStorage),
-  saveChat: chatStorage.saveChat.bind(chatStorage),
-  wait: (ms, signal) =>
-    new Promise((resolve, reject) => {
-      const timer = window.setTimeout(resolve, ms)
-      signal.addEventListener(
-        'abort',
-        () => {
-          clearTimeout(timer)
-          reject(signal.reason)
-        },
-        { once: true },
-      )
-    }),
+  saveChat: chatStorage.saveChatIfAllowed.bind(chatStorage),
+  wait: (ms, signal) => {
+    signal.throwIfAborted()
+    return new Promise((resolve, reject) => {
+      const complete = () => {
+        signal.removeEventListener('abort', abort)
+        resolve()
+      }
+      const abort = () => {
+        clearTimeout(timer)
+        signal.removeEventListener('abort', abort)
+        reject(signal.reason)
+      }
+      const timer = window.setTimeout(complete, ms)
+      signal.addEventListener('abort', abort, { once: true })
+    })
+  },
 }
 
 function emptyReport(): NativeRestoreResult['report'] {
@@ -140,7 +144,8 @@ async function restoreLocalChats(
       } as unknown as Chat
       // prettier-ignore
       await dependencies.forEachImage(sourceImages, ({ metadata, bytes }) => applyImage(chat, metadata, bytes), { signal })
-      await dependencies.saveChat(chat, true)
+      if (!(await dependencies.saveChat(chat, true)))
+        throw new Error('Restored chat was not saved')
       report.local_chats.imported++
       report.attachments.imported += sourceImages.length
     } catch {

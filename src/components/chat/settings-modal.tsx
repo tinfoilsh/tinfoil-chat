@@ -3367,7 +3367,10 @@ ${encryptionKey.replace('key_', '')}
                     />
                     <NativeBackupRestore
                       available={Boolean(
-                        isSignedIn && encryptionKey && NATIVE_RESTORE_ENABLED,
+                        isSignedIn &&
+                        user?.id &&
+                        encryptionKey &&
+                        NATIVE_RESTORE_ENABLED,
                       )}
                       ownerId={user?.id}
                       onChatsUpdated={onChatsUpdated}

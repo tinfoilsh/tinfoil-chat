@@ -51,6 +51,13 @@ export class ChatStorageService {
     return (await this.saveChatInternal(chat, skipCloudSync, false)) ?? chat
   }
 
+  async saveChatIfAllowed(
+    chat: Chat,
+    skipCloudSync = false,
+  ): Promise<Chat | null> {
+    return this.saveChatInternal(chat, skipCloudSync, false)
+  }
+
   async saveExistingChat(
     chat: Chat,
     skipCloudSync = false,

@@ -466,6 +466,7 @@ export async function importCreate(
   req: ImportCreateRequest,
   signal?: AbortSignal,
 ): Promise<ImportCreateResponse> {
+  signal?.throwIfAborted()
   const client = await getSyncEnclaveClient()
   return client.post<ImportCreateResponse>(
     '/v1/import/create',
@@ -485,6 +486,7 @@ export async function importUploadChunk(
   req: ImportUploadChunkRequest,
   signal?: AbortSignal,
 ): Promise<OKResponse> {
+  signal?.throwIfAborted()
   const client = await getSyncEnclaveClient()
   return client.post<OKResponse>(
     '/v1/import/upload',
@@ -508,6 +510,7 @@ export async function importStart(
   req: ImportStartRequest,
   signal?: AbortSignal,
 ): Promise<ImportStatusResponse> {
+  signal?.throwIfAborted()
   const client = await getSyncEnclaveClient()
   return client.post<ImportStatusResponse>(
     '/v1/import/start',
@@ -522,6 +525,7 @@ export async function importStatus(
   jobId: string,
   signal?: AbortSignal,
 ): Promise<ImportStatusResponse> {
+  signal?.throwIfAborted()
   const client = await getSyncEnclaveClient()
   const resp = await client.post<ImportStatusResponse>(
     '/v1/import/status',

@@ -159,4 +159,67 @@ describe('NativeBackupRestore', () => {
     )
     finish({ state: 'pending', report })
   })
+
+  it('aborts a started restore when its owner changes', async () => {
+    const runRestore = vi.fn(
+      (
+        _file: File,
+        _owner: string,
+        signal: AbortSignal,
+        events: { onStarted(status: any): void },
+      ) => {
+        events.onStarted({ status: 'running' })
+        return new Promise<NativeRestoreResult>((_resolve, reject) =>
+          signal.addEventListener('abort', () => reject(signal.reason)),
+        )
+      },
+    )
+    const view = render(
+      <NativeBackupRestore
+        available
+        ownerId="owner-a"
+        runRestore={runRestore}
+      />,
+    )
+    selectArchive(view.container)
+    await waitFor(() => expect(runRestore).toHaveBeenCalledOnce())
+
+    view.rerender(
+      <NativeBackupRestore
+        available
+        ownerId="owner-b"
+        runRestore={runRestore}
+      />,
+    )
+
+    expect(runRestore.mock.calls[0][2].aborted).toBe(true)
+  })
+
+  it('surfaces a terminal failure after the progress view is closed', async () => {
+    let finish!: (result: NativeRestoreResult) => void
+    const runRestore = vi.fn(
+      (
+        _file: File,
+        _owner: string,
+        _signal: AbortSignal,
+        events: { onStarted(status: any): void },
+      ) => {
+        events.onStarted({ status: 'running' })
+        return new Promise<NativeRestoreResult>((resolve) => (finish = resolve))
+      },
+    )
+    const view = render(
+      <NativeBackupRestore available ownerId="owner" runRestore={runRestore} />,
+    )
+    selectArchive(view.container)
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+
+    finish({ state: 'failed', report })
+
+    expect(
+      await screen.findByText(
+        'The cloud restore failed. No local chats were restored.',
+      ),
+    ).toBeVisible()
+  })
 })
