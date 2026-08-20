@@ -468,6 +468,7 @@ export function ChatInterface({
     setupFirstTimePasskey,
     showFirstTimePasskeyPrompt,
     showPasskeyRecoveryPrompt,
+    cancelPasskeyRoutingProbe,
     dismissFirstTimePasskeyPrompt,
     recoverWithPasskey,
     setupNewKeySplit,
@@ -537,6 +538,7 @@ export function ChatInterface({
   // State for cloud sync setup modal
   const [showCloudSyncSetupModal, setShowCloudSyncSetupModal] = useState(false)
   const [isCloudSyncRoutePending, setIsCloudSyncRoutePending] = useState(false)
+  const cloudSyncRouteGenerationRef = useRef(0)
   // Tracks the in-flight first-time passkey setup call so the modal can
   // disable its buttons while the native dialog is showing.
   const [isFirstTimePasskeySetupBusy, setIsFirstTimePasskeySetupBusy] =
@@ -2139,6 +2141,7 @@ export function ChatInterface({
   // the intro and routes directly to recovery.
   const handleOpenCloudSyncSetup = useCallback(async () => {
     if (!encryptionService.getKey()) {
+      const generation = ++cloudSyncRouteGenerationRef.current
       // Open the modal immediately for instant feedback. It renders
       // its recovery / manual UI from the live hook state, so we don't
       // block the popup on the slow enclave key-state probe. The
@@ -2149,10 +2152,13 @@ export function ChatInterface({
       setIsCloudSyncRoutePending(true)
       try {
         const recovered = await showPasskeyRecoveryPrompt()
+        if (generation !== cloudSyncRouteGenerationRef.current) return
         if (recovered) return
         await showFirstTimePasskeyPrompt()
       } finally {
-        setIsCloudSyncRoutePending(false)
+        if (generation === cloudSyncRouteGenerationRef.current) {
+          setIsCloudSyncRoutePending(false)
+        }
       }
       return
     }
@@ -4408,6 +4414,9 @@ export function ChatInterface({
         <CloudSyncSetupModal
           isOpen={showCloudSyncSetupModal}
           onClose={() => {
+            cloudSyncRouteGenerationRef.current += 1
+            cancelPasskeyRoutingProbe()
+            setIsCloudSyncRoutePending(false)
             setShowCloudSyncSetupModal(false)
             if (passkeyFirstTimePromptAvailable) {
               dismissFirstTimePasskeyPrompt()
@@ -4454,7 +4463,9 @@ export function ChatInterface({
           }
           isPasskeySetupBusy={isFirstTimePasskeySetupBusy}
           onSkipRecovery={() => {
+            cloudSyncRouteGenerationRef.current += 1
             skipPasskeyRecovery()
+            setIsCloudSyncRoutePending(false)
             setShowCloudSyncSetupModal(false)
           }}
           onRecoverWithPasskey={async () => {

@@ -4,6 +4,8 @@ import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
   AUTH_ANONYMOUS_RESTORE_PENDING_CLEANUP,
+  SETTINGS_CLOUD_SYNC_ENABLED,
+  USER_ENCRYPTION_KEY,
 } from '@/constants/storage-keys'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { createElement } from 'react'
@@ -84,10 +86,33 @@ describe('AuthCleanupHandler', () => {
     expect(mockPerformSignoutCleanup).not.toHaveBeenCalled()
   })
 
-  it('clears data after confirmed session expiry', async () => {
+  it('preserves local account data during slow auth hydration', async () => {
     localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
-    render(createElement(AuthCleanupHandler))
+    localStorage.setItem(USER_ENCRYPTION_KEY, 'key_cek')
+    localStorage.setItem(SETTINGS_CLOUD_SYNC_ENABLED, 'true')
+    const { rerender } = render(createElement(AuthCleanupHandler))
 
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+    })
+
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_123' } }
+    rerender(createElement(AuthCleanupHandler))
+
+    expect(mockPerformSignoutCleanup).not.toHaveBeenCalled()
+    expect(localStorage.getItem(USER_ENCRYPTION_KEY)).toBe('key_cek')
+    expect(localStorage.getItem(SETTINGS_CLOUD_SYNC_ENABLED)).toBe('true')
+  })
+
+  it('clears everything after an observed session signs out', async () => {
+    authState = { isSignedIn: true, isLoaded: true }
+    userState = { user: { id: 'user_123' } }
+    const { rerender } = render(createElement(AuthCleanupHandler))
+
+    authState = { isSignedIn: false, isLoaded: true }
+    userState = { user: null }
+    rerender(createElement(AuthCleanupHandler))
     await act(async () => {
       vi.advanceTimersByTime(2000)
       await Promise.resolve()

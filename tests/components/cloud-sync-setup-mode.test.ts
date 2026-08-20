@@ -49,10 +49,10 @@ describe('determineGeneratedKeySetupMode', () => {
       manualRecoveryNeeded: false,
     })
 
-    expect(mode).toBe('recoverExisting')
+    expect(mode).toBe('explicitStartFresh')
   })
 
-  it('falls back to recoverExisting when remote inspection fails', async () => {
+  it('requires explicit start fresh when remote inspection fails', async () => {
     mockInspectRemoteEncryptedState.mockRejectedValue(
       new Error('Network error'),
     )
@@ -61,6 +61,6 @@ describe('determineGeneratedKeySetupMode', () => {
       manualRecoveryNeeded: false,
     })
 
-    expect(mode).toBe('recoverExisting')
+    expect(mode).toBe('explicitStartFresh')
   })
 })

@@ -4,7 +4,7 @@ import {
 } from '@/constants/storage-keys'
 import { usePasskeyBackup } from '@/hooks/use-passkey-backup'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   inspectRemoteEncryptedState: vi.fn(),
@@ -155,11 +155,16 @@ describe('usePasskeyBackup', () => {
     mocks.getPasskeyCredentialState.mockResolvedValue('empty')
     mocks.getPasskeyDeviceState.mockResolvedValue('empty')
     mocks.loadPasskeyCredentials.mockResolvedValue([])
+    mocks.loadRecoveryCandidates.mockResolvedValue([])
     mocks.getCachedPrfResult.mockReturnValue(null)
     mocks.getLocalPasskeyCredentialId.mockReturnValue(null)
     mocks.getKey.mockReturnValue(null)
     mocks.getAllKeys.mockReturnValue({ primary: null, alternatives: [] })
     mocks.passkeyEventsOn.mockReturnValue(() => {})
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('keeps transient remote-state failures retriable during initialization', async () => {
@@ -177,7 +182,7 @@ describe('usePasskeyBackup', () => {
     expect(result.current.passkeyRetryAvailable).toBe(true)
   })
 
-  it('keeps manual first-time prompt retries available on unknown remote state', async () => {
+  it('routes unknown remote state to passkey recovery', async () => {
     mocks.inspectRemoteEncryptedState.mockResolvedValue('unknown')
     const { result } = renderHook(() =>
       usePasskeyBackup({ ...baseOptions, initialized: false }),
@@ -188,10 +193,75 @@ describe('usePasskeyBackup', () => {
       prompted = await result.current.showFirstTimePasskeyPrompt()
     })
 
-    expect(prompted).toBe(false)
+    expect(prompted).toBe(true)
     expect(result.current.manualRecoveryNeeded).toBe(false)
-    expect(result.current.passkeySetupFailed).toBe(true)
+    expect(result.current.passkeyRecoveryNeeded).toBe(true)
+    expect(result.current.passkeySetupFailed).toBe(false)
     expect(result.current.passkeyRetryAvailable).toBe(true)
+  })
+
+  it('uses v2 bundle inventory for recovery without a local key marker', async () => {
+    mocks.loadRecoveryCandidates.mockResolvedValue([
+      { id: 'v2-credential', source: 'enclave' },
+    ])
+    expect(localStorage.getItem(SECRET_PASSKEY_BACKED_UP)).toBeNull()
+    const { result } = renderHook(() =>
+      usePasskeyBackup({ ...baseOptions, initialized: false }),
+    )
+
+    let prompted = false
+    await act(async () => {
+      prompted = await result.current.showPasskeyRecoveryPrompt()
+    })
+
+    expect(prompted).toBe(true)
+    expect(result.current.passkeyRecoveryNeeded).toBe(true)
+    expect(mocks.loadRecoveryCandidates).toHaveBeenCalledTimes(1)
+  })
+
+  it('times out a hanging routing probe toward passkey recovery', async () => {
+    vi.useFakeTimers()
+    mocks.loadRecoveryCandidates.mockReturnValue(new Promise(() => {}))
+    const { result } = renderHook(() =>
+      usePasskeyBackup({ ...baseOptions, initialized: false }),
+    )
+
+    let promptPromise!: Promise<boolean>
+    act(() => {
+      promptPromise = result.current.showPasskeyRecoveryPrompt()
+    })
+    await act(async () => {
+      await Promise.resolve()
+      vi.advanceTimersByTime(3_000)
+    })
+
+    await expect(promptPromise).resolves.toBe(true)
+    expect(result.current.passkeyRecoveryNeeded).toBe(true)
+  })
+
+  it('ignores a routing probe after dismissal', async () => {
+    let resolveCandidates!: (value: unknown[]) => void
+    mocks.loadRecoveryCandidates.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCandidates = resolve
+      }),
+    )
+    const { result } = renderHook(() =>
+      usePasskeyBackup({ ...baseOptions, initialized: false }),
+    )
+
+    let promptPromise!: Promise<boolean>
+    act(() => {
+      promptPromise = result.current.showPasskeyRecoveryPrompt()
+    })
+    await act(async () => {
+      await Promise.resolve()
+      result.current.cancelPasskeyRoutingProbe()
+      resolveCandidates([{ id: 'late-v2-bundle', source: 'enclave' }])
+    })
+
+    await expect(promptPromise).resolves.toBe(false)
+    expect(result.current.passkeyRecoveryNeeded).toBe(false)
   })
 
   it('keeps explicit manual recovery available after a reload', async () => {

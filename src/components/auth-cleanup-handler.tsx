@@ -233,10 +233,7 @@ export function AuthCleanupHandler() {
       return
     }
 
-    const storedUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
-    const shouldCleanup =
-      isSignedIn === false &&
-      (storedUserId !== null || hadSignedInSessionRef.current)
+    const shouldCleanup = isSignedIn === false && hadSignedInSessionRef.current
 
     if (shouldCleanup && !hasCheckedRef.current) {
       if (pendingSignoutCleanupRef.current === null) {

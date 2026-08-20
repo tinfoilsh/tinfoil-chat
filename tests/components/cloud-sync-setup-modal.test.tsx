@@ -192,17 +192,42 @@ describe('CloudSyncSetupModal onboarding', () => {
     )
   })
 
-  it('disables intro actions while passkey setup is in progress', () => {
+  it('keeps Maybe later available while passkey setup is in progress', () => {
+    const onClose = vi.fn()
     render(
       <CloudSyncSetupModal
         {...baseProps}
+        onClose={onClose}
         onSetupWithPasskey={vi.fn(async () => {})}
         isPasskeySetupBusy
       />,
     )
 
     expect(screen.getByRole('button', { name: 'Setting up...' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Maybe later' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Maybe later' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps intro actions enabled while the routing probe hangs', async () => {
+    const onClose = vi.fn()
+    render(
+      <CloudSyncSetupModal
+        {...baseProps}
+        onClose={onClose}
+        isContinuePending
+        onRecoverWithPasskey={vi.fn()}
+      />,
+    )
+
+    const continueButton = screen.getByRole('button', { name: 'Continue' })
+    const maybeLaterButton = screen.getByRole('button', { name: 'Maybe later' })
+    expect(continueButton).toBeEnabled()
+    expect(maybeLaterButton).toBeEnabled()
+
+    fireEvent.click(continueButton)
+    expect(
+      await screen.findByRole('button', { name: 'Unlock with Passkey' }),
+    ).toBeEnabled()
   })
 
   it('bypasses the intro for passkey recovery', () => {

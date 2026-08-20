@@ -127,6 +127,25 @@ export interface UsePasskeyBackupOptions {
 }
 
 const SYNC_CHECK_INTERVAL_MS = 30_000
+const PASSKEY_ROUTING_PROBE_TIMEOUT_MS = 3_000
+
+async function withPasskeyRoutingProbeTimeout<T>(
+  probe: Promise<T>,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error('Passkey routing probe timed out')),
+      PASSKEY_ROUTING_PROBE_TIMEOUT_MS,
+    )
+  })
+
+  try {
+    return await Promise.race([probe, timeout])
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId)
+  }
+}
 
 /**
  * Read the locally remembered sync_version for a credential ID.
@@ -268,6 +287,7 @@ export function usePasskeyBackup({
   onEncryptionKeyRecoveredRef.current = onEncryptionKeyRecovered
   const hasInitializedPasskeyRef = useRef(false)
   const previousUserIdRef = useRef<string | null | undefined>(undefined)
+  const routingProbeGenerationRef = useRef(0)
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1511,14 +1531,18 @@ export function usePasskeyBackup({
   // prompt was made available; false if the caller should fall through to
   // another flow (first-time setup or manual key).
   const showPasskeyRecoveryPrompt = useCallback(async (): Promise<boolean> => {
+    const generation = ++routingProbeGenerationRef.current
     if (encryptionService.getKey()) return false
     const prfSupported = await isPrfSupported()
     if (!prfSupported) return false
     try {
-      const credentialState = await getPasskeyCredentialState()
-      if (credentialState !== 'exists') return false
+      const candidates = await withPasskeyRoutingProbeTimeout(
+        loadRecoveryCandidates(),
+      )
+      if (generation !== routingProbeGenerationRef.current) return false
+      if (candidates.length === 0) return false
     } catch {
-      return false
+      if (generation !== routingProbeGenerationRef.current) return false
     }
     passkeyRecoveryDismissedFlag.clear()
     setupWarningDismissedFlag.clear()
@@ -1526,6 +1550,7 @@ export function usePasskeyBackup({
       setState((prev) => ({
         ...prev,
         passkeyRecoveryNeeded: true,
+        manualRecoveryNeeded: false,
         passkeySetupFailed: false,
         passkeyRetryAvailable: true,
       }))
@@ -1542,16 +1567,42 @@ export function usePasskeyBackup({
   // was made available; false if the caller should route through the
   // manual-key flow instead.
   const showFirstTimePasskeyPrompt = useCallback(async (): Promise<boolean> => {
+    const generation = ++routingProbeGenerationRef.current
     manualRecoveryDismissedFlag.clear()
     const prfSupported = await isPrfSupported()
-    if (!prfSupported) return false
+    if (generation !== routingProbeGenerationRef.current) return false
+    if (!prfSupported) {
+      if (isMountedRef.current) {
+        setState((prev) => ({
+          ...prev,
+          manualRecoveryNeeded: true,
+          passkeyRecoveryNeeded: false,
+          passkeyFirstTimePromptAvailable: false,
+          passkeySetupFailed: true,
+          passkeyRetryAvailable: false,
+        }))
+      }
+      return false
+    }
     try {
-      const [credentialState, remoteState] = await Promise.all([
-        getPasskeyCredentialState(),
-        inspectRemoteEncryptedState(),
-      ])
-      if (credentialState !== 'empty') {
-        return false
+      const [candidates, remoteState] = await withPasskeyRoutingProbeTimeout(
+        Promise.all([loadRecoveryCandidates(), inspectRemoteEncryptedState()]),
+      )
+      if (generation !== routingProbeGenerationRef.current) return false
+      if (candidates.length > 0 || remoteState === 'unknown') {
+        passkeyRecoveryDismissedFlag.clear()
+        setupWarningDismissedFlag.clear()
+        if (isMountedRef.current) {
+          setState((prev) => ({
+            ...prev,
+            passkeyRecoveryNeeded: true,
+            manualRecoveryNeeded: false,
+            passkeyFirstTimePromptAvailable: false,
+            passkeySetupFailed: false,
+            passkeyRetryAvailable: true,
+          }))
+        }
+        return true
       }
       if (remoteState === 'exists') {
         if (isMountedRef.current) {
@@ -1565,27 +1616,29 @@ export function usePasskeyBackup({
         }
         return false
       }
-      if (remoteState === 'unknown') {
-        setupWarningDismissedFlag.clear()
-        if (isMountedRef.current) {
-          setState((prev) => ({
-            ...prev,
-            manualRecoveryNeeded: false,
-            passkeyFirstTimePromptAvailable: false,
-            passkeySetupFailed: true,
-            passkeyRetryAvailable: true,
-          }))
-        }
-        return false
-      }
     } catch {
-      return false
+      if (generation !== routingProbeGenerationRef.current) return false
+      passkeyRecoveryDismissedFlag.clear()
+      setupWarningDismissedFlag.clear()
+      if (isMountedRef.current) {
+        setState((prev) => ({
+          ...prev,
+          passkeyRecoveryNeeded: true,
+          manualRecoveryNeeded: false,
+          passkeyFirstTimePromptAvailable: false,
+          passkeySetupFailed: false,
+          passkeyRetryAvailable: true,
+        }))
+      }
+      return true
     }
     firstTimePromptDismissedFlag.clear()
     if (isMountedRef.current) {
       setState((prev) => ({
         ...prev,
         passkeyFirstTimePromptAvailable: true,
+        passkeyRecoveryNeeded: false,
+        manualRecoveryNeeded: false,
       }))
     }
     return true
@@ -1597,6 +1650,7 @@ export function usePasskeyBackup({
   // chat-interface closes the currently open modal. Cleared automatically
   // once the user regains an encryption key via any path.
   const skipPasskeyRecovery = useCallback((): void => {
+    routingProbeGenerationRef.current += 1
     passkeyRecoveryDismissedFlag.set()
     if (!isMountedRef.current) return
     setState((prev) => {
@@ -1621,6 +1675,10 @@ export function usePasskeyBackup({
         passkeyRetryAvailable: true,
       }
     })
+  }, [])
+
+  const cancelPasskeyRoutingProbe = useCallback((): void => {
+    routingProbeGenerationRef.current += 1
   }, [])
 
   /**
@@ -1822,6 +1880,7 @@ export function usePasskeyBackup({
     setupFirstTimePasskey,
     showFirstTimePasskeyPrompt,
     showPasskeyRecoveryPrompt,
+    cancelPasskeyRoutingProbe,
     dismissFirstTimePasskeyPrompt,
     recoverWithPasskey,
     setupNewKeySplit,

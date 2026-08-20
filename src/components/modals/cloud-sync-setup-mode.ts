@@ -5,6 +5,24 @@ import {
 
 export type CloudKeySetupMode = 'recoverExisting' | 'explicitStartFresh'
 
+const REMOTE_STATE_ROUTING_TIMEOUT_MS = 3_000
+
+async function inspectRemoteStateWithTimeout() {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error('Remote state routing probe timed out')),
+      REMOTE_STATE_ROUTING_TIMEOUT_MS,
+    )
+  })
+
+  try {
+    return await Promise.race([inspectRemoteEncryptedState(), timeout])
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId)
+  }
+}
+
 /**
  * Why a key activation failed. `key_mismatch` means the enclave
  * confirmed different cloud data exists under another key;
@@ -13,13 +31,10 @@ export type CloudKeySetupMode = 'recoverExisting' | 'explicitStartFresh'
  * correct; `invalid_key` covers malformed input or unexpected errors.
  */
 export type CloudKeySetupFailureReason =
-  | 'key_mismatch'
-  | 'verification_unavailable'
-  | 'invalid_key'
+  'key_mismatch' | 'verification_unavailable' | 'invalid_key'
 
 export type CloudKeySetupResult =
-  | { ok: true }
-  | { ok: false; reason: CloudKeySetupFailureReason }
+  { ok: true } | { ok: false; reason: CloudKeySetupFailureReason }
 
 export function classifyCloudKeySetupError(
   error: unknown,
@@ -67,9 +82,9 @@ export async function determineGeneratedKeySetupMode({
   }
 
   try {
-    const remoteState = await inspectRemoteEncryptedState()
-    return remoteState === 'exists' ? 'explicitStartFresh' : 'recoverExisting'
+    const remoteState = await inspectRemoteStateWithTimeout()
+    return remoteState === 'empty' ? 'recoverExisting' : 'explicitStartFresh'
   } catch {
-    return 'recoverExisting'
+    return 'explicitStartFresh'
   }
 }
