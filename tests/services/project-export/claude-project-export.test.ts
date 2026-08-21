@@ -344,15 +344,16 @@ describe('buildClaudeProjectExport', () => {
       }),
     })
     const result = await buildClaudeProjectExport(testStorage)
+    const encodedBytes = new TextEncoder().encode(result.json).length
 
     await expect(
       buildClaudeProjectExport(testStorage, {
-        maxEncodedBytes: result.encodedBytes,
+        maxEncodedBytes: encodedBytes,
       }),
     ).resolves.toEqual(result)
     await expect(
       buildClaudeProjectExport(testStorage, {
-        maxEncodedBytes: result.encodedBytes - 1,
+        maxEncodedBytes: encodedBytes - 1,
       }),
     ).rejects.toBeInstanceOf(ClaudeProjectExportSizeError)
   })
@@ -367,7 +368,7 @@ describe('buildClaudeProjectExport', () => {
 
     await expect(
       buildClaudeProjectExport(emptyStorage, { maxEncodedBytes: 2 }),
-    ).resolves.toMatchObject({ json: '[]', encodedBytes: 2 })
+    ).resolves.toMatchObject({ json: '[]' })
     await expect(
       buildClaudeProjectExport(emptyStorage, { maxEncodedBytes: 1 }),
     ).rejects.toBeInstanceOf(ClaudeProjectExportSizeError)

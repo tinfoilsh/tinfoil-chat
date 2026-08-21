@@ -22,7 +22,6 @@ export interface ClaudeProjectExportCounts {
 
 export interface ClaudeProjectExportResult {
   json: string
-  encodedBytes: number
   counts: ClaudeProjectExportCounts
   warnings: string[]
 }
@@ -299,8 +298,7 @@ export async function buildClaudeProjectExport(
     serializedProjects.length === 0
       ? '[]'
       : `[\n${serializedProjects.join(',\n')}\n]`
-  const encodedBytes = sizeGuard.encodedLength(json)
-  sizeGuard.assertFinal(encodedBytes)
+  sizeGuard.assertFinal(sizeGuard.encodedLength(json))
 
-  return { json, encodedBytes, counts, warnings }
+  return { json, counts, warnings }
 }
