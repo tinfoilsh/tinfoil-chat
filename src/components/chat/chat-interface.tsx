@@ -3229,8 +3229,12 @@ export function ChatInterface({
       wasThinkingBefore &&
       scrolledForContentStartKeyRef.current !== key
     ) {
-      const distanceFromBottom =
-        el.scrollHeight - el.scrollTop - el.clientHeight
+      const distanceFromBottom = getDistanceFromChatContentBottom(
+        el.scrollHeight,
+        el.scrollTop,
+        el.clientHeight,
+        getChatSpacerHeight(el),
+      )
       const ANCHOR_THRESHOLD = 140
       const isNearBottom = distanceFromBottom <= ANCHOR_THRESHOLD
       if (isNearBottom) {
