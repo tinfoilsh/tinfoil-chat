@@ -1,7 +1,19 @@
 import { NativeBackupRestore } from '@/components/chat/native-backup-restore'
 import type { NativeRestoreResult } from '@/services/native-backup/orchestrate'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const mocks = vi.hoisted(() => ({ restore: vi.fn() }))
+vi.mock('@/services/native-backup/orchestrate', () => ({
+  NATIVE_RESTORE_KINDS: [
+    'projects',
+    'project_documents',
+    'cloud_chats',
+    'local_chats',
+    'attachments',
+  ],
+  restoreNativeBackup: mocks.restore,
+}))
 
 const report = {
   projects: {
@@ -54,6 +66,10 @@ function selectArchive(container: HTMLElement) {
 }
 
 describe('NativeBackupRestore', () => {
+  beforeEach(() => {
+    mocks.restore.mockReset()
+  })
+
   it('honors its availability gate and displays the plaintext warning', () => {
     const { rerender } = render(
       <NativeBackupRestore available={false} ownerId="owner" />,
@@ -66,7 +82,7 @@ describe('NativeBackupRestore', () => {
   })
 
   it('reports partial restores by kind without unqualified success', async () => {
-    const runRestore = vi.fn(async () => ({
+    mocks.restore.mockResolvedValue({
       state: 'partial' as const,
       report: {
         ...report,
@@ -75,13 +91,12 @@ describe('NativeBackupRestore', () => {
           warnings: ['thumbnail unavailable'],
         },
       },
-    }))
+    })
     const updated = vi.fn()
     const { container } = render(
       <NativeBackupRestore
         available
         ownerId="owner"
-        runRestore={runRestore}
         onChatsUpdated={updated}
       />,
     )
@@ -98,10 +113,10 @@ describe('NativeBackupRestore', () => {
   })
 
   it('reports a failed asynchronous chat reload instead of success', async () => {
-    const runRestore = vi.fn(async () => ({
+    mocks.restore.mockResolvedValue({
       state: 'completed' as const,
       report,
-    }))
+    })
     const updated = vi.fn(async () => {
       throw new Error('Chat reload failed')
     })
@@ -109,7 +124,6 @@ describe('NativeBackupRestore', () => {
       <NativeBackupRestore
         available
         ownerId="owner"
-        runRestore={runRestore}
         onChatsUpdated={updated}
       />,
     )
@@ -125,35 +139,29 @@ describe('NativeBackupRestore', () => {
   })
 
   it('explains pending local restore and allows cancellation', async () => {
-    const runRestore = vi.fn(
+    mocks.restore.mockImplementation(
       (_file: File, _owner: string, signal: AbortSignal) =>
         new Promise<NativeRestoreResult>((resolve, reject) => {
           signal.addEventListener('abort', () => reject(signal.reason))
           queueMicrotask(() => resolve({ state: 'pending', report }))
         }),
     )
-    const first = render(
-      <NativeBackupRestore available ownerId="owner" runRestore={runRestore} />,
-    )
+    const first = render(<NativeBackupRestore available ownerId="owner" />)
     selectArchive(first.container)
     expect(
       await screen.findByText(/No local chats were restored/),
     ).toHaveTextContent('reselect this archive')
 
-    const neverFinishes = vi.fn(
-      (_file: File, _owner: string, signal: AbortSignal) =>
-        new Promise<NativeRestoreResult>((_resolve, reject) =>
-          signal.addEventListener('abort', () => reject(signal.reason)),
-        ),
-    )
+    const neverFinishes = mocks.restore
+      .mockReset()
+      .mockImplementation(
+        (_file: File, _owner: string, signal: AbortSignal) =>
+          new Promise<NativeRestoreResult>((_resolve, reject) =>
+            signal.addEventListener('abort', () => reject(signal.reason)),
+          ),
+      )
     first.unmount()
-    const second = render(
-      <NativeBackupRestore
-        available
-        ownerId="owner"
-        runRestore={neverFinishes}
-      />,
-    )
+    const second = render(<NativeBackupRestore available ownerId="owner" />)
     selectArchive(second.container)
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
     await waitFor(() =>
@@ -163,7 +171,7 @@ describe('NativeBackupRestore', () => {
 
   it('closes without aborting after the enclave restore starts', async () => {
     let finish!: (result: NativeRestoreResult) => void
-    const runRestore = vi.fn(
+    const runRestore = mocks.restore.mockImplementation(
       (
         _file: File,
         _owner: string,
@@ -175,7 +183,7 @@ describe('NativeBackupRestore', () => {
       },
     )
     const { container } = render(
-      <NativeBackupRestore available ownerId="owner" runRestore={runRestore} />,
+      <NativeBackupRestore available ownerId="owner" />,
     )
     selectArchive(container)
     fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
@@ -188,7 +196,7 @@ describe('NativeBackupRestore', () => {
   })
 
   it('aborts a started restore when its owner changes', async () => {
-    const runRestore = vi.fn(
+    const runRestore = mocks.restore.mockImplementation(
       (
         _file: File,
         _owner: string,
@@ -201,30 +209,18 @@ describe('NativeBackupRestore', () => {
         )
       },
     )
-    const view = render(
-      <NativeBackupRestore
-        available
-        ownerId="owner-a"
-        runRestore={runRestore}
-      />,
-    )
+    const view = render(<NativeBackupRestore available ownerId="owner-a" />)
     selectArchive(view.container)
     await waitFor(() => expect(runRestore).toHaveBeenCalledOnce())
 
-    view.rerender(
-      <NativeBackupRestore
-        available
-        ownerId="owner-b"
-        runRestore={runRestore}
-      />,
-    )
+    view.rerender(<NativeBackupRestore available ownerId="owner-b" />)
 
     expect(runRestore.mock.calls[0][2].aborted).toBe(true)
   })
 
   it('surfaces a terminal failure after the progress view is closed', async () => {
     let finish!: (result: NativeRestoreResult) => void
-    const runRestore = vi.fn(
+    mocks.restore.mockImplementation(
       (
         _file: File,
         _owner: string,
@@ -235,9 +231,7 @@ describe('NativeBackupRestore', () => {
         return new Promise<NativeRestoreResult>((resolve) => (finish = resolve))
       },
     )
-    const view = render(
-      <NativeBackupRestore available ownerId="owner" runRestore={runRestore} />,
-    )
+    const view = render(<NativeBackupRestore available ownerId="owner" />)
     selectArchive(view.container)
     fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
 
@@ -252,7 +246,7 @@ describe('NativeBackupRestore', () => {
 
   it('replaces the dismissed progress message after completion', async () => {
     let finish!: (result: NativeRestoreResult) => void
-    const runRestore = vi.fn(
+    mocks.restore.mockImplementation(
       (
         _file: File,
         _owner: string,
@@ -263,9 +257,7 @@ describe('NativeBackupRestore', () => {
         return new Promise<NativeRestoreResult>((resolve) => (finish = resolve))
       },
     )
-    const view = render(
-      <NativeBackupRestore available ownerId="owner" runRestore={runRestore} />,
-    )
+    const view = render(<NativeBackupRestore available ownerId="owner" />)
     selectArchive(view.container)
     fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
 

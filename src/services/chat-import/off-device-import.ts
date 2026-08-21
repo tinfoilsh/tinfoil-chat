@@ -77,7 +77,6 @@ export async function runOffDeviceImport(
     throw new Error('The export file is too large')
   }
 
-  const signalArg = options.signal ? ([options.signal] as const) : []
   const totalChunks = Math.ceil(file.size / IMPORT_CHUNK_BYTES)
   const { archiveSha256, chunkSha256s } = await hashFileByChunk(
     file,
@@ -86,7 +85,7 @@ export async function runOffDeviceImport(
 
   const { job_id, upload_id } = await importCreate(
     { source, totalBytes: file.size, totalChunks, archiveSha256 },
-    ...signalArg,
+    options.signal,
   )
 
   for (let index = 0; index < totalChunks; index++) {
@@ -99,14 +98,14 @@ export async function runOffDeviceImport(
         chunkSha256: chunkSha256s[index],
         data: chunk,
       },
-      ...signalArg,
+      options.signal,
     )
   }
 
   options.signal?.throwIfAborted()
   const status = await importStart(
     { jobId: job_id, keyB64: requirePrimaryKeyB64() },
-    ...signalArg,
+    options.signal,
   )
 
   return { jobId: job_id, status }

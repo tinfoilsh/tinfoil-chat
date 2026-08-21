@@ -6,12 +6,10 @@ export function NativeBackupRestore({
   available,
   ownerId,
   onChatsUpdated,
-  runRestore = restoreNativeBackup,
 }: {
   available?: boolean
   ownerId?: string
   onChatsUpdated?: () => void | Promise<void>
-  runRestore?: typeof restoreNativeBackup
 }) {
   const input = useRef<HTMLInputElement>(null)
   const controller = useRef<AbortController | null>(null)
@@ -42,7 +40,7 @@ export function NativeBackupRestore({
     setResult(null)
     setMessage(null)
     try {
-      const next = await runRestore(file, ownerId, current.signal, {
+      const next = await restoreNativeBackup(file, ownerId, current.signal, {
         onStarted: (status) => {
           started.current = true
           setPhase(status.phase ?? 'running')

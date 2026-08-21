@@ -23,7 +23,7 @@ function validated(cloud = true): ValidatedNativeRestore {
   return {
     backup: { backup_id: 'backup-1' } as ValidatedNativeRestore['backup'],
     local: {
-      chats: [localChat],
+      chats: [structuredClone(localChat)],
       relationships: {
         projectChats: [{ projectId: 'source-project', chatId: 'source-chat' }],
         projectDocuments: [],

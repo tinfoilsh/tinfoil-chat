@@ -50,8 +50,11 @@ describe('runOffDeviceImport', () => {
     const size = IMPORT_CHUNK_BYTES + 1234
     const archive = new Uint8Array(size)
     for (let i = 0; i < size; i++) archive[i] = i % 251
+    const signal = new AbortController().signal
 
-    const result = await runOffDeviceImport('claude', fileOf(archive))
+    const result = await runOffDeviceImport('claude', fileOf(archive), {
+      signal,
+    })
 
     expect(importCreate).toHaveBeenCalledTimes(1)
     const createArg = importCreate.mock.calls[0][0]
@@ -69,10 +72,13 @@ describe('runOffDeviceImport', () => {
     expect(second.chunkIndex).toBe(1)
     expect(second.data.byteLength).toBe(1234)
 
-    expect(importStart).toHaveBeenCalledWith({
-      jobId: 'job-1',
-      keyB64: 'cek-base64',
-    })
+    expect(importStart).toHaveBeenCalledWith(
+      {
+        jobId: 'job-1',
+        keyB64: 'cek-base64',
+      },
+      signal,
+    )
     expect(result.jobId).toBe('job-1')
   })
 })

@@ -53,10 +53,21 @@ const defaults: Dependencies = {
 }
 
 function emptyReport(): NativeRestoreResult['report'] {
-  // prettier-ignore
-  return Object.fromEntries(
-    NATIVE_RESTORE_KINDS.map((kind) => [kind, { imported: 0, skipped: 0, failed: 0, blocked: 0, warnings: [], errors: [] }]),
-  ) as unknown as NativeRestoreResult['report']
+  const empty = (): NativeRestoreCount => ({
+    imported: 0,
+    skipped: 0,
+    failed: 0,
+    blocked: 0,
+    warnings: [],
+    errors: [],
+  })
+  return {
+    projects: empty(),
+    project_documents: empty(),
+    cloud_chats: empty(),
+    local_chats: empty(),
+    attachments: empty(),
+  }
 }
 
 // prettier-ignore
@@ -83,6 +94,60 @@ function applyImage(chat: Chat, image: NativeBackupImage, bytes: Uint8Array) {
   } else {
     // prettier-ignore
     message.attachments![index] = { id: attachment.id, type: 'image', fileName: image.fileName, mimeType: image.mimeType, fileSize: image.sizeBytes, description: image.description, base64 }
+  }
+}
+
+function normalizeChat(
+  source: ValidatedNativeRestore['local']['chats'][number],
+  id: string,
+  ownerId: string,
+  projectId: string | undefined,
+  images: ValidatedNativeRestore['local']['images'],
+): Chat {
+  const imageById = new Map(
+    images.map(({ metadata }) => [metadata.id, metadata]),
+  )
+  return {
+    id,
+    title: source.title,
+    titleState: source.titleState,
+    messages: source.messages.map((message) => ({
+      ...message,
+      timestamp: new Date(message.timestamp),
+      imageData: message.imageData?.map(({ mimeType }) => ({
+        base64: '',
+        mimeType,
+      })),
+      attachments: message.attachments?.map((attachment) => {
+        if (attachment.type === 'document') {
+          return {
+            ...attachment,
+            pages: attachment.pages?.map(({ imageId: _imageId, ...page }) => ({
+              ...page,
+              image: '',
+            })),
+          }
+        }
+        const image = imageById.get(attachment.imageId)
+        if (!image) throw new Error('Backup image attachment is missing')
+        return {
+          id: attachment.id,
+          type: 'image' as const,
+          fileName: image.fileName,
+          mimeType: image.mimeType,
+          fileSize: image.sizeBytes,
+          description: image.description,
+        }
+      }),
+    })),
+    createdAt: new Date(source.createdAt),
+    updatedAt: source.updatedAt,
+    projectId,
+    presetId: source.presetId,
+    model: source.model,
+    webSearchEnabled: source.webSearchEnabled,
+    isLocalOnly: true,
+    syncUserId: ownerId,
   }
 }
 
@@ -146,16 +211,7 @@ async function restoreLocalChats(
       ({ metadata }) => metadata.chatId === source.id,
     )
     try {
-      const chat = {
-        ...source,
-        id,
-        projectId,
-        // prettier-ignore
-        messages: source.messages.map((message) => ({ ...message, timestamp: new Date(message.timestamp), attachments: message.attachments?.map((attachment) => attachment.type === 'document' ? { ...attachment, pages: attachment.pages?.map(({ imageId: _imageId, ...page }) => ({ ...page, image: '' })) } : attachment) })),
-        createdAt: new Date(source.createdAt),
-        isLocalOnly: true,
-        syncUserId: ownerId,
-      } as unknown as Chat
+      const chat = normalizeChat(source, id, ownerId, projectId, sourceImages)
       // prettier-ignore
       await dependencies.forEachImage(sourceImages, ({ metadata, bytes }) => applyImage(chat, metadata, bytes), { signal })
       if (!(await dependencies.saveChat(chat, true)))
