@@ -41,7 +41,10 @@ async function readChunk(file: File, index: number): Promise<Uint8Array> {
   return new Uint8Array(await file.slice(start, end).arrayBuffer())
 }
 
-async function hashFileByChunk(file: File): Promise<{
+async function hashFileByChunk(
+  file: File,
+  signal?: AbortSignal,
+): Promise<{
   archiveSha256: string
   chunkSha256s: string[]
 }> {
@@ -50,6 +53,7 @@ async function hashFileByChunk(file: File): Promise<{
   const chunkSha256s: string[] = []
 
   for (let index = 0; index < totalChunks; index++) {
+    signal?.throwIfAborted()
     const chunk = await readChunk(file, index)
     archiveHash.update(chunk)
     chunkSha256s.push(bytesToHex(sha256(chunk)))
@@ -64,6 +68,7 @@ async function hashFileByChunk(file: File): Promise<{
 export async function runOffDeviceImport(
   source: ImportSource,
   file: File,
+  options: { signal?: AbortSignal } = {},
 ): Promise<OffDeviceImportResult> {
   if (file.size === 0) {
     throw new Error('The export file is empty')
@@ -73,29 +78,35 @@ export async function runOffDeviceImport(
   }
 
   const totalChunks = Math.ceil(file.size / IMPORT_CHUNK_BYTES)
-  const { archiveSha256, chunkSha256s } = await hashFileByChunk(file)
+  const { archiveSha256, chunkSha256s } = await hashFileByChunk(
+    file,
+    options.signal,
+  )
 
-  const { job_id, upload_id } = await importCreate({
-    source,
-    totalBytes: file.size,
-    totalChunks,
-    archiveSha256,
-  })
+  const { job_id, upload_id } = await importCreate(
+    { source, totalBytes: file.size, totalChunks, archiveSha256 },
+    options.signal,
+  )
 
   for (let index = 0; index < totalChunks; index++) {
+    options.signal?.throwIfAborted()
     const chunk = await readChunk(file, index)
-    await importUploadChunk({
-      uploadId: upload_id,
-      chunkIndex: index,
-      chunkSha256: chunkSha256s[index],
-      data: chunk,
-    })
+    await importUploadChunk(
+      {
+        uploadId: upload_id,
+        chunkIndex: index,
+        chunkSha256: chunkSha256s[index],
+        data: chunk,
+      },
+      options.signal,
+    )
   }
 
-  const status = await importStart({
-    jobId: job_id,
-    keyB64: requirePrimaryKeyB64(),
-  })
+  options.signal?.throwIfAborted()
+  const status = await importStart(
+    { jobId: job_id, keyB64: requirePrimaryKeyB64() },
+    options.signal,
+  )
 
   return { jobId: job_id, status }
 }

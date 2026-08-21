@@ -405,7 +405,7 @@ export interface SearchReindexStatusResponse {
 /*  Off-device chat import                                                    */
 /* -------------------------------------------------------------------------- */
 
-export type ImportSource = 'chatgpt' | 'claude' | 'tinfoil'
+export type ImportSource = 'chatgpt' | 'claude' | 'tinfoil' | 'tinfoil_backup'
 
 export type ImportJobStatus =
   'idle' | 'staging' | 'running' | 'completed' | 'failed'
@@ -442,10 +442,17 @@ export interface ImportStartRequest {
 
 export interface ImportStatusResponse {
   status: ImportJobStatus
+  phase?: string
   imported: number
   failed: number
   total: number
+  counts?: Record<
+    string,
+    { imported: number; skipped: number; failed: number; blocked: number }
+  >
+  warnings?: string[]
   errors?: string[]
+  project_mappings?: Record<string, string>
   job_id?: string
 }
 
@@ -457,27 +464,41 @@ export interface ImportStatusResponse {
  */
 export async function importCreate(
   req: ImportCreateRequest,
+  signal?: AbortSignal,
 ): Promise<ImportCreateResponse> {
+  signal?.throwIfAborted()
   const client = await getSyncEnclaveClient()
-  return client.post<ImportCreateResponse>('/v1/import/create', {
-    source: req.source,
-    total_bytes: req.totalBytes,
-    total_chunks: req.totalChunks,
-    archive_sha256: req.archiveSha256,
-  })
+  return client.post<ImportCreateResponse>(
+    '/v1/import/create',
+    {
+      source: req.source,
+      total_bytes: req.totalBytes,
+      total_chunks: req.totalChunks,
+      archive_sha256: req.archiveSha256,
+    },
+    undefined,
+    { signal },
+  )
 }
 
 /** Stage one archive chunk. Replaying the same index+hash is idempotent. */
 export async function importUploadChunk(
   req: ImportUploadChunkRequest,
+  signal?: AbortSignal,
 ): Promise<OKResponse> {
+  signal?.throwIfAborted()
   const client = await getSyncEnclaveClient()
-  return client.post<OKResponse>('/v1/import/upload', {
-    upload_id: req.uploadId,
-    chunk_index: req.chunkIndex,
-    chunk_sha256: req.chunkSha256,
-    data: bytesToB64(req.data),
-  })
+  return client.post<OKResponse>(
+    '/v1/import/upload',
+    {
+      upload_id: req.uploadId,
+      chunk_index: req.chunkIndex,
+      chunk_sha256: req.chunkSha256,
+      data: bytesToB64(req.data),
+    },
+    undefined,
+    { signal },
+  )
 }
 
 /**
@@ -487,22 +508,31 @@ export async function importUploadChunk(
  */
 export async function importStart(
   req: ImportStartRequest,
+  signal?: AbortSignal,
 ): Promise<ImportStatusResponse> {
+  signal?.throwIfAborted()
   const client = await getSyncEnclaveClient()
-  return client.post<ImportStatusResponse>('/v1/import/start', {
-    job_id: req.jobId,
-    key: req.keyB64,
-  })
+  return client.post<ImportStatusResponse>(
+    '/v1/import/start',
+    { job_id: req.jobId, key: req.keyB64 },
+    undefined,
+    { signal },
+  )
 }
 
 /** Poll an import job's progress while the tab stays open. */
 export async function importStatus(
   jobId: string,
+  signal?: AbortSignal,
 ): Promise<ImportStatusResponse> {
+  signal?.throwIfAborted()
   const client = await getSyncEnclaveClient()
-  const resp = await client.post<ImportStatusResponse>('/v1/import/status', {
-    job_id: jobId,
-  })
+  const resp = await client.post<ImportStatusResponse>(
+    '/v1/import/status',
+    { job_id: jobId },
+    undefined,
+    { signal },
+  )
   return { ...resp, errors: resp.errors ?? [] }
 }
 

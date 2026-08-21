@@ -110,6 +110,7 @@ import { normalizeChatFont, type ChatFont } from './hooks/use-chat-font'
 import { usePromptLibrary } from './hooks/use-prompt-library'
 import { MfaSettingsCard } from './mfa-settings-card'
 import { NativeBackupExport } from './native-backup-export'
+import { NativeBackupRestore } from './native-backup-restore'
 import {
   EMPTY_PRESET_EDITOR_STATE,
   PresetEditor,
@@ -333,7 +334,7 @@ type SettingsModalProps = {
   isClient: boolean
   defaultSystemPrompt?: string
   onCloudSyncSetupClick?: () => void
-  onChatsUpdated?: () => void
+  onChatsUpdated?: () => void | Promise<void>
   isSignedIn?: boolean
   isPremium?: boolean
   encryptionKey: string | null
@@ -3361,6 +3362,13 @@ ${encryptionKey.replace('key_', '')}
                     )}
                     <NativeBackupExport
                       available={Boolean(isSignedIn && encryptionKey)}
+                    />
+                    <NativeBackupRestore
+                      available={Boolean(
+                        isSignedIn && user?.id && encryptionKey,
+                      )}
+                      ownerId={user?.id}
+                      onChatsUpdated={onChatsUpdated}
                     />
                   </div>
 
