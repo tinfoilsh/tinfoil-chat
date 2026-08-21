@@ -122,8 +122,6 @@ import type { Attachment, Chat } from './types'
 const CHARS = '0123456789ABCDEF!@#$%^&*()_+<>?/'
 
 const DASHBOARD_URL = 'https://dash.tinfoil.sh'
-const NATIVE_RESTORE_ENABLED =
-  process.env.NEXT_PUBLIC_NATIVE_BACKUP_RESTORE_ENABLED === 'true'
 
 const DELETE_ALL_CHATS_CONFIRM_PHRASE = 'delete all chats'
 const DELETE_ALL_PROJECTS_CONFIRM_PHRASE = 'delete all projects'
@@ -3367,10 +3365,7 @@ ${encryptionKey.replace('key_', '')}
                     />
                     <NativeBackupRestore
                       available={Boolean(
-                        isSignedIn &&
-                        user?.id &&
-                        encryptionKey &&
-                        NATIVE_RESTORE_ENABLED,
+                        isSignedIn && user?.id && encryptionKey,
                       )}
                       ownerId={user?.id}
                       onChatsUpdated={onChatsUpdated}
