@@ -1920,7 +1920,6 @@ export function SettingsModal({
     const guard = cloudSync.createAccountOperationGuard()
     try {
       const deleted = await projectStorage.deleteAllProjects(guard)
-      guard.assertCurrent()
       setProjectExportResult(null)
       try {
         await projectCache.clear()
