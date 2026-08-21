@@ -119,6 +119,11 @@ import { AskSidebar } from './ask-sidebar'
 import { ChatAnnouncer } from './chat-announcer'
 import { ChatInput } from './chat-input'
 import { ChatMessages } from './chat-messages'
+import {
+  getChatContentBottomScrollTop,
+  getChatSpacerHeight,
+  getDistanceFromChatContentBottom,
+} from './chat-scroll'
 import { ChatSidebar } from './chat-sidebar'
 import { PromptPresetSuggestions } from './components/prompt-preset-suggestions'
 import { CONSTANTS } from './constants'
@@ -830,13 +835,18 @@ export function ChatInterface({
   const scrollToBottom = useCallback((smooth = true) => {
     if (scrollContainerRef.current) {
       const el = scrollContainerRef.current
+      const top = getChatContentBottomScrollTop(
+        el.scrollHeight,
+        el.clientHeight,
+        getChatSpacerHeight(el),
+      )
       if (smooth) {
         el.scrollTo({
-          top: el.scrollHeight,
+          top,
           behavior: 'smooth',
         })
       } else {
-        el.scrollTop = el.scrollHeight
+        el.scrollTop = top
       }
     }
   }, [])
@@ -3088,14 +3098,14 @@ export function ChatInterface({
     const el = scrollContainerRef.current
     if (!el) return
 
-    // Check if spacer is present and get its height
-    const spacer = el.querySelector('[data-spacer]') as HTMLElement | null
-    const spacerHeight = spacer?.offsetHeight || 0
-
     // Show button when user has scrolled up from the bottom by more than threshold
     // Subtract spacer height since it's empty space, not content
-    const distanceFromBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight - spacerHeight
+    const distanceFromBottom = getDistanceFromChatContentBottom(
+      el.scrollHeight,
+      el.scrollTop,
+      el.clientHeight,
+      getChatSpacerHeight(el),
+    )
     const SCROLL_THRESHOLD = 200
 
     setShowScrollButton(distanceFromBottom > SCROLL_THRESHOLD)
