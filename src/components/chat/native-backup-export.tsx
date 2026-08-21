@@ -13,13 +13,7 @@ const progressLabel: Record<NativeBackupExportProgress, string> = {
   writing: 'Saving archive...',
 }
 
-export function NativeBackupExport({
-  available,
-  runExport = runNativeBackupExport,
-}: {
-  available: boolean
-  runExport?: typeof runNativeBackupExport
-}) {
+export function NativeBackupExport({ available }: { available: boolean }) {
   const [showWarning, setShowWarning] = useState(false)
   const [progress, setProgress] = useState<NativeBackupExportProgress | null>(
     null,
@@ -49,7 +43,7 @@ export function NativeBackupExport({
     controller.current = current
     const isCurrent = () => controller.current === current
     try {
-      await runExport(current.signal, (value) => {
+      await runNativeBackupExport(current.signal, (value) => {
         if (isCurrent()) setProgress(value)
       })
       if (!isCurrent() || !availableRef.current) return
