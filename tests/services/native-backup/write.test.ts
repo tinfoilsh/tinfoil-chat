@@ -1,6 +1,7 @@
 import {
   NATIVE_BACKUP_WRITER_LIMITS,
   NativeBackupWriterError,
+  prepareNativeBackupArchiveDestination,
   writeNativeBackupArchive,
   type NativeBackupArchiveInput,
   type NativeBackupWriterDependencies,
@@ -102,6 +103,28 @@ function mockDependencies(
 }
 
 describe('native backup archive writer', () => {
+  it('uses a stable filename before archive collection', async () => {
+    const original = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'showSaveFilePicker',
+    )
+    const picker = vi.fn(async () => ({}) as FileSystemFileHandle)
+    Object.defineProperty(globalThis, 'showSaveFilePicker', {
+      configurable: true,
+      value: picker,
+    })
+    try {
+      await prepareNativeBackupArchiveDestination()
+      expect(picker).toHaveBeenCalledWith(
+        expect.objectContaining({ suggestedName: 'tinfoil-backup.zip' }),
+      )
+    } finally {
+      if (original)
+        Object.defineProperty(globalThis, 'showSaveFilePicker', original)
+      else Reflect.deleteProperty(globalThis, 'showSaveFilePicker')
+    }
+  })
+
   it('writes the manifest and files one at a time in deterministic path order', async () => {
     const { dependencies, events } = mockDependencies()
 
