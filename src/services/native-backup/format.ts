@@ -301,7 +301,17 @@ export function formatNativeBackupV1(input: NativeBackupFormatInput): {
     })),
   }
   const manifestBytes = jsonBytes(manifest)
-  assertValidNativeBackupV1(manifestBytes, files)
+  assertSemanticContent(
+    projects,
+    documents,
+    [...cloudChats, ...localChats],
+    relationships,
+    images,
+  )
+  assertNativeBackupSizeLimits(
+    manifestBytes.length,
+    files.map(({ path, bytes }) => ({ path, sizeBytes: bytes.length })),
+  )
   return { manifestBytes, files }
 }
 
