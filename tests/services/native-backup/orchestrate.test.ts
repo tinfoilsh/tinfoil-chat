@@ -200,6 +200,47 @@ describe('restoreNativeBackup', () => {
     expect(result.report.projects).toMatchObject({ imported: 0, skipped: 1 })
   })
 
+  it('preserves aggregate failures and all image counts without service counts', async () => {
+    const value = validated()
+    value.backup.counts = {
+      projects: 1,
+      project_documents: 0,
+      cloud_chats: 1,
+      local_chats: 0,
+      relationships: 2,
+      images: 2,
+      files: 0,
+    }
+    value.cloud!.manifest.counts = {
+      projects: 1,
+      documents: 0,
+      chats: 1,
+      blobs: 0,
+    }
+    dependencies.validate.mockResolvedValue(value)
+    dependencies.upload.mockResolvedValue({
+      jobId: 'job-1',
+      status: {
+        status: 'completed',
+        imported: 1,
+        failed: 1,
+        total: 2,
+      },
+    })
+
+    const result = await restoreNativeBackup(
+      sourceFile,
+      'owner-a',
+      new AbortController().signal,
+      {},
+      dependencies,
+    )
+
+    expect(result.report.cloud_chats.failed).toBe(1)
+    expect(result.report.attachments.imported).toBe(2)
+    expect(result.state).toBe('partial')
+  })
+
   it('streams local images and counts attachments after each chat outcome', async () => {
     const value = validated(false)
     value.local.chats[0].messages[0].attachments = [

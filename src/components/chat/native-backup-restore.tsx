@@ -50,18 +50,28 @@ export function NativeBackupRestore({
         // prettier-ignore
         onPhase: (value) => { if (!dismissed.current && value) setPhase(value) },
       })
-      if (next.state === 'completed' || next.state === 'partial')
-        await onChatsUpdated?.()
+      let refreshFailed = false
+      if (next.state === 'completed' || next.state === 'partial') {
+        try {
+          await onChatsUpdated?.()
+        } catch {
+          refreshFailed = true
+        }
+      }
       if (!dismissed.current || next.state !== 'pending') setResult(next)
       if (!dismissed.current || next.state !== 'pending')
         setMessage(
-          next.state === 'pending'
-            ? "The cloud restore is still running. We'll email you when it finishes. No local chats were restored; reselect this archive afterward to restore them."
-            : next.state === 'failed'
-              ? 'The cloud restore failed. No local chats were restored.'
-              : next.state === 'partial'
-                ? 'Backup restored with warnings.'
-                : 'Backup restored successfully.',
+          refreshFailed
+            ? next.state === 'partial'
+              ? 'Backup restored with warnings, but chats could not be refreshed. Reload to see restored chats.'
+              : 'Backup restored successfully, but chats could not be refreshed. Reload to see restored chats.'
+            : next.state === 'pending'
+              ? "The cloud restore is still running. We'll email you when it finishes. No local chats were restored; reselect this archive afterward to restore them."
+              : next.state === 'failed'
+                ? 'The cloud restore failed. No local chats were restored.'
+                : next.state === 'partial'
+                  ? 'Backup restored with warnings.'
+                  : 'Backup restored successfully.',
         )
     } catch (cause) {
       if (!current.signal.aborted)

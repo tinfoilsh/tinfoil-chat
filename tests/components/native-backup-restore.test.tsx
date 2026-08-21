@@ -116,7 +116,11 @@ describe('NativeBackupRestore', () => {
 
     selectArchive(container)
 
-    expect(await screen.findByText('Chat reload failed')).toBeVisible()
+    expect(
+      await screen.findByText(
+        'Backup restored successfully, but chats could not be refreshed. Reload to see restored chats.',
+      ),
+    ).toBeVisible()
     expect(screen.queryByText('Backup restored successfully.')).toBeNull()
   })
 

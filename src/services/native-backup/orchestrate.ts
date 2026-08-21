@@ -89,7 +89,11 @@ function applyImage(chat: Chat, image: NativeBackupImage, bytes: Uint8Array) {
 function applyCloudReport(
   status: ImportStatusResponse,
   report: NativeRestoreResult['report'],
-  fallback: NonNullable<ValidatedNativeRestore['cloud']>['manifest']['counts'],
+  fallback: NonNullable<
+    ValidatedNativeRestore['cloud']
+  >['manifest']['counts'] & {
+    images: number
+  },
 ) {
   // prettier-ignore
   const aliases: Record<string, NativeRestoreKind> = { project: 'projects', document: 'project_documents', chat: 'cloud_chats' }
@@ -98,10 +102,11 @@ function applyCloudReport(
     if (target) Object.assign(report[target], outcome)
   }
   if (status.status === 'completed' && !status.counts) {
+    report.cloud_chats.failed = status.failed
     report.projects.imported = fallback.projects
     report.project_documents.imported = fallback.documents
     report.cloud_chats.imported = fallback.chats
-    report.attachments.imported = fallback.blobs
+    report.attachments.imported = fallback.images
   }
   report.attachments.warnings.push(...(status.warnings ?? []))
   report.cloud_chats.errors.push(...(status.errors ?? []))
@@ -203,7 +208,13 @@ export async function restoreNativeBackup(
     } finally {
       if (upload.kind === 'file') await upload.cleanup()
     }
-    applyCloudReport(status!, report, validated.cloud.manifest.counts)
+    applyCloudReport(status!, report, {
+      ...validated.cloud.manifest.counts,
+      images:
+        (validated.backup.counts?.images ??
+          validated.cloud.manifest.counts.blobs) -
+        validated.local.images.length,
+    })
     if (status!.status !== 'completed' && status!.status !== 'failed')
       return { state: 'pending', jobId, report }
     if (status!.status === 'failed') return { state: 'failed', jobId, report }
