@@ -46,11 +46,11 @@ export type NativeRestoreDependencies = { openArchive(file: File): Promise<Nativ
 // prettier-ignore
 export type NativeCloudImportManifestV1 = { format: 'tinfoil-native-cloud-import'; version: 1; source_backup_id: string; counts: { projects: number; documents: number; chats: number; blobs: number }; entities: Array<{ kind: 'project' | 'document' | 'chat'; source_id: string; project_source_id?: string; path: string; sha256: string; size_bytes: number }>; blobs: Array<{ path: string; sha256: string; size_bytes: number }> }
 // prettier-ignore
-export type NativeCloudUpload = { kind: 'blob'; blob: Blob; filename: string; sizeBytes: number } | { kind: 'file'; handle: FileSystemFileHandle; filename: string; sizeBytes: number; cleanup(): Promise<void> }
+export type NativeCloudUpload = { kind: 'blob'; blob: Blob; filename: string } | { kind: 'file'; handle: FileSystemFileHandle; filename: string; cleanup(): Promise<void> }
 // prettier-ignore
 export type NativeBackupImageSource = { metadata: NativeBackupImage; source: { file: File; path: string; sizeBytes: number; sha256: string } }
 // prettier-ignore
-export type ValidatedNativeRestore = { backup: NativeBackupManifestV1; local: { chats: NativeBackupChat[]; relationships: NativeBackupRelationships; images: NativeBackupImageSource[] }; cloud: { manifest: NativeCloudImportManifestV1; upload: NativeCloudUpload } | null }
+export type ValidatedNativeRestore = { backup: NativeBackupManifestV1; local: { chats: NativeBackupChat[]; images: NativeBackupImageSource[] }; cloud: { manifest: NativeCloudImportManifestV1; upload: NativeCloudUpload } | null }
 // prettier-ignore
 type ParsedBackup = { backup: NativeBackupManifestV1; projects: NativeBackupProject[]; documents: NativeBackupProjectDocument[]; cloudChats: NativeBackupChat[]; localChats: NativeBackupChat[]; relationships: NativeBackupRelationships; images: Array<{ metadata: NativeBackupImage; entry: NativeRestoreEntry; sha256: string }> }
 function fail(message: string): never {
@@ -309,9 +309,9 @@ async function createCloudSink(
         await target!.close()
         committed = true
         // prettier-ignore
-        if (handle) return { kind: 'file', handle, filename: 'tinfoil-cloud-import.zip', sizeBytes: size, cleanup: () => root!.removeEntry(outputName) }
+        if (handle) return { kind: 'file', handle, filename: 'tinfoil-cloud-import.zip', cleanup: () => root!.removeEntry(outputName) }
         // prettier-ignore
-        return { kind: 'blob', blob: await blobWriter!.getData(), filename: 'tinfoil-cloud-import.zip', sizeBytes: size }
+        return { kind: 'blob', blob: await blobWriter!.getData(), filename: 'tinfoil-cloud-import.zip' }
       },
       abort,
     }
@@ -451,7 +451,7 @@ export async function validateAndPackageNativeBackup(
       cloud = { manifest, upload }
     }
     // prettier-ignore
-    return { backup: value.backup, local: { chats: value.localChats, relationships: { projectChats: value.relationships.projectChats.filter(({ chatId }) => localIds.has(chatId)), projectDocuments: [], chatImages: value.relationships.chatImages.filter(({ chatId }) => localIds.has(chatId)) }, images: localImages }, cloud }
+    return { backup: value.backup, local: { chats: value.localChats, images: localImages }, cloud }
   } catch (error) {
     await sink?.abort(error)
     options.signal?.throwIfAborted()

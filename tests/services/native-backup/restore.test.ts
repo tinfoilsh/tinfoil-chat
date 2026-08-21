@@ -172,7 +172,6 @@ describe('native backup restore validation and cloud packaging', () => {
     expect(result.local.images.map(({ metadata }) => metadata.id)).toEqual([
       'local-image',
     ])
-    expect(result.local.relationships.projectChats).toEqual([])
     expect(result.cloud?.manifest.counts).toEqual({
       projects: 1,
       documents: 1,
