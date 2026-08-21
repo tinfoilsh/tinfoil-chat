@@ -16,7 +16,7 @@ describe('NativeBackupExport', () => {
     mocks.runExport.mockReset()
   })
 
-  it('hides export when its account, flag, or key gate is unavailable', () => {
+  it('hides export when an availability prerequisite is missing', () => {
     render(<NativeBackupExport available={false} />)
     expect(
       screen.queryByRole('button', { name: 'Create Tinfoil Backup' }),
