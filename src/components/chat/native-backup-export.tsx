@@ -32,6 +32,7 @@ export function NativeBackupExport({
 
   useEffect(() => {
     if (!available) {
+      controller.current = null
       setShowWarning(false)
       setProgress(null)
       setMessage(null)
@@ -46,17 +47,22 @@ export function NativeBackupExport({
     setFailed(false)
     const current = new AbortController()
     controller.current = current
+    const isCurrent = () => controller.current === current
     try {
-      await runExport(current.signal, setProgress)
-      if (!availableRef.current) return
+      await runExport(current.signal, (value) => {
+        if (isCurrent()) setProgress(value)
+      })
+      if (!isCurrent() || !availableRef.current) return
       setMessage('Backup saved successfully.')
     } catch (error) {
-      if (current.signal.aborted && !availableRef.current) return
+      if (!isCurrent()) return
       setFailed(true)
       setMessage(nativeBackupExportError(error))
     } finally {
-      if (controller.current === current) controller.current = null
-      setProgress(null)
+      if (isCurrent()) {
+        controller.current = null
+        setProgress(null)
+      }
     }
   }
 

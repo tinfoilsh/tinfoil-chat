@@ -82,4 +82,42 @@ describe('NativeBackupExport', () => {
     view.rerender(<NativeBackupExport available runExport={runExport} />)
     expect(screen.queryByText(/No backup file was saved/)).toBeNull()
   })
+
+  it('ignores stale completion from an invalidated export', async () => {
+    let rejectFirst!: (reason: unknown) => void
+    const runExport = vi
+      .fn()
+      .mockImplementationOnce(
+        (signal: AbortSignal, onProgress: (value: 'collecting') => void) => {
+          onProgress('collecting')
+          return new Promise<void>((_resolve, reject) => {
+            rejectFirst = reject
+            signal.addEventListener('abort', () => undefined)
+          })
+        },
+      )
+      .mockResolvedValueOnce(undefined)
+    const view = render(<NativeBackupExport available runExport={runExport} />)
+    const start = () => {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Create Tinfoil Backup' }),
+      )
+      fireEvent.click(
+        screen.getByRole('button', { name: 'I understand, create backup' }),
+      )
+    }
+    start()
+    await waitFor(() => expect(runExport).toHaveBeenCalledOnce())
+    view.rerender(
+      <NativeBackupExport available={false} runExport={runExport} />,
+    )
+    view.rerender(<NativeBackupExport available runExport={runExport} />)
+    start()
+
+    expect(await screen.findByText('Backup saved successfully.')).toBeVisible()
+    rejectFirst(new DOMException('Canceled', 'AbortError'))
+    await Promise.resolve()
+
+    expect(screen.getByText('Backup saved successfully.')).toBeVisible()
+  })
 })
