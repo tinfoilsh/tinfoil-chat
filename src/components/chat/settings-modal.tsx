@@ -1918,6 +1918,7 @@ export function SettingsModal({
     setIsDeletingAllProjects(true)
     try {
       const result = await projectStorage.deleteAllProjects()
+      setProjectExportResult(null)
       try {
         await projectCache.clear()
       } catch (cacheError) {
