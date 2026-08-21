@@ -12,7 +12,6 @@ export interface NativeBackupImageCandidate {
   legacyIndex?: number
   fileName: string
   mimeType: string
-  sizeBytes?: number
   description?: string
 }
 export type NativeBackupImageCollector = (
@@ -153,12 +152,6 @@ function cleanAttachments(
           attachmentId,
           fileName: String(attachment.fileName),
           mimeType: String(attachment.mimeType ?? 'application/octet-stream'),
-          sizeBytes:
-            typeof attachment.fileSize === 'number' &&
-            Number.isInteger(attachment.fileSize) &&
-            attachment.fileSize >= 0
-              ? attachment.fileSize
-              : undefined,
           description:
             typeof attachment.description === 'string'
               ? attachment.description
