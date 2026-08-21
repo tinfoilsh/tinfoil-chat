@@ -24,11 +24,6 @@ function validated(cloud = true): ValidatedNativeRestore {
     backup: { backup_id: 'backup-1' } as ValidatedNativeRestore['backup'],
     local: {
       chats: [structuredClone(localChat)],
-      relationships: {
-        projectChats: [{ projectId: 'source-project', chatId: 'source-chat' }],
-        projectDocuments: [],
-        chatImages: [],
-      },
       images: [],
     },
     cloud: cloud
@@ -45,7 +40,6 @@ function validated(cloud = true): ValidatedNativeRestore {
             kind: 'blob',
             blob: cloudFile,
             filename: 'cloud.zip',
-            sizeBytes: cloudFile.size,
           },
         }
       : null,
