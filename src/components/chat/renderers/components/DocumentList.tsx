@@ -1,8 +1,8 @@
 import { XMarkIcon } from '@heroicons/react/24/outline'
+import { TfDocument } from '@tinfoilsh/tinfoil-icons'
 import { memo, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  BsFile,
   BsFiletypeCss,
   BsFiletypeCsv,
   BsFiletypeDoc,
@@ -112,7 +112,7 @@ function getFileIcon(filename: string, size: number = 20) {
     case 'mov':
       return <BsFiletypeMov size={size} className={iconClass} />
     default:
-      return <BsFile size={size} className={iconClass} />
+      return <TfDocument width={size} size={size} className={iconClass} />
   }
 }
 

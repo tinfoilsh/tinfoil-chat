@@ -3,15 +3,9 @@ import { useToast } from '@/hooks/use-toast'
 import { uploadSharedChat } from '@/services/share-api'
 import { shareSeal as enclaveShareSeal } from '@/services/sync-enclave/sync-api'
 import type { ShareableChatData } from '@/utils/compression'
-import {
-  CheckIcon,
-  DocumentDuplicateIcon,
-  GlobeAltIcon,
-  LinkIcon,
-  LockClosedIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline'
+import { CheckIcon, LinkIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
+import { TfCopy, TfGlobe, TfLockLocked } from '@tinfoilsh/tinfoil-icons'
 import { useEffect, useRef, useState } from 'react'
 import { Card, CardContent } from '../ui/card'
 import {
@@ -364,9 +358,12 @@ export function ShareModal({
                     <div className="flex items-start gap-4 p-4">
                       <div className="mt-1 rounded-full bg-surface-chat p-2 text-content-secondary">
                         {isShareEnabled ? (
-                          <GlobeAltIcon className="h-5 w-5" />
+                          <TfGlobe className="h-5 w-5" aria-hidden="true" />
                         ) : (
-                          <LockClosedIcon className="h-5 w-5" />
+                          <TfLockLocked
+                            className="h-5 w-5"
+                            aria-hidden="true"
+                          />
                         )}
                       </div>
                       <div className="flex-1 space-y-4">
@@ -394,7 +391,10 @@ export function ShareModal({
                               aria-label="Make this conversation shareable with anyone who has the link"
                               className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-border-subtle bg-surface-chat transition-all checked:border-brand-accent-dark checked:bg-brand-accent-dark"
                             />
-                            <CheckIcon className="pointer-events-none absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100" />
+                            <CheckIcon
+                              className="pointer-events-none absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100"
+                              aria-hidden="true"
+                            />
                           </div>
                           <span className="text-sm font-medium text-content-primary">
                             Make this conversation shareable with anyone who has
@@ -416,7 +416,10 @@ export function ShareModal({
                                 </>
                               ) : (
                                 <>
-                                  <LinkIcon className="h-4 w-4" />
+                                  <LinkIcon
+                                    className="h-4 w-4"
+                                    aria-hidden="true"
+                                  />
                                   Create share link
                                 </>
                               )}
@@ -441,12 +444,18 @@ export function ShareModal({
                             >
                               {isLinkCopied ? (
                                 <>
-                                  <CheckIcon className="h-4 w-4" />
+                                  <CheckIcon
+                                    className="h-4 w-4"
+                                    aria-hidden="true"
+                                  />
                                   Copied!
                                 </>
                               ) : (
                                 <>
-                                  <DocumentDuplicateIcon className="h-4 w-4" />
+                                  <TfCopy
+                                    className="h-4 w-4"
+                                    aria-hidden="true"
+                                  />
                                   Copy
                                 </>
                               )}
@@ -477,7 +486,7 @@ export function ShareModal({
                         </>
                       ) : (
                         <>
-                          <DocumentDuplicateIcon className="h-3 w-3" />
+                          <TfCopy className="h-3 w-3" aria-hidden="true" />
                           Copy to Clipboard
                         </>
                       )}

@@ -3,16 +3,13 @@ import { acquireInteractionLock } from '@/utils/interaction-lock'
 import {
   ArrowLeftIcon,
   CheckIcon,
-  PencilSquareIcon,
   PlusIcon,
-  SparklesIcon,
-  Squares2X2Icon,
   StarIcon,
-  TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
+import { TfStars, TfTools, TfTrash, TfWriting } from '@tinfoilsh/tinfoil-icons'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ConfirmDialog } from './components/confirm-dialog'
 import { CONSTANTS } from './constants'
@@ -297,8 +294,8 @@ export function PromptLibraryModal({
                       <ArrowLeftIcon className="h-5 w-5" aria-hidden="true" />
                     </button>
                   )}
-                  <Squares2X2Icon
-                    className="hidden h-5 w-5 text-content-secondary md:block"
+                  <TfTools
+                    className="hidden h-5 w-5 !text-content-secondary md:block"
                     aria-hidden="true"
                   />
                   <DialogPrimitive.Title className="truncate text-base font-semibold text-content-primary md:text-lg">
@@ -532,7 +529,7 @@ function PresetDetail({
                   onClick={onUseThis}
                   className="flex w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-brand-accent-dark px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-accent-dark/90"
                 >
-                  <SparklesIcon className="h-4 w-4" />
+                  <TfStars className="h-4 w-4" aria-hidden="true" />
                   Use for this chat
                 </button>
               )}
@@ -557,7 +554,7 @@ function PresetDetail({
               onClick={onUseThis}
               className="flex w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-brand-accent-dark px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-accent-dark/90 md:w-auto"
             >
-              <SparklesIcon className="h-4 w-4" />
+              <TfStars className="h-4 w-4" aria-hidden="true" />
               Use for this chat
             </button>
           )}
@@ -597,7 +594,7 @@ function PresetDetail({
             onClick={onEdit}
             className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-content-secondary transition-colors hover:bg-surface-chat hover:text-content-primary"
           >
-            <PencilSquareIcon className="h-3.5 w-3.5" />
+            <TfWriting className="h-3.5 w-3.5" aria-hidden="true" />
             Edit
           </button>
         )}
@@ -615,7 +612,7 @@ function PresetDetail({
             onClick={onDelete}
             className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-red-500 transition-colors hover:bg-red-500/10"
           >
-            <TrashIcon className="h-3.5 w-3.5" />
+            <TfTrash className="h-3.5 w-3.5" aria-hidden="true" />
             Delete
           </button>
         )}

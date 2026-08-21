@@ -69,33 +69,40 @@ import {
   ArrowPathIcon,
   ArrowTopRightOnSquareIcon,
   ArrowUpTrayIcon,
-  ChatBubbleLeftRightIcon,
   CheckCircleIcon,
   ChevronDownIcon,
-  ComputerDesktopIcon,
-  CreditCardIcon,
   EyeIcon,
   EyeSlashIcon,
-  MoonIcon,
-  PencilSquareIcon,
   PlusIcon,
-  Squares2X2Icon,
-  SunIcon,
-  TrashIcon,
-  UserCircleIcon,
-  UserIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
+import {
+  TfAdjustmentToggle,
+  TfCard,
+  TfChat2,
+  TfCloudSync,
+  TfComputer,
+  TfDownload,
+  TfKey,
+  TfLightbulb,
+  TfMoon,
+  TfNumber1,
+  TfNumber2,
+  TfNumber3,
+  TfNumber4,
+  TfPerson,
+  TfPersonKey,
+  TfShieldCheck,
+  TfSunLightMode,
+  TfTools,
+  TfTrash,
+  TfWriting,
+} from '@tinfoilsh/tinfoil-icons'
 import { AnimatePresence, motion } from 'framer-motion'
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AiOutlineCloudSync, AiOutlineExport } from 'react-icons/ai'
 import { BsQrCode } from 'react-icons/bs'
-import { GoPasskeyFill } from 'react-icons/go'
-import { HiOutlineAdjustmentsVertical } from 'react-icons/hi2'
-import { IoShieldCheckmark } from 'react-icons/io5'
 import { PiSignIn, PiSpinner } from 'react-icons/pi'
-import { RiLightbulbFill, RiShieldKeyholeFill } from 'react-icons/ri'
 import QRCode from 'react-qr-code'
 import { CloudSyncHealthCard } from './cloud-sync-health-card'
 import { ConfirmDialog } from './components/confirm-dialog'
@@ -189,10 +196,26 @@ const ScrambleText = ({
   )
 }
 
-const STEP_CIRCLE_CLASSES = cn(
-  'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
-  'bg-content-muted/20 text-content-secondary',
-)
+const STEP_ICONS = {
+  1: TfNumber1,
+  2: TfNumber2,
+  3: TfNumber3,
+  4: TfNumber4,
+} as const
+
+function StepNumber({ step }: { step: keyof typeof STEP_ICONS }) {
+  const Icon = STEP_ICONS[step]
+
+  return (
+    <>
+      <Icon
+        className="mt-1 h-3 w-3 shrink-0 !text-content-secondary"
+        aria-hidden="true"
+      />
+      <span className="sr-only">Step {step}:</span>
+    </>
+  )
+}
 
 export type SettingsTab =
   'general' | 'chat' | 'personalization' | 'prompts' | 'cloud-sync' | 'account'
@@ -271,7 +294,7 @@ function PasskeyBundleInventory({
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <GoPasskeyFill className="h-4 w-4 shrink-0 text-content-secondary" />
+                  <TfPersonKey className="h-4 w-4 shrink-0 text-content-secondary" />
                   <span className="truncate text-sm font-medium text-content-primary">
                     {isCurrentPlatform ? 'This platform' : 'Other platform'}
                   </span>
@@ -2141,33 +2164,33 @@ ${encryptionKey.replace('key_', '')}
   if (!isOpen) return null
 
   const navItems = [
-    { id: 'account' as const, label: 'Account', icon: UserCircleIcon },
+    { id: 'account' as const, label: 'Account', icon: TfPerson },
     {
       id: 'general' as const,
       label: 'General',
-      icon: HiOutlineAdjustmentsVertical,
+      icon: TfAdjustmentToggle,
     },
     {
       id: 'chat' as const,
       label: 'Chat Settings',
-      icon: ChatBubbleLeftRightIcon,
+      icon: TfChat2,
     },
     {
       id: 'personalization' as const,
       label: 'Personalization',
-      icon: UserIcon,
+      icon: TfPerson,
     },
     {
       id: 'prompts' as const,
       label: 'Prompts',
-      icon: Squares2X2Icon,
+      icon: TfTools,
     },
     ...(isSignedIn
       ? [
           {
             id: 'cloud-sync' as const,
             label: 'Cloud Sync',
-            icon: AiOutlineCloudSync,
+            icon: TfCloudSync,
           },
         ]
       : []),
@@ -2247,7 +2270,7 @@ ${encryptionKey.replace('key_', '')}
                 {item.id === 'account' && isSignedIn ? (
                   <UserAvatar size={16} />
                 ) : (
-                  <item.icon className="h-4 w-4" />
+                  <item.icon className="h-4 w-4" aria-hidden="true" />
                 )}
                 {item.label}
                 {item.id === 'cloud-sync' && syncNeedsAttention && (
@@ -2297,7 +2320,7 @@ ${encryptionKey.replace('key_', '')}
                 {item.id === 'account' && isSignedIn ? (
                   <UserAvatar size={20} />
                 ) : (
-                  <item.icon className="h-5 w-5" />
+                  <item.icon className="h-5 w-5" aria-hidden="true" />
                 )}
                 {item.label}
                 {item.id === 'cloud-sync' && syncNeedsAttention && (
@@ -2362,17 +2385,17 @@ ${encryptionKey.replace('key_', '')}
                           {
                             id: 'light' as const,
                             label: 'Light',
-                            icon: SunIcon,
+                            icon: TfSunLightMode,
                           },
                           {
                             id: 'dark' as const,
                             label: 'Dark',
-                            icon: MoonIcon,
+                            icon: TfMoon,
                           },
                           {
                             id: 'system' as const,
                             label: 'System',
-                            icon: ComputerDesktopIcon,
+                            icon: TfComputer,
                           },
                         ].map((theme) => (
                           <button
@@ -2385,7 +2408,10 @@ ${encryptionKey.replace('key_', '')}
                                 : 'border-border-subtle hover:border-border-strong',
                             )}
                           >
-                            <theme.icon className="h-5 w-5 text-content-primary" />
+                            <theme.icon
+                              className="h-5 w-5 !text-content-primary"
+                              aria-hidden="true"
+                            />
                             <span className="text-xs text-content-secondary">
                               {theme.label}
                             </span>
@@ -3322,7 +3348,10 @@ ${encryptionKey.replace('key_', '')}
                       className="flex w-full items-center justify-between p-4"
                     >
                       <div className="flex items-center gap-2">
-                        <RiLightbulbFill className="h-4 w-4 text-content-muted" />
+                        <TfLightbulb
+                          className="h-4 w-4 !text-content-muted"
+                          aria-hidden="true"
+                        />
                         <h3 className="font-aeonik text-sm font-medium text-content-secondary">
                           How It Works
                         </h3>
@@ -3337,7 +3366,7 @@ ${encryptionKey.replace('key_', '')}
                     {isHowItWorksOpen && (
                       <div className="space-y-3 border-t border-border-subtle p-4">
                         <div className="flex items-start gap-3">
-                          <div className={STEP_CIRCLE_CLASSES}>1</div>
+                          <StepNumber step={1} />
                           <div className="font-aeonik-fono text-sm text-content-muted">
                             Your chats are encrypted with a key that only you
                             possess and stored encrypted in the cloud. Nobody
@@ -3345,14 +3374,14 @@ ${encryptionKey.replace('key_', '')}
                           </div>
                         </div>
                         <div className="flex items-start gap-3">
-                          <div className={STEP_CIRCLE_CLASSES}>2</div>
+                          <StepNumber step={2} />
                           <div className="font-aeonik-fono text-sm text-content-muted">
                             Only you have the encryption key. Tinfoil cannot
                             read your messages.
                           </div>
                         </div>
                         <div className="flex items-start gap-3">
-                          <div className={STEP_CIRCLE_CLASSES}>3</div>
+                          <StepNumber step={3} />
                           <div className="font-aeonik-fono text-sm text-content-muted">
                             Use a passkey to seamlessly sync your chats across
                             devices, or manually enter your encryption key.
@@ -3423,7 +3452,7 @@ ${encryptionKey.replace('key_', '')}
                     >
                       <div className="flex w-full items-center justify-between p-4">
                         <div className="flex items-center gap-2">
-                          <RiShieldKeyholeFill className="h-4 w-4 text-content-muted" />
+                          <TfKey className="h-4 w-4 text-content-muted" />
                           <h3 className="font-aeonik text-sm font-medium text-content-secondary">
                             Your Personal Encryption Key
                           </h3>
@@ -3628,7 +3657,7 @@ ${encryptionKey.replace('key_', '')}
                             )}
                           >
                             <div className="flex items-start gap-2">
-                              <GoPasskeyFill className="mt-0.5 h-4 w-4 shrink-0 text-brand-accent-light" />
+                              <TfPersonKey className="mt-0.5 h-4 w-4 shrink-0 text-brand-accent-light" />
                               <div>
                                 <span className="text-sm font-medium text-content-primary">
                                   Sync and backup using Passkeys
@@ -3640,7 +3669,10 @@ ${encryptionKey.replace('key_', '')}
                               </div>
                             </div>
                             <div className="ml-6 mt-2 flex items-center gap-1.5">
-                              <IoShieldCheckmark className="h-3.5 w-3.5 text-brand-accent-light" />
+                              <TfShieldCheck
+                                className="h-3.5 w-3.5 !text-brand-accent-light"
+                                aria-hidden="true"
+                              />
                               <span className="text-xs font-medium text-brand-accent-light">
                                 Passkey active
                               </span>
@@ -3744,7 +3776,7 @@ ${encryptionKey.replace('key_', '')}
                               )}
                             >
                               <div className="flex gap-2">
-                                <GoPasskeyFill className="mt-[3px] h-4 w-4 shrink-0 text-content-secondary" />
+                                <TfPersonKey className="mt-[3px] h-4 w-4 shrink-0 text-content-secondary" />
                                 <div>
                                   <span className="text-sm font-medium leading-tight text-content-primary">
                                     {isSettingUpPasskey
@@ -3798,7 +3830,7 @@ ${encryptionKey.replace('key_', '')}
                               )}
                             >
                               <div className="flex gap-2">
-                                <GoPasskeyFill className="mt-[3px] h-4 w-4 shrink-0 text-content-secondary" />
+                                <TfPersonKey className="mt-[3px] h-4 w-4 shrink-0 text-content-secondary" />
                                 <div>
                                   <span className="text-sm font-medium leading-tight text-content-primary">
                                     {isSettingUpPasskey
@@ -3977,16 +4009,7 @@ ${encryptionKey.replace('key_', '')}
                       )}
                     >
                       <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
-                            isDarkMode
-                              ? 'bg-content-muted/20 text-content-secondary'
-                              : 'bg-content-muted/20 text-content-secondary',
-                          )}
-                        >
-                          1
-                        </div>
+                        <StepNumber step={1} />
                         <div className="font-aeonik-fono text-sm text-content-muted">
                           Open{' '}
                           <a
@@ -4005,32 +4028,14 @@ ${encryptionKey.replace('key_', '')}
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
-                            isDarkMode
-                              ? 'bg-content-muted/20 text-content-secondary'
-                              : 'bg-content-muted/20 text-content-secondary',
-                          )}
-                        >
-                          2
-                        </div>
+                        <StepNumber step={2} />
                         <div className="font-aeonik-fono text-sm text-content-muted">
                           Click on &quot;Export data&quot; and confirm the
                           export.
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
-                            isDarkMode
-                              ? 'bg-content-muted/20 text-content-secondary'
-                              : 'bg-content-muted/20 text-content-secondary',
-                          )}
-                        >
-                          3
-                        </div>
+                        <StepNumber step={3} />
                         <div className="font-aeonik-fono text-sm text-content-muted">
                           {shouldImportOffDevice()
                             ? 'Download the ZIP file you receive by email.'
@@ -4038,16 +4043,7 @@ ${encryptionKey.replace('key_', '')}
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
-                            isDarkMode
-                              ? 'bg-content-muted/20 text-content-secondary'
-                              : 'bg-content-muted/20 text-content-secondary',
-                          )}
-                        >
-                          4
-                        </div>
+                        <StepNumber step={4} />
                         <div className="font-aeonik-fono text-sm text-content-muted">
                           {shouldImportOffDevice() ? (
                             <>
@@ -4109,16 +4105,7 @@ ${encryptionKey.replace('key_', '')}
                       )}
                     >
                       <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
-                            isDarkMode
-                              ? 'bg-content-muted/20 text-content-secondary'
-                              : 'bg-content-muted/20 text-content-secondary',
-                          )}
-                        >
-                          1
-                        </div>
+                        <StepNumber step={1} />
                         <div className="font-aeonik-fono text-sm text-content-muted">
                           Open{' '}
                           <a
@@ -4137,32 +4124,14 @@ ${encryptionKey.replace('key_', '')}
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
-                            isDarkMode
-                              ? 'bg-content-muted/20 text-content-secondary'
-                              : 'bg-content-muted/20 text-content-secondary',
-                          )}
-                        >
-                          2
-                        </div>
+                        <StepNumber step={2} />
                         <div className="font-aeonik-fono text-sm text-content-muted">
                           Click on &quot;Export data&quot; and confirm the
                           export.
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
-                            isDarkMode
-                              ? 'bg-content-muted/20 text-content-secondary'
-                              : 'bg-content-muted/20 text-content-secondary',
-                          )}
-                        >
-                          3
-                        </div>
+                        <StepNumber step={3} />
                         <div className="font-aeonik-fono text-sm text-content-muted">
                           {shouldImportOffDevice()
                             ? 'Download the ZIP file you receive by email.'
@@ -4170,16 +4139,7 @@ ${encryptionKey.replace('key_', '')}
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
-                            isDarkMode
-                              ? 'bg-content-muted/20 text-content-secondary'
-                              : 'bg-content-muted/20 text-content-secondary',
-                          )}
-                        >
-                          4
-                        </div>
+                        <StepNumber step={4} />
                         <div className="font-aeonik-fono text-sm text-content-muted">
                           {shouldImportOffDevice() ? (
                             <>
@@ -4343,7 +4303,7 @@ ${encryptionKey.replace('key_', '')}
                         exportType === 'chats' ? (
                           <ArrowPathIcon className="h-4 w-4 animate-spin" />
                         ) : (
-                          <AiOutlineExport className="h-4 w-4" />
+                          <TfDownload className="h-4 w-4" />
                         )}
                         {isPreparingExport && exportType === 'chats'
                           ? 'Please wait while we prepare the export...'
@@ -4394,7 +4354,7 @@ ${encryptionKey.replace('key_', '')}
                           ) : projectsLoading ? (
                             <ArrowPathIcon className="h-4 w-4 animate-spin" />
                           ) : (
-                            <AiOutlineExport className="h-4 w-4" />
+                            <TfDownload className="h-4 w-4" />
                           )}
                           {isExporting && exportType === 'projects'
                             ? 'Exporting...'
@@ -4528,7 +4488,10 @@ ${encryptionKey.replace('key_', '')}
                           >
                             <div className="text-left">
                               <div className="flex items-center gap-3">
-                                <CreditCardIcon className="h-5 w-5 text-content-muted" />
+                                <TfCard
+                                  className="h-5 w-5 !text-content-muted"
+                                  aria-hidden="true"
+                                />
                                 <div className="font-aeonik text-sm font-medium text-content-primary">
                                   Manage Billing
                                 </div>
@@ -4575,7 +4538,10 @@ ${encryptionKey.replace('key_', '')}
                         >
                           <div className="text-left">
                             <div className="flex items-center gap-3">
-                              <UserCircleIcon className="h-5 w-5 text-content-muted" />
+                              <TfPerson
+                                className="h-5 w-5 !text-content-muted"
+                                aria-hidden="true"
+                              />
                               <div className="font-aeonik text-sm font-medium text-content-primary">
                                 Dashboard
                               </div>
@@ -4599,7 +4565,10 @@ ${encryptionKey.replace('key_', '')}
                           isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
                         )}
                       >
-                        <UserCircleIcon className="mx-auto h-12 w-12 text-content-muted" />
+                        <TfPerson
+                          className="mx-auto h-12 w-12 !text-content-muted"
+                          aria-hidden="true"
+                        />
                         <h3 className="mt-3 font-aeonik text-base font-medium text-content-primary">
                           Sign in to your account
                         </h3>
@@ -4738,7 +4707,7 @@ function PresetRow({
             aria-label={`Edit ${preset.name}`}
             className="rounded-md p-1.5 text-content-secondary transition-colors hover:bg-surface-chat hover:text-content-primary"
           >
-            <PencilSquareIcon className="h-4 w-4" />
+            <TfWriting className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
         <button
@@ -4756,7 +4725,7 @@ function PresetRow({
             aria-label={`Delete ${preset.name}`}
             className="rounded-md p-1.5 text-red-500 transition-colors hover:bg-red-500/10"
           >
-            <TrashIcon className="h-4 w-4" />
+            <TfTrash className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>

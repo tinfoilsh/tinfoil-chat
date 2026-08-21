@@ -5,13 +5,18 @@ import { getProjectColor } from '@/constants/project-colors'
 import { useToast } from '@/hooks/use-toast'
 import { getTinfoilClient } from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
+import { StopIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import {
-  FolderIcon,
-  MicrophoneIcon,
-  Squares2X2Icon,
-  StopIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline'
+  TfAttachment,
+  TfFolder,
+  TfGlobe,
+  TfGlobeX,
+  TfMicrophone,
+  TfPlus,
+  TfQuote,
+  TfTerminal,
+  TfTools,
+} from '@tinfoilsh/tinfoil-icons'
 import type { FormEvent, RefObject } from 'react'
 import {
   useCallback,
@@ -20,15 +25,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import {
-  PiGlobe,
-  PiGlobeX,
-  PiPaperclipLight,
-  PiPlusLight,
-  PiQuotes,
-  PiSpinner,
-  PiTerminalWindow,
-} from 'react-icons/pi'
+import { PiSpinner } from 'react-icons/pi'
 import {
   ContextUsageIndicator,
   type ContextUsage,
@@ -745,7 +742,7 @@ export function ChatInput({
                     )}
                     style={colorStyle}
                   >
-                    <FolderIcon className="h-3 w-3" />
+                    <TfFolder className="h-3 w-3" aria-hidden="true" />
                     <span className="text-xs font-medium">
                       {activeProject.name}
                     </span>
@@ -799,7 +796,7 @@ export function ChatInput({
 
           {quote && (
             <div className="mb-3 mt-1 flex items-start gap-2 rounded-2xl border border-border-subtle bg-surface-chat-background px-3 py-2">
-              <PiQuotes className="mt-0.5 h-4 w-4 flex-shrink-0 text-content-secondary" />
+              <TfQuote className="mt-0.5 h-4 w-4 flex-shrink-0 text-content-secondary" />
               <p className="line-clamp-3 flex-1 whitespace-pre-wrap text-sm text-content-secondary">
                 {quote.length > QUOTE_PREVIEW_MAX_LENGTH
                   ? `${quote.slice(0, QUOTE_PREVIEW_MAX_LENGTH).trimEnd()}…`
@@ -1201,7 +1198,7 @@ export function ChatInput({
                   aria-haspopup="menu"
                   className="flex h-7 w-7 items-center justify-center rounded-lg text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
                 >
-                  <PiPlusLight className="h-5 w-5" />
+                  <TfPlus className="h-5 w-5" />
                 </button>
                 {isInputMenuOpen && (
                   <>
@@ -1225,7 +1222,10 @@ export function ChatInput({
                         }}
                         className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                       >
-                        <PiPaperclipLight className="h-5 w-5 text-content-secondary" />
+                        <TfAttachment
+                          className="h-5 w-5 !text-content-secondary"
+                          aria-hidden="true"
+                        />
                         Add files or photos
                       </button>
                       {onOpenPromptLibrary && (
@@ -1238,7 +1238,7 @@ export function ChatInput({
                           }}
                           className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                         >
-                          <Squares2X2Icon className="h-5 w-5 text-content-secondary" />
+                          <TfTools className="h-5 w-5 text-content-secondary" />
                           Change system prompt
                         </button>
                       )}
@@ -1257,9 +1257,15 @@ export function ChatInput({
                           className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                         >
                           {webSearchEnabled ? (
-                            <PiGlobe className="h-5 w-5 text-content-secondary" />
+                            <TfGlobe
+                              className="h-5 w-5 !text-content-secondary"
+                              aria-hidden="true"
+                            />
                           ) : (
-                            <PiGlobeX className="h-5 w-5 text-content-secondary" />
+                            <TfGlobeX
+                              className="h-5 w-5 text-content-secondary"
+                              aria-hidden="true"
+                            />
                           )}
                           <span className="flex-1">Web search</span>
                           {webSearchEnabled && (
@@ -1278,7 +1284,10 @@ export function ChatInput({
                           }}
                           className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                         >
-                          <PiTerminalWindow className="h-5 w-5 text-content-secondary" />
+                          <TfTerminal
+                            className="h-5 w-5 !text-content-secondary"
+                            aria-hidden="true"
+                          />
                           <span className="flex-1">Code execution</span>
                           {codeExecutionEnabled && (
                             <MenuCheckmark className="h-4 w-4 text-brand-accent-light" />
@@ -1322,7 +1331,7 @@ export function ChatInput({
                 >
                   {isRecording ? (
                     <StopIcon
-                      className="h-6 w-6 md:h-5 md:w-5"
+                      className="h-6 w-6 md:h-4 md:w-4"
                       aria-hidden="true"
                     />
                   ) : isTranscribing ? (
@@ -1331,8 +1340,8 @@ export function ChatInput({
                       aria-hidden="true"
                     />
                   ) : (
-                    <MicrophoneIcon
-                      className="h-6 w-6 md:h-5 md:w-5"
+                    <TfMicrophone
+                      className="h-6 w-6 md:h-4 md:w-4"
                       aria-hidden="true"
                     />
                   )}

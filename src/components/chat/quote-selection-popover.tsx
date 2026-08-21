@@ -1,5 +1,5 @@
+import { TfChat2, TfQuote } from '@tinfoilsh/tinfoil-icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { PiChatCircleText, PiQuotes } from 'react-icons/pi'
 
 type PopoverPosition = {
   top: number
@@ -62,6 +62,25 @@ export function QuoteSelectionPopover({
       '#chat-input, textarea, input',
     )
     if (isInsideInput) {
+      hidePopover()
+      return
+    }
+
+    const getMessageElement = (node: Node) => {
+      const element =
+        node.nodeType === Node.ELEMENT_NODE
+          ? (node as Element)
+          : node.parentElement
+      return (
+        element?.closest(
+          '[data-message-role="user"], [data-message-role="assistant"]',
+        ) ?? null
+      )
+    }
+    const startMessage = getMessageElement(range.startContainer)
+    const endMessage = getMessageElement(range.endContainer)
+
+    if (!startMessage || startMessage !== endMessage) {
       hidePopover()
       return
     }
@@ -161,7 +180,7 @@ export function QuoteSelectionPopover({
         onClick={handleQuoteClick}
         className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat-background"
       >
-        <PiQuotes className="h-4 w-4" />
+        <TfQuote className="h-4 w-4" aria-hidden="true" />
         <span>Quote</span>
       </button>
       {onAsk && (
@@ -170,7 +189,7 @@ export function QuoteSelectionPopover({
           onClick={handleAskClick}
           className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat-background"
         >
-          <PiChatCircleText className="h-4 w-4" />
+          <TfChat2 className="h-4 w-4" aria-hidden="true" />
           <span>Ask</span>
         </button>
       )}
