@@ -20,6 +20,30 @@ describe('clearDeletedProjectsForAccount', () => {
     vi.clearAllMocks()
   })
 
+  it('publishes the successful deletion count after clearing the cache', async () => {
+    mocks.clear.mockResolvedValue(undefined)
+    const guard: AccountOperationGuard = {
+      userId: 'project-user',
+      isCurrent: () => true,
+      assertCurrent: vi.fn(),
+    }
+    const onCacheError = vi.fn()
+    const deletedCount = 3
+    const publishUiSuccess = vi.fn((count: number) => count)
+
+    const completion = clearDeletedProjectsForAccount(guard, onCacheError).then(
+      () => publishUiSuccess(deletedCount),
+    )
+
+    await expect(completion).resolves.toBe(deletedCount)
+    expect(guard.isCurrent()).toBe(true)
+    expect(mocks.clear).toHaveBeenCalledOnce()
+    expect(guard.assertCurrent).toHaveBeenCalledTimes(2)
+    expect(mocks.invalidateProjects).toHaveBeenCalledOnce()
+    expect(publishUiSuccess).toHaveBeenCalledExactlyOnceWith(deletedCount)
+    expect(onCacheError).not.toHaveBeenCalled()
+  })
+
   it('does not publish success when the account changes during cache clear', async () => {
     let accountIsCurrent = true
     let finishCacheClear!: () => void
