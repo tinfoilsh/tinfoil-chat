@@ -45,7 +45,7 @@ import {
   formatClaudeProjectExportCounts,
   type ClaudeProjectExportCounts,
 } from '@/services/project-export/claude-project-export'
-import { invalidateProjects } from '@/services/project/project-events'
+import { clearDeletedProjectsForAccount } from '@/services/project/project-deletion'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { projectCache } from '@/services/storage/project-cache'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -1920,17 +1920,13 @@ export function SettingsModal({
     const guard = cloudSync.createAccountOperationGuard()
     try {
       const deleted = await projectStorage.deleteAllProjects(guard)
-      setProjectExportResult(null)
-      try {
-        await projectCache.clear()
-      } catch (cacheError) {
+      await clearDeletedProjectsForAccount(guard, (cacheError) => {
         logError('Failed to clear cached projects', cacheError, {
           component: 'SettingsModal',
           action: 'handleDeleteAllProjects.clearCache',
         })
-      }
-      guard.assertCurrent()
-      invalidateProjects()
+      })
+      setProjectExportResult(null)
       toast({
         title: 'All projects deleted',
         description: `Deleted ${deleted} ${deleted === 1 ? 'project' : 'projects'}.`,
