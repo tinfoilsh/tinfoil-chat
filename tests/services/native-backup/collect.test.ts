@@ -4,6 +4,7 @@ import {
   NATIVE_BACKUP_LIMITS,
   NativeBackupCollectionError,
   collectNativeBackupV1,
+  formatNativeBackupV1,
   type NativeBackupCollectionDependencies,
 } from '@/services/native-backup'
 import type { StoredChat } from '@/services/storage/indexed-db'
@@ -279,6 +280,7 @@ describe('native backup collection', () => {
         },
       ],
     })
+    expect(() => formatNativeBackupV1(result)).not.toThrow()
   })
 
   it('keeps documents with the same id in different projects', async () => {
