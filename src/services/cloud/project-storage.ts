@@ -12,6 +12,7 @@ import type {
 import { logError } from '@/utils/error-handling'
 import { authTokenManager } from '../auth'
 import {
+  deleteAllProjects as enclaveDeleteAllProjects,
   deleteRow as enclaveDeleteRow,
   listStatus as enclaveListStatus,
   pull as enclavePull,
@@ -19,6 +20,7 @@ import {
   newIdempotencyKey,
   pullItemPlaintext,
 } from '../sync-enclave/sync-api'
+import type { AccountOperationGuard } from './account-operation'
 import { pullKey, requirePrimaryKeyB64 } from './cek-encoding'
 import { canWriteToCloud } from './cloud-key-authorization'
 import { ProjectDataSchema, ProjectDocumentPlaintextSchema } from './schemas'
@@ -360,43 +362,21 @@ export class ProjectStorageService {
     })
   }
 
-  async deleteAllProjects(): Promise<{
-    deleted: number
-    notificationSent?: boolean
-  }> {
+  async deleteAllProjects(guard: AccountOperationGuard): Promise<number> {
+    guard.assertCurrent()
     if (!(await canWriteToCloud())) {
       throw new Error(
         'Cloud writes are blocked until your encryption key is verified',
       )
     }
 
-    let deleted = 0
-    let cursor: string | undefined
-    do {
-      const status = await enclaveListStatus({
-        scope: PROJECT_SCOPE,
-        cursor,
-        limit: 500,
-      })
-      for (const update of status.updates) {
-        // Bulk delete-all is unconditional: user intent is "drop
-        // everything", and the listed etag can become stale between
-        // the page fetch and the delete (concurrent write from another
-        // device). Passing ifMatch=null avoids spurious STALE_BLOB
-        // failures that would leave the batch partially completed.
-        // Mirrors the single-row deleteProject path.
-        await enclaveDeleteRow({
-          scope: PROJECT_SCOPE,
-          id: update.id,
-          ifMatch: null,
-          idempotencyKey: newIdempotencyKey(),
-          keyB64: requirePrimaryKeyB64(),
-        })
-        deleted++
-      }
-      cursor = status.next_cursor
-    } while (cursor)
-    return { deleted }
+    guard.assertCurrent()
+    const response = await enclaveDeleteAllProjects({
+      keyB64: requirePrimaryKeyB64(),
+      idempotencyKey: newIdempotencyKey(),
+    })
+    guard.assertCurrent()
+    return response.deleted
   }
 
   async listProjects(options?: {

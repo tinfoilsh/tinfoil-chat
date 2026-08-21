@@ -1,6 +1,9 @@
 'use client'
 
-import { UI_EXPAND_PROJECTS_ON_MOUNT } from '@/constants/storage-keys'
+import {
+  SYNC_PROJECTS_INVALIDATED,
+  UI_EXPAND_PROJECTS_ON_MOUNT,
+} from '@/constants/storage-keys'
 import { useMemory } from '@/hooks/use-memory'
 import { projectStorage } from '@/services/cloud/project-storage'
 import { projectEvents } from '@/services/project/project-events'
@@ -71,6 +74,22 @@ export function ProjectProvider({
     setLoading(false)
     setLoadingProject(null)
   }, [])
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === SYNC_PROJECTS_INVALIDATED) {
+        resetProjectSessionState()
+      }
+    }
+    const unsubscribe = projectEvents.on('projects-invalidated', () => {
+      resetProjectSessionState()
+    })
+    window.addEventListener('storage', handleStorage)
+    return () => {
+      unsubscribe()
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [resetProjectSessionState])
 
   useEffect(() => {
     if (isSignedIn && !initializingRef.current) {

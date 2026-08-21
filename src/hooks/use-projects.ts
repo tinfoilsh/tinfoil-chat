@@ -1,5 +1,7 @@
+import { SYNC_PROJECTS_INVALIDATED } from '@/constants/storage-keys'
 import { projectStorage } from '@/services/cloud/project-storage'
 import { ENCRYPTION_KEY_CHANGED_EVENT } from '@/services/encryption/encryption-service'
+import { projectEvents } from '@/services/project/project-events'
 import {
   PROJECT_CACHE_UPDATED_EVENT,
   projectCache,
@@ -34,6 +36,39 @@ const freshProjectsByUser = new Map<
   string,
   { generation: number; refreshedAt: number; projects: Project[] }
 >()
+const projectInvalidationSubscribers = new Set<() => void>()
+let unsubscribeProjectInvalidation: (() => void) | null = null
+
+function invalidateProjectLists(): void {
+  projectCache.invalidate()
+  refreshByUser.clear()
+  freshProjectsByUser.clear()
+  projectInvalidationSubscribers.forEach((subscriber) => subscriber())
+}
+
+function handleProjectInvalidationStorage(event: StorageEvent): void {
+  if (event.key === SYNC_PROJECTS_INVALIDATED) invalidateProjectLists()
+}
+
+function subscribeToProjectInvalidation(subscriber: () => void): () => void {
+  projectInvalidationSubscribers.add(subscriber)
+  if (projectInvalidationSubscribers.size === 1) {
+    unsubscribeProjectInvalidation = projectEvents.on(
+      'projects-invalidated',
+      invalidateProjectLists,
+    )
+    window.addEventListener('storage', handleProjectInvalidationStorage)
+  }
+
+  return () => {
+    projectInvalidationSubscribers.delete(subscriber)
+    if (projectInvalidationSubscribers.size === 0) {
+      unsubscribeProjectInvalidation?.()
+      unsubscribeProjectInvalidation = null
+      window.removeEventListener('storage', handleProjectInvalidationStorage)
+    }
+  }
+}
 
 function projectFromListItem(
   item: ProjectListItem,
@@ -170,7 +205,7 @@ export function useProjects(
   }, [userId])
 
   const loadProjects = useCallback(
-    async (forceRefresh = false) => {
+    async (forceRefresh = false, skipCache = false) => {
       const loadGeneration = loadGenerationRef.current + 1
       loadGenerationRef.current = loadGeneration
       if (!isSignedIn || !userId) {
@@ -180,7 +215,7 @@ export function useProjects(
       }
 
       const requestUserId = userId
-      setLoading(visibleProjects.length === 0)
+      setLoading(skipCache || visibleProjects.length === 0)
       setError(null)
       let remoteApplied = false
       let cacheApplied = false
@@ -188,22 +223,24 @@ export function useProjects(
         currentUserRef.current === requestUserId &&
         loadGenerationRef.current === loadGeneration
 
-      void projectCache
-        .getProjects(requestUserId)
-        .then((cachedProjects) => {
-          if (!isCurrentLoad() || remoteApplied) return
+      if (!skipCache) {
+        void projectCache
+          .getProjects(requestUserId)
+          .then((cachedProjects) => {
+            if (!isCurrentLoad() || remoteApplied) return
 
-          cacheApplied = true
-          setProjectsUserId(requestUserId)
-          setProjects(cachedProjects)
-          if (cachedProjects.length > 0) setLoading(false)
-        })
-        .catch((cacheError) => {
-          logError('Failed to load cached projects', cacheError, {
-            component: 'useProjects',
-            action: 'loadCachedProjects',
+            cacheApplied = true
+            setProjectsUserId(requestUserId)
+            setProjects(cachedProjects)
+            if (cachedProjects.length > 0) setLoading(false)
           })
-        })
+          .catch((cacheError) => {
+            logError('Failed to load cached projects', cacheError, {
+              component: 'useProjects',
+              action: 'loadCachedProjects',
+            })
+          })
+      }
 
       try {
         const remoteProjects = await revalidateProjects(
@@ -240,6 +277,17 @@ export function useProjects(
   )
 
   const refresh = useCallback(() => loadProjects(true), [loadProjects])
+
+  useEffect(() => {
+    if (!isSignedIn || !userId) return
+
+    return subscribeToProjectInvalidation(() => {
+      setProjects([])
+      setProjectsUserId(userId)
+      setError(null)
+      void loadProjects(true, true)
+    })
+  }, [isSignedIn, userId, loadProjects])
 
   useEffect(() => {
     if (

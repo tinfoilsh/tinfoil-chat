@@ -45,6 +45,7 @@ import {
   formatClaudeProjectExportCounts,
   type ClaudeProjectExportCounts,
 } from '@/services/project-export/claude-project-export'
+import { clearDeletedProjectsForAccount } from '@/services/project/project-deletion'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { projectCache } from '@/services/storage/project-cache'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -1916,25 +1917,20 @@ export function SettingsModal({
     }
 
     setIsDeletingAllProjects(true)
+    const guard = cloudSync.createAccountOperationGuard()
     try {
-      const result = await projectStorage.deleteAllProjects()
-      setProjectExportResult(null)
-      try {
-        await projectCache.clear()
-      } catch (cacheError) {
+      const deleted = await projectStorage.deleteAllProjects(guard)
+      await clearDeletedProjectsForAccount(guard, (cacheError) => {
         logError('Failed to clear cached projects', cacheError, {
           component: 'SettingsModal',
           action: 'handleDeleteAllProjects.clearCache',
         })
-      }
+      })
+      setProjectExportResult(null)
       toast({
         title: 'All projects deleted',
-        description: result.notificationSent
-          ? 'We will email you a confirmation.'
-          : 'Email confirmation could not be sent.',
+        description: `Deleted ${deleted} ${deleted === 1 ? 'project' : 'projects'}.`,
       })
-
-      await refreshProjects()
 
       // Project deletion detaches chats from projects on the server, so the
       // chat list in the sidebar may need to refresh too.

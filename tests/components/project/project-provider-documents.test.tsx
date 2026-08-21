@@ -1,5 +1,6 @@
 import { useProject } from '@/components/project/project-context'
 import { ProjectProvider } from '@/components/project/project-provider'
+import { SYNC_PROJECTS_INVALIDATED } from '@/constants/storage-keys'
 import type { Project, ProjectDocument } from '@/types/project'
 import { act, renderHook } from '@testing-library/react'
 import type { PropsWithChildren } from 'react'
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   deleteDocument: vi.fn(),
   loadMemory: vi.fn(),
   processMessages: vi.fn(),
+  projectEventHandlers: new Map<string, (event: unknown) => void>(),
 }))
 
 vi.mock('@clerk/nextjs', () => ({
@@ -27,7 +29,12 @@ vi.mock('@/hooks/use-memory', () => ({
 }))
 
 vi.mock('@/services/project/project-events', () => ({
-  projectEvents: { on: vi.fn(() => vi.fn()) },
+  projectEvents: {
+    on: vi.fn((type: string, handler: (event: unknown) => void) => {
+      mocks.projectEventHandlers.set(type, handler)
+      return () => mocks.projectEventHandlers.delete(type)
+    }),
+  },
 }))
 
 vi.mock('@/services/cloud/project-storage', () => ({
@@ -92,6 +99,7 @@ async function renderInProject() {
 describe('ProjectProvider documents', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.projectEventHandlers.clear()
     mocks.getProject.mockResolvedValue(project)
     mocks.listDocuments.mockResolvedValue({ documents: [listedDocument] })
     mocks.getDocuments.mockResolvedValue(
@@ -225,6 +233,71 @@ describe('ProjectProvider documents', () => {
       await refreshPromise
     })
 
+    expect(result.current.projectDocuments).toEqual([])
+  })
+
+  it('invalidates active state and prevents a stale load from restoring it', async () => {
+    const { result } = await renderInProject()
+    let resolvePendingProject!: (project: Project) => void
+    mocks.getProject.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePendingProject = resolve
+      }),
+    )
+
+    let pendingLoad!: Promise<boolean>
+    act(() => {
+      pendingLoad = result.current.enterProjectMode('project-2')
+    })
+    await vi.waitFor(() => expect(mocks.getProject).toHaveBeenCalledTimes(2))
+
+    act(() => {
+      mocks.projectEventHandlers.get('projects-invalidated')?.({
+        type: 'projects-invalidated',
+      })
+    })
+    expect(result.current.activeProject).toBeNull()
+    expect(result.current.projectDocuments).toEqual([])
+
+    await act(async () => {
+      resolvePendingProject({ ...project, id: 'project-2' })
+      await pendingLoad
+    })
+
+    expect(result.current.activeProject).toBeNull()
+    expect(result.current.projectDocuments).toEqual([])
+  })
+
+  it('handles cross-tab invalidation without letting a stale load restore state', async () => {
+    const { result } = await renderInProject()
+    let resolvePendingProject!: (project: Project) => void
+    mocks.getProject.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePendingProject = resolve
+      }),
+    )
+
+    let pendingLoad!: Promise<boolean>
+    act(() => {
+      pendingLoad = result.current.enterProjectMode('project-2')
+    })
+    await vi.waitFor(() => expect(mocks.getProject).toHaveBeenCalledTimes(2))
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: SYNC_PROJECTS_INVALIDATED,
+          newValue: 'another-tab-signal',
+        }),
+      )
+    })
+
+    await act(async () => {
+      resolvePendingProject({ ...project, id: 'project-2' })
+      await pendingLoad
+    })
+
+    expect(result.current.activeProject).toBeNull()
     expect(result.current.projectDocuments).toEqual([])
   })
 
