@@ -3360,12 +3360,7 @@ ${encryptionKey.replace('key_', '')}
                       />
                     )}
                     <NativeBackupExport
-                      available={Boolean(
-                        isSignedIn &&
-                        encryptionKey &&
-                        process.env.NEXT_PUBLIC_NATIVE_BACKUP_EXPORT_ENABLED ===
-                          'true',
-                      )}
+                      available={Boolean(isSignedIn && encryptionKey)}
                     />
                   </div>
 
