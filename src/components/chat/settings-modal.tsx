@@ -39,6 +39,12 @@ import {
   PrfNotSupportedError,
   type PasskeyCredentialEntry,
 } from '@/services/passkey'
+import {
+  buildClaudeProjectExport,
+  ClaudeProjectExportSizeError,
+  formatClaudeProjectExportCounts,
+  type ClaudeProjectExportCounts,
+} from '@/services/project-export/claude-project-export'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { projectCache } from '@/services/storage/project-cache'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -379,14 +385,7 @@ export function SettingsModal({
   const { user } = useUser()
   const { toast } = useToast()
 
-  // Projects for export functionality
-  const {
-    projects,
-    loading: projectsLoading,
-    refresh: refreshProjects,
-  } = useProjects({
-    autoLoad: isSignedIn && isPremium,
-  })
+  const { refresh: refreshProjects } = useProjects({ autoLoad: false })
   // Encryption key management state
   const [isCopied, setIsCopied] = useState(false)
   const [isQRCodeExpanded, setIsQRCodeExpanded] = useState(false)
@@ -533,6 +532,11 @@ export function SettingsModal({
   const [exportType, setExportType] = useState<'chats' | 'projects' | null>(
     null,
   )
+  const [projectExportResult, setProjectExportResult] = useState<{
+    counts?: ClaudeProjectExportCounts
+    warnings: string[]
+    error?: string
+  } | null>(null)
 
   // Danger zone state
   const [showDeleteAllChatsConfirm, setShowDeleteAllChatsConfirm] =
@@ -1914,6 +1918,7 @@ export function SettingsModal({
     setIsDeletingAllProjects(true)
     try {
       const result = await projectStorage.deleteAllProjects()
+      setProjectExportResult(null)
       try {
         await projectCache.clear()
       } catch (cacheError) {
@@ -1953,91 +1958,31 @@ export function SettingsModal({
     }
   }
 
-  // Export projects as projects.json
-  const downloadProjects = async (
-    projectsToExport: Array<{
-      id: string
-      name: string
-      description: string
-      systemInstructions: string
-      memory: Array<{ fact: string }>
-      createdAt: string
-      updatedAt: string
-    }>,
-  ) => {
-    if (projectsToExport.length === 0) {
-      toast({
-        title: 'No projects to export',
-        description: 'You have no projects to export yet.',
-        variant: 'destructive',
-      })
-      return
-    }
-
+  const downloadProjectsForClaude = async () => {
     setIsExporting(true)
     setExportType('projects')
+    setProjectExportResult(null)
 
     try {
-      // Fetch documents for each project and convert to Claude-compatible format
-      const projectsWithDocs = await Promise.all(
-        projectsToExport.map(async (project) => {
-          const docs: Array<{
-            uuid: string
-            filename: string
-            content: string
-            created_at: string
-          }> = []
+      const result = await buildClaudeProjectExport(projectStorage)
+      setProjectExportResult({
+        counts: result.counts,
+        warnings: result.warnings,
+      })
 
-          // Try to fetch documents for this project
-          try {
-            const docsResponse = await projectStorage.listDocuments(
-              project.id,
-              {
-                includeContent: true,
-              },
-            )
+      if (result.counts.exportedProjects === 0) {
+        toast({
+          title: 'No projects exported',
+          description:
+            result.counts.skippedProjects > 0
+              ? 'The available projects could not be read.'
+              : 'You have no projects to export yet.',
+          variant: 'destructive',
+        })
+        return
+      }
 
-            if (docsResponse.documents && docsResponse.documents.length > 0) {
-              await Promise.all(
-                docsResponse.documents.map(async (doc) => {
-                  try {
-                    const fullDoc = await projectStorage.getDocument(
-                      project.id,
-                      doc.id,
-                    )
-                    if (fullDoc && fullDoc.content) {
-                      docs.push({
-                        uuid: doc.id,
-                        filename: fullDoc.filename,
-                        content: fullDoc.content,
-                        created_at: new Date().toISOString(),
-                      })
-                    }
-                  } catch {
-                    // Skip documents that fail to fetch
-                  }
-                }),
-              )
-            }
-          } catch {
-            // Skip documents if we can't fetch them
-          }
-
-          return {
-            uuid: project.id,
-            name: project.name,
-            description: project.description || undefined,
-            prompt_template: project.systemInstructions || undefined,
-            created_at: new Date(project.createdAt).toISOString(),
-            updated_at: new Date(project.updatedAt).toISOString(),
-            docs: docs.length > 0 ? docs : undefined,
-          }
-        }),
-      )
-
-      // Create and download JSON file
-      const jsonContent = JSON.stringify(projectsWithDocs, null, 2)
-      const blob = new Blob([jsonContent], { type: 'application/json' })
+      const blob = new Blob([result.json], { type: 'application/json' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -2049,16 +1994,21 @@ export function SettingsModal({
 
       toast({
         title: 'Export complete',
-        description: `Exported ${projectsToExport.length} project${projectsToExport.length !== 1 ? 's' : ''} successfully.`,
+        description: `Exported ${result.counts.exportedProjects} project${result.counts.exportedProjects !== 1 ? 's' : ''} for Claude.`,
       })
     } catch (error) {
       logError('Failed to create projects export', error, {
         component: 'SettingsModal',
-        action: 'downloadProjects',
+        action: 'downloadProjectsForClaude',
       })
+      const message =
+        error instanceof ClaudeProjectExportSizeError
+          ? error.message
+          : 'The Claude-compatible project export could not be created.'
+      setProjectExportResult({ warnings: [], error: message })
       toast({
         title: 'Export failed',
-        description: 'Failed to download projects. Please try again.',
+        description: message,
         variant: 'destructive',
       })
     } finally {
@@ -2093,6 +2043,7 @@ export function SettingsModal({
       setDeleteAllChatsConfirmText('')
       setShowDeleteAllProjectsConfirm(false)
       setDeleteAllProjectsConfirmText('')
+      setProjectExportResult(null)
     }
   }, [isOpen])
 
@@ -4358,7 +4309,7 @@ ${encryptionKey.replace('key_', '')}
                   {isPremium && (
                     <div className="space-y-3">
                       <h3 className="font-aeonik text-sm font-medium text-content-secondary">
-                        Export Projects
+                        Export Projects for Claude
                       </h3>
                       <div
                         className={cn(
@@ -4367,21 +4318,18 @@ ${encryptionKey.replace('key_', '')}
                         )}
                       >
                         <div className="font-aeonik-fono text-xs text-content-muted">
-                          Download all your projects including their settings,
-                          system instructions, memory, and documents.
+                          Creates a lossy, Claude-compatible projects.json with
+                          project names, descriptions, instructions, and
+                          extracted document text and metadata. Memory, colors,
+                          chats, images, and original document bytes are not
+                          included.
                         </div>
                         <button
-                          onClick={() => downloadProjects(projects)}
-                          disabled={
-                            isExporting ||
-                            projects.length === 0 ||
-                            projectsLoading
-                          }
+                          onClick={downloadProjectsForClaude}
+                          disabled={isExporting}
                           className={cn(
                             'flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
-                            isExporting ||
-                              projects.length === 0 ||
-                              projectsLoading
+                            isExporting
                               ? 'cursor-not-allowed opacity-50'
                               : 'hover:bg-surface-chat',
                             isDarkMode
@@ -4391,17 +4339,33 @@ ${encryptionKey.replace('key_', '')}
                         >
                           {isExporting && exportType === 'projects' ? (
                             <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                          ) : projectsLoading ? (
-                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
                           ) : (
                             <AiOutlineExport className="h-4 w-4" />
                           )}
                           {isExporting && exportType === 'projects'
                             ? 'Exporting...'
-                            : projectsLoading
-                              ? 'Loading projects...'
-                              : 'Export Projects'}
+                            : 'Export Projects for Claude'}
                         </button>
+                        {projectExportResult && (
+                          <div
+                            className="space-y-1 font-aeonik-fono text-xs text-content-muted"
+                            role="status"
+                          >
+                            {projectExportResult.counts && (
+                              <div>
+                                {formatClaudeProjectExportCounts(
+                                  projectExportResult.counts,
+                                )}
+                              </div>
+                            )}
+                            {projectExportResult.error && (
+                              <div>{projectExportResult.error}</div>
+                            )}
+                            {projectExportResult.warnings.map((warning) => (
+                              <div key={warning}>{warning}</div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
