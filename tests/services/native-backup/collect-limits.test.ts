@@ -40,7 +40,7 @@ const localChat: StoredChat = {
 }
 
 describe('native backup collection limits', () => {
-  it('preflights aggregate record counts before returning input', async () => {
+  it('guards message counts before reading attachments', async () => {
     const { collectNativeBackupV1 } =
       await import('@/services/native-backup/collect')
     const getCloudImage = vi.fn().mockResolvedValue(new Uint8Array([1]))

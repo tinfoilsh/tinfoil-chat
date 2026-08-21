@@ -15,18 +15,8 @@ import {
 import { SyncEnclaveError } from '@/services/sync-enclave'
 import type { Project, ProjectDocument } from '@/types/project'
 import { base64ToUint8Array } from '@/utils/binary-codec'
-import { bytesToHex } from '@noble/hashes/utils.js'
-import {
-  NATIVE_BACKUP_FORMAT,
-  NATIVE_BACKUP_LIMITS,
-  NATIVE_BACKUP_VERSION,
-  type NativeBackupEntityKind,
-} from './constants'
-import {
-  assertNativeBackupSizeLimits,
-  type NativeBackupManifestV1,
-  type NativeBackupV1Input,
-} from './format'
+import { NATIVE_BACKUP_LIMITS } from './constants'
+import type { NativeBackupV1Input } from './format'
 import { detectNativeBackupImageMimeType } from './image-mime'
 import {
   classifyNativeBackupChat,
@@ -119,7 +109,6 @@ const detail = (error: unknown) =>
   error instanceof Error ? error.message : String(error)
 const jsonSize = (value: unknown) =>
   encoder.encode(JSON.stringify(value)).length
-const idComponent = (id: string) => `id-${bytesToHex(encoder.encode(id))}`
 function valid<T>(kind: string, id: string, parse: () => T): T {
   try {
     return parse()
@@ -220,68 +209,6 @@ class Budget {
     if (entity) this.entities(1)
     this.check(value)
     value.forEach((amount, index) => (this.used[index] += amount))
-  }
-  finalize(input: NativeBackupV1Input) {
-    const files: Array<{
-      path: string
-      kind: NativeBackupEntityKind
-      sizeBytes: number
-    }> = []
-    const add = (path: string, kind: NativeBackupEntityKind, value: unknown) =>
-      files.push({ path, kind, sizeBytes: jsonSize(value) })
-    for (const value of input.projects)
-      add(`projects/${idComponent(value.id)}.json`, 'projects', value)
-    for (const value of input.projectDocuments)
-      add(
-        `project_documents/${idComponent(value.projectId)}/${idComponent(value.id)}.json`,
-        'project_documents',
-        value,
-      )
-    for (const value of input.cloudChats)
-      add(`cloud_chats/${idComponent(value.id)}.json`, 'cloud_chats', value)
-    for (const value of input.localChats)
-      add(`local_chats/${idComponent(value.id)}.json`, 'local_chats', value)
-    add('relationships.json', 'relationships', input.relationships)
-    for (const { metadata, bytes } of input.images) {
-      const path = `images/${idComponent(metadata.id)}`
-      add(`${path}.json`, 'images', { ...metadata, sizeBytes: bytes.length })
-      files.push({
-        path: `${path}.bin`,
-        kind: 'images',
-        sizeBytes: bytes.length,
-      })
-    }
-    files.sort((left, right) => (left.path < right.path ? -1 : 1))
-    const manifest: NativeBackupManifestV1 = {
-      format: NATIVE_BACKUP_FORMAT,
-      version: NATIVE_BACKUP_VERSION,
-      backup_id: input.backupId,
-      created_at: input.createdAt,
-      complete: true,
-      counts: {
-        projects: input.projects.length,
-        project_documents: input.projectDocuments.length,
-        cloud_chats: input.cloudChats.length,
-        local_chats: input.localChats.length,
-        relationships:
-          input.relationships.projectChats.length +
-          input.relationships.projectDocuments.length +
-          input.relationships.chatImages.length,
-        images: input.images.length,
-        files: files.length,
-      },
-      notices: {
-        contains_plaintext: true,
-        documents_are_extracted_text_only: true,
-      },
-      files: files.map(({ path, kind, sizeBytes }) => ({
-        path,
-        kind,
-        sha256: '0'.repeat(64),
-        size_bytes: sizeBytes,
-      })),
-    }
-    assertNativeBackupSizeLimits(jsonSize(manifest), files)
   }
   private check(value: Pending) {
     budgetLimits.forEach(([label, limit], index) =>
@@ -591,6 +518,5 @@ export async function collectNativeBackupV1(
     images,
   }
   signal?.throwIfAborted()
-  budget.finalize(input)
   return input
 }
