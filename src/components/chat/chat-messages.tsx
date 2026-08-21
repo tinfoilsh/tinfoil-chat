@@ -20,6 +20,7 @@ import React, {
   useRef,
   useState,
 } from 'react'
+import { canRemoveChatSpacerWithoutJump } from './chat-scroll'
 import { CONSTANTS } from './constants'
 import { ensureTimeline } from './ensure-timeline'
 import type { ReasoningEffort } from './hooks/use-reasoning-effort'
@@ -322,8 +323,8 @@ export function ChatMessages({
   const [mounted, setMounted] = useState(false)
   const [showSpacer, setShowSpacer] = useState(false)
   const prevMessageCountRef = React.useRef(messages.length)
-  const prevShowScrollButtonRef = React.useRef(showScrollButton)
   const messageCountWhenSpacerSetRef = React.useRef<number | null>(null)
+  const spacerRef = React.useRef<HTMLDivElement>(null)
   const printRef = useRef<HTMLDivElement>(null)
   const printReadyResolverRef = useRef<(() => void) | null>(null)
   const [printRequested, setPrintRequested] = useState(false)
@@ -385,19 +386,30 @@ export function ChatMessages({
     messageCountWhenSpacerSetRef.current = null
   }, [chatId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reset spacer when scroll-to-bottom button appears (user scrolled up)
+  // Reset spacer after an active response has grown beyond the viewport
   React.useEffect(() => {
-    const buttonJustAppeared =
-      showScrollButton && !prevShowScrollButtonRef.current
     const spacerSetForCurrentMessage =
       messageCountWhenSpacerSetRef.current === messages.length
+    const spacer = spacerRef.current
+    const scrollContainer = spacer?.closest(
+      '[data-scroll-container="main"]',
+    ) as HTMLElement | null
 
-    // Only reset if button transitioned to visible and we're not on the same message that triggered the spacer
-    if (buttonJustAppeared && !spacerSetForCurrentMessage) {
+    if (
+      !isStreamingResponse &&
+      !spacerSetForCurrentMessage &&
+      spacer &&
+      scrollContainer &&
+      canRemoveChatSpacerWithoutJump(
+        scrollContainer.scrollHeight,
+        scrollContainer.scrollTop,
+        scrollContainer.clientHeight,
+        spacer.offsetHeight,
+      )
+    ) {
       setShowSpacer(false)
     }
-    prevShowScrollButtonRef.current = showScrollButton
-  }, [showScrollButton, messages.length])
+  }, [showScrollButton, messages.length, isStreamingResponse])
 
   // Get the current model - always defined since config must load
   const currentModel = useMemo(() => {
@@ -744,6 +756,7 @@ export function ChatMessages({
           fade above the input area, not a full 70dvh of empty space. */}
         {showSpacer && (
           <div
+            ref={spacerRef}
             data-spacer
             className="flex-shrink-0"
             style={{
