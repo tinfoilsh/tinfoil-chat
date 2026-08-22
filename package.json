@@ -36,7 +36,7 @@
     "@radix-ui/react-toast": "^1.2.7",
     "@radix-ui/react-tooltip": "^1.2.0",
     "@tailwindcss/typography": "^0.5.16",
-    "@tinfoilsh/passkey-kit": "https://github.com/tinfoilsh/tinfoil-passkey-kit/archive/b1d5e59efa24014249d8a558a60d5f31ad3a6fef.tar.gz",
+    "@tinfoilsh/passkey-kit": "https://github.com/tinfoilsh/tinfoil-passkey-kit/archive/4b34007b8fe647b67c46e6fcbe86d666cdcd632e.tar.gz",
     "@tinfoilsh/tinfoil-icons": "^2.0.4",
     "@zip.js/zip.js": "^2.8.53",
     "autoprefixer": "^10.4.21",
