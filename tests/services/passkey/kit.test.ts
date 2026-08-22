@@ -1,6 +1,8 @@
 import { SECRET_PASSKEY_PRF_OUTPUT } from '@/constants/storage-keys'
 import {
   createAndWrapTinfoilKey,
+  enclaveBundleFromTinfoilWrappedKey,
+  evaluateTinfoilCredential,
   passkeyKeyManager,
   PasskeyTimeoutError,
   PrfNotSupportedError,
@@ -8,6 +10,7 @@ import {
   tinfoilPasskeyStorage,
   tinfoilWrappedKeyFromEnclaveBundle,
 } from '@/services/passkey/kit'
+import { encodeWrappedKeyRecord } from '@tinfoilsh/passkey-kit'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const CREDENTIAL_ID = 'AQID'
@@ -20,6 +23,13 @@ const EXISTING_WRAPPED_KEY_HEX =
 function installCredentials(create: () => Promise<unknown>): void {
   Object.defineProperty(navigator, 'credentials', {
     value: { create: vi.fn(create), get: vi.fn() },
+    configurable: true,
+  })
+}
+
+function installCredentialEvaluation(get: () => Promise<unknown>): void {
+  Object.defineProperty(navigator, 'credentials', {
+    value: { create: vi.fn(), get: vi.fn(get) },
     configurable: true,
   })
 }
@@ -38,14 +48,33 @@ describe('Tinfoil passkey manager configuration', () => {
       version: 1,
       relyingPartyId:
         window.location.hostname === 'localhost' ? 'localhost' : 'tinfoil.sh',
-      relyingPartyName: 'Tinfoil Chat',
     })
+    expect(TINFOIL_PASSKEY_PROFILE).not.toHaveProperty('relyingPartyName')
     expect(new TextDecoder().decode(TINFOIL_PASSKEY_PROFILE.prfSalt)).toBe(
       'tinfoil-chat-key-encryption',
     )
     expect(new TextDecoder().decode(TINFOIL_PASSKEY_PROFILE.hkdfInfo)).toBe(
       'tinfoil-chat-kek-v1',
     )
+  })
+
+  it('round-trips transport fields through the exact canonical record codec', () => {
+    const wrappedKey = tinfoilWrappedKeyFromEnclaveBundle({
+      credentialId: CREDENTIAL_ID,
+      kekIvHex: EXISTING_KEK_IV_HEX,
+      wrappedKeyHex: EXISTING_WRAPPED_KEY_HEX,
+    })
+    const relyingPartyId = TINFOIL_PASSKEY_PROFILE.relyingPartyId
+
+    expect(encodeWrappedKeyRecord(wrappedKey)).toBe(
+      `{"version":1,"profile":{"version":1,"relyingPartyId":"${relyingPartyId}","prfSalt":"dGluZm9pbC1jaGF0LWtleS1lbmNyeXB0aW9u","hkdfInfo":"dGluZm9pbC1jaGF0LWtlay12MQ"},"credentialId":"AQID","kekIvHex":"0102030405060708090a0b0c","wrappedKeyHex":"53c8f700925c9f94a7cf679d8a892c82f7c443769103a322e477a38d9118f0a014a659136ee1b9f6ed4921877f17aca7"}`,
+    )
+    expect(enclaveBundleFromTinfoilWrappedKey(wrappedKey)).toEqual({
+      credentialId: CREDENTIAL_ID,
+      kekIvHex: EXISTING_KEK_IV_HEX,
+      encryptedKeysHex: EXISTING_WRAPPED_KEY_HEX,
+    })
+    expect(wrappedKey.profile).toEqual(TINFOIL_PASSKEY_PROFILE)
   })
 
   it('reconstructs the profile for the existing cache and unlocks existing bytes', async () => {
@@ -100,6 +129,14 @@ describe('Tinfoil passkey manager configuration', () => {
         key: EXPECTED_KEY,
       }),
     ).resolves.toBeNull()
+  })
+
+  it('maps evaluateCredential cancellation without touching legacy crypto', async () => {
+    installCredentialEvaluation(async () => {
+      throw new DOMException('localized text', 'NotAllowedError')
+    })
+
+    await expect(evaluateTinfoilCredential([CREDENTIAL_ID])).resolves.toBeNull()
   })
 
   it('maps unsupported and timeout categories to existing UI errors', async () => {

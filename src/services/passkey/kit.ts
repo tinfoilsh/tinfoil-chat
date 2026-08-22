@@ -5,8 +5,11 @@ import {
 import { base64ToUint8Array, uint8ArrayToBase64 } from '@/utils/binary-codec'
 import {
   createPasskeyKeyManager,
+  decodeWrappedKeyRecord,
+  encodeWrappedKeyRecord,
   PasskeyKeyError,
   type CachedPRFResult,
+  type EvaluatedCredential,
   type PasskeyCapability,
   type PasskeyKeyProfile,
   type PasskeyKeyStorage,
@@ -24,7 +27,6 @@ const relyingPartyId =
 export const TINFOIL_PASSKEY_PROFILE: PasskeyKeyProfile = {
   version: 1,
   relyingPartyId,
-  relyingPartyName: 'Tinfoil Chat',
   prfSalt: textEncoder.encode('tinfoil-chat-key-encryption'),
   hkdfInfo: textEncoder.encode('tinfoil-chat-kek-v1'),
 }
@@ -93,6 +95,7 @@ export const tinfoilPasskeyStorage: PasskeyKeyStorage = {
 
 export const passkeyKeyManager = createPasskeyKeyManager({
   profile: TINFOIL_PASSKEY_PROFILE,
+  relyingPartyName: 'Tinfoil Chat',
   storage: tinfoilPasskeyStorage,
 })
 
@@ -139,12 +142,14 @@ export function tinfoilWrappedKeyFromEnclaveBundle(input: {
   kekIvHex: string
   wrappedKeyHex: string
 }): WrappedKey {
-  return {
-    profile: TINFOIL_PASSKEY_PROFILE,
-    credentialId: input.credentialId,
-    kekIvHex: input.kekIvHex,
-    wrappedKeyHex: input.wrappedKeyHex,
-  }
+  return decodeWrappedKeyRecord(
+    encodeWrappedKeyRecord({
+      profile: TINFOIL_PASSKEY_PROFILE,
+      credentialId: input.credentialId,
+      kekIvHex: input.kekIvHex,
+      wrappedKeyHex: input.wrappedKeyHex,
+    }),
+  )
 }
 
 export function enclaveBundleFromTinfoilWrappedKey(wrappedKey: WrappedKey): {
@@ -152,10 +157,11 @@ export function enclaveBundleFromTinfoilWrappedKey(wrappedKey: WrappedKey): {
   kekIvHex: string
   encryptedKeysHex: string
 } {
+  const canonical = decodeWrappedKeyRecord(encodeWrappedKeyRecord(wrappedKey))
   return {
-    credentialId: wrappedKey.credentialId,
-    kekIvHex: wrappedKey.kekIvHex,
-    encryptedKeysHex: wrappedKey.wrappedKeyHex,
+    credentialId: canonical.credentialId,
+    kekIvHex: canonical.kekIvHex,
+    encryptedKeysHex: canonical.wrappedKeyHex,
   }
 }
 
@@ -208,11 +214,11 @@ export async function createAndWrapTinfoilKey(input: {
   }
 }
 
-export async function recoverTinfoilKey(
-  wrappedKeys: WrappedKey[],
-): Promise<{ credentialId: string; key: Uint8Array } | null> {
+export async function evaluateTinfoilCredential(
+  credentialIds: string[],
+): Promise<EvaluatedCredential | null> {
   try {
-    return await passkeyKeyManager.recoverKey({ wrappedKeys })
+    return await passkeyKeyManager.evaluateCredential({ credentialIds })
   } catch (error) {
     if (classifyTinfoilPasskeyError(error) === 'cancelled') return null
     throwMappedPasskeyError(error)

@@ -47,10 +47,10 @@ import { deriveTinfoilKeyIdHex } from '../sync-enclave/tinfoil-key-id'
 import { IF_MATCH_SENTINELS, WIRE_CODES } from '../sync-enclave/wire-contract'
 import {
   enclaveBundleFromTinfoilWrappedKey,
+  evaluateTinfoilCredential,
   getCachedCredentialId,
   getCachedPrfOutputForLegacyBundle,
   passkeyKeyManager,
-  recoverTinfoilKey,
   TINFOIL_PASSKEY_PROFILE,
   tinfoilWrappedKeyFromEnclaveBundle,
 } from './kit'
@@ -526,26 +526,22 @@ export interface RecoveredPasskeyKeyBundle {
   source?: 'enclave' | 'legacy'
 }
 
-const PLACEHOLDER_WRAPPED_KEY_HEX = '00'.repeat(48)
-
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join(
     '',
   )
 }
 
+function isGenericWrappedKey(entry: PasskeyCredentialEntry): boolean {
+  return base64ToUint8Array(entry.encrypted_keys).length === 48
+}
+
 function entryToWrappedKey(entry: PasskeyCredentialEntry): WrappedKey {
   const ciphertext = base64ToUint8Array(entry.encrypted_keys)
-  // Legacy web records encrypt a variable-length JSON envelope. A valid-size
-  // placeholder lets the manager run the credential ceremony and cache its
-  // PRF result; recoverLegacyEntry then applies the retained app-owned decoder.
   return tinfoilWrappedKeyFromEnclaveBundle({
     credentialId: entry.id,
     kekIvHex: bytesToHex(base64ToUint8Array(entry.iv)),
-    wrappedKeyHex:
-      ciphertext.length === 48
-        ? bytesToHex(ciphertext)
-        : PLACEHOLDER_WRAPPED_KEY_HEX,
+    wrappedKeyHex: bytesToHex(ciphertext),
   })
 }
 
@@ -573,8 +569,9 @@ async function deriveLegacyKek(prfOutput: Uint8Array): Promise<CryptoKey> {
 
 async function recoverLegacyEntry(
   entry: PasskeyCredentialEntry,
+  evaluatedPrfOutput?: Uint8Array,
 ): Promise<KeyBundle | null> {
-  const prfOutput = getCachedPrfOutputForLegacyBundle()
+  const prfOutput = evaluatedPrfOutput ?? getCachedPrfOutputForLegacyBundle()
   if (!prfOutput) return null
   try {
     return await decryptKeyBundle(await deriveLegacyKek(prfOutput), {
@@ -616,30 +613,35 @@ export async function recoverPasskeyKeyBundle(
   options: { cachedOnly?: boolean } = {},
 ): Promise<RecoveredPasskeyKeyBundle | null> {
   if (entries.length === 0) return null
-  const wrappedKeys = entries.map(entryToWrappedKey)
+  const genericEntries = entries.filter(isGenericWrappedKey)
+  const wrappedKeys = genericEntries.map(entryToWrappedKey)
   let credentialId: string | null = null
   let rawKey: Uint8Array | null = null
+  let evaluatedPrfOutput: Uint8Array | undefined
 
   if (options.cachedOnly) {
-    const recovered = await passkeyKeyManager.recoverKeyFromCache({
-      wrappedKeys,
-    })
+    const recovered =
+      wrappedKeys.length > 0
+        ? await passkeyKeyManager.recoverKeyFromCache({ wrappedKeys })
+        : null
     credentialId = recovered?.credentialId ?? getCachedCredentialId()
     rawKey = recovered?.key ?? null
   } else {
-    try {
-      const recovered = await recoverTinfoilKey(wrappedKeys)
-      if (!recovered) return null
-      credentialId = recovered.credentialId
-      rawKey = recovered.key
-    } catch (error) {
-      credentialId = getCachedCredentialId()
-      if (
-        !credentialId ||
-        !entries.some((entry) => entry.id === credentialId)
-      ) {
-        throw error
+    const evaluated = await evaluateTinfoilCredential(
+      entries.map((entry) => entry.id),
+    )
+    if (!evaluated) return null
+    credentialId = evaluated.credentialId
+    evaluatedPrfOutput = evaluated.prfResult.output
+    if (genericEntries.some((entry) => entry.id === credentialId)) {
+      const recovered = await passkeyKeyManager.recoverKeyFromCache({
+        wrappedKeys,
+        preferredCredentialId: credentialId,
+      })
+      if (!recovered || recovered.credentialId !== credentialId) {
+        return null
       }
+      rawKey = recovered.key
     }
   }
 
@@ -651,7 +653,7 @@ export async function recoverPasskeyKeyBundle(
         primary: encryptionService.encodeKeyFromBytes(rawKey),
         alternatives: [],
       }
-    : await recoverLegacyEntry(entry)
+    : await recoverLegacyEntry(entry, evaluatedPrfOutput)
   if (
     !keyBundle ||
     !(await acceptLegacyBundleForCurrentKey(entry, keyBundle))
@@ -703,12 +705,20 @@ export async function promoteRecoveredCekToEnclave(input: {
   if (current?.key_id) {
     if (current.key_id !== keyIdHex) return false
     if (current.bundles[input.credentialId]) return true
-    await addWrappedKeyForCurrentKey({
-      wrappedKey,
-      cek: input.cek,
-      keyIdHex,
-    })
-    return true
+    try {
+      await addWrappedKeyForCurrentKey({
+        wrappedKey,
+        cek: input.cek,
+        keyIdHex,
+      })
+      return true
+    } catch (error) {
+      logError('Failed to add recovered passkey bundle', error, {
+        component: 'PasskeyKeyStorage',
+        action: 'promoteRecoveredCekToEnclave',
+      })
+      return false
+    }
   }
   try {
     const enclaveBundle = enclaveBundleFromTinfoilWrappedKey(wrappedKey)
@@ -725,12 +735,10 @@ export async function promoteRecoveredCekToEnclave(input: {
     })
     return true
   } catch (error) {
-    if (
-      error instanceof SyncEnclaveError &&
-      error.code === WIRE_CODES.ExistingDataUnderOtherKey
-    ) {
-      return false
-    }
-    throw error
+    logError('Failed to register recovered passkey bundle', error, {
+      component: 'PasskeyKeyStorage',
+      action: 'promoteRecoveredCekToEnclave',
+    })
+    return false
   }
 }

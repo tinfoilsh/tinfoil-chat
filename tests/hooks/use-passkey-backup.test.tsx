@@ -269,6 +269,34 @@ describe('usePasskeyBackup', () => {
     })
   })
 
+  it('keeps recovery successful when legacy promotion fails', async () => {
+    mocks.loadRecoveryCandidates.mockResolvedValue([
+      { id: 'cred-legacy', source: 'legacy' },
+    ])
+    mocks.recoverPasskeyKeyBundle.mockResolvedValue({
+      credentialId: 'cred-legacy',
+      keyBundle: { primary: 'key_recovered', alternatives: [] },
+      syncVersion: 1,
+      bundleVersion: 1,
+      source: 'legacy',
+    })
+    mocks.getAlternativeKeyBytes.mockReturnValue(new Uint8Array(32))
+    mocks.promoteRecoveredCekToEnclave.mockResolvedValue(false)
+    mocks.authorizeCurrentPrimaryKeyOrThrow.mockResolvedValue(undefined)
+
+    const { result } = renderHook(() =>
+      usePasskeyBackup({ ...baseOptions, initialized: false }),
+    )
+    let recovered: string | null = null
+    await act(async () => {
+      recovered = await result.current.recoverWithPasskey()
+    })
+
+    expect(recovered).toBe('key_recovered')
+    expect(result.current.passkeyRecoveryFailure).toBeNull()
+    expect(result.current.passkeyActive).toBe(true)
+  })
+
   describe('addPasskeyToThisDevice legacy promotion', () => {
     beforeEach(() => {
       mocks.getAllKeys.mockReturnValue({ primary: 'key_x', alternatives: [] })
