@@ -207,6 +207,49 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
     },
   )
 
+  it.each([
+    ['primary', () => localStorage.setItem(USER_ENCRYPTION_KEY, 'key_changed')],
+    [
+      'history',
+      () =>
+        localStorage.setItem(
+          USER_ENCRYPTION_KEY_HISTORY,
+          JSON.stringify(['key_changed_history']),
+        ),
+    ],
+    [
+      'authorization',
+      () =>
+        localStorage.setItem(
+          `${SECRET_CLOUD_KEY_AUTHORIZATION_PREFIX}user-1`,
+          JSON.stringify({ mode: 'explicit_start_fresh' }),
+        ),
+    ],
+    ['account', () => localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-2')],
+  ])(
+    'does not release writes when persisted %s changes during registration',
+    async (_, mutate) => {
+      let resolveRegistration: (value: {
+        ok: boolean
+        key_id: string
+      }) => void = () => {}
+      mockRegisterKey.mockReturnValue(
+        new Promise((resolve) => {
+          resolveRegistration = resolve
+        }),
+      )
+
+      const adoption = adoptLocalKeyForMigration()
+      await vi.waitFor(() => expect(mockRegisterKey).toHaveBeenCalledOnce())
+      mutate()
+      resolveRegistration({ ok: true, key_id: 'kid' })
+
+      await expect(adoption).resolves.toBe(false)
+      expect(mockRegisterKey).toHaveBeenCalledOnce()
+      expect(mockEmit).not.toHaveBeenCalled()
+    },
+  )
+
   it('collapses concurrent adoptions for the same key into one registration', async () => {
     mockRegisterKey.mockResolvedValue({ ok: true, key_id: 'kid' })
 

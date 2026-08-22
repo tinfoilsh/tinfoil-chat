@@ -208,6 +208,7 @@ async function registerAdoptedKey(
       idempotencyKey: newIdempotencyKey(),
       ...(initialBundle ? { initialBundle } : {}),
     })
+    if (!persistedSnapshotStillCurrent(snapshot)) return false
   } catch (err) {
     logError('Failed to adopt local key for migration', err, {
       component: 'CloudSync',
