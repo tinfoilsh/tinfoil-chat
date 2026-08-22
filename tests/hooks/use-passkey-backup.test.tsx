@@ -352,6 +352,9 @@ describe('usePasskeyBackup', () => {
 
     it('proceeds with promotion when remote legacy data exists', async () => {
       mocks.keyCurrent.mockResolvedValue({ key_id: null, has_data: true })
+      mocks.getCurrentCloudKeyAuthorizationMode.mockResolvedValue(
+        'explicit_start_fresh',
+      )
 
       const { result } = renderHook(() => usePasskeyBackup(baseOptions))
 
@@ -363,6 +366,13 @@ describe('usePasskeyBackup', () => {
       expect(success).toBe(true)
       expect(mocks.recoverPasskeyKeyBundle).toHaveBeenCalledOnce()
       expect(mocks.promoteRecoveredCekToEnclave).toHaveBeenCalledOnce()
+      expect(mocks.promoteRecoveredCekToEnclave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          keyBundle: expect.objectContaining({
+            authorizationMode: 'explicit_start_fresh',
+          }),
+        }),
+      )
     })
 
     it('proceeds with promotion when no remote data exists', async () => {
@@ -377,6 +387,48 @@ describe('usePasskeyBackup', () => {
 
       expect(success).toBe(true)
       expect(mocks.promoteRecoveredCekToEnclave).toHaveBeenCalledOnce()
+    })
+
+    it('preserves Start Fresh authorization for current-key add-device enrollment', async () => {
+      mocks.getAllKeys.mockReturnValue({
+        primary: 'key_x',
+        alternatives: ['key_previous'],
+      })
+      mocks.getCurrentCloudKeyAuthorizationMode.mockResolvedValue(
+        'explicit_start_fresh',
+      )
+      mocks.keyCurrent.mockResolvedValue({ key_id: 'kid-current', bundles: {} })
+      const primary = { credentialId: 'AQID' }
+      mocks.createAndWrapTinfoilKey.mockResolvedValue({
+        credentialId: 'AQID',
+        wrappedKey: primary,
+      })
+      const wrappedKeys = { primary, alternatives: [{ credentialId: 'AQID' }] }
+      mocks.wrapTinfoilKeyBundle.mockResolvedValue(wrappedKeys)
+      mocks.addWrappedKeyForCurrentKey.mockResolvedValue(undefined)
+
+      const { result } = renderHook(() => usePasskeyBackup(baseOptions))
+      let success = false
+      await act(async () => {
+        success = await result.current.addPasskeyToThisDevice()
+      })
+
+      expect(success).toBe(true)
+      const keyBundle = {
+        primary: 'key_x',
+        alternatives: ['key_previous'],
+        authorizationMode: 'explicit_start_fresh',
+      }
+      expect(mocks.wrapTinfoilKeyBundle).toHaveBeenCalledWith(
+        primary,
+        keyBundle,
+      )
+      expect(mocks.addWrappedKeyForCurrentKey).toHaveBeenCalledWith({
+        wrappedKeys,
+        keyBundle,
+        cek: new Uint8Array(32),
+        keyIdHex: 'kid-current',
+      })
     })
   })
 })

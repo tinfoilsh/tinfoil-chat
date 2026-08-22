@@ -1735,23 +1735,30 @@ export function usePasskeyBackup({
     const userInfo = getPasskeyUserInfo()
     if (!userInfo) return false
 
-    const keys = encryptionService.getAllKeys()
-    if (!keys.primary) return false
-    const keyBundle = { primary: keys.primary, alternatives: keys.alternatives }
-
-    const cekBytes = encryptionService.getAlternativeKeyBytes(keyBundle.primary)
-    if (!cekBytes) return false
     let keyIdHex: string | null
+    let authorizationMode: CloudKeyAuthorizationMode
     try {
+      authorizationMode =
+        (await getCurrentCloudKeyAuthorizationMode()) ?? 'validated'
       const resp = await enclaveKeyCurrent()
       keyIdHex = resp.key_id ?? null
     } catch (error) {
-      logError('Failed to read enclave key state for add-bundle', error, {
+      logError('Failed to read key state for add-bundle', error, {
         component: 'usePasskeyBackup',
         action: 'addPasskeyToThisDevice',
       })
       return false
     }
+    const keys = encryptionService.getAllKeys()
+    if (!keys.primary) return false
+    const keyBundle = {
+      primary: keys.primary,
+      alternatives: keys.alternatives,
+      authorizationMode,
+    }
+
+    const cekBytes = encryptionService.getAlternativeKeyBytes(keyBundle.primary)
+    if (!cekBytes) return false
 
     passkeyFlowInProgressRef.current = true
     try {
