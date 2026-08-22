@@ -228,7 +228,7 @@ async function registerAdoptedKey(
       current,
       initialBundle,
     )
-    if (!converged) return false
+    if (!converged || !persistedSnapshotStillCurrent(snapshot)) return false
   } catch (err) {
     logError('Failed to adopt local key for migration', err, {
       component: 'CloudSync',
@@ -311,20 +311,7 @@ async function reconcileExistingAdoptedKey(
   initialBundle: KeyRegisterBundleInput | null,
 ): Promise<boolean> {
   if (current.key_id !== localKeyId) {
-    if (
-      snapshot.keyBundle.authorizationMode !== 'explicit_start_fresh' ||
-      !current.etag
-    ) {
-      return false
-    }
-    await registerKey({
-      keyB64: snapshot.keyB64,
-      ifMatch: current.etag,
-      createdVia: 'start_fresh',
-      idempotencyKey: newIdempotencyKey(),
-      ...(initialBundle ? { initialBundle } : {}),
-    })
-    return verifyAdoptedKeyConvergence(snapshot, localKeyId, initialBundle)
+    return false
   }
 
   if (initialBundle && !bundleMatches(current, initialBundle)) {

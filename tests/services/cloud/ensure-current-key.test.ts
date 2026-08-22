@@ -398,7 +398,7 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
     expect(mockEmit).toHaveBeenCalledOnce()
   })
 
-  it('reconciles a changed Start Fresh key after a delayed create', async () => {
+  it('does not let a persisted Start Fresh hint replace the server key', async () => {
     let releaseFirstRegistration: () => void = () => {}
     const registrationGate = new Promise<void>((resolve) => {
       releaseFirstRegistration = resolve
@@ -427,15 +427,15 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
 
     releaseFirstRegistration()
     await expect(staleAdoption).resolves.toBe(false)
-    await expect(currentAdoption).resolves.toBe(true)
+    await expect(currentAdoption).resolves.toBe(false)
 
-    expect(mockRegisterKey).toHaveBeenCalledTimes(2)
+    expect(mockRegisterKey).toHaveBeenCalledOnce()
     expect(mockRegisterKey.mock.calls[0][0].ifMatch).toBe('*')
-    expect(mockRegisterKey.mock.calls[1][0].ifMatch).not.toBe('*')
-    expect(remoteKeyState.key_id).toBe(
+    expect(mockRegisterKey.mock.calls[0][0].createdVia).toBe('recovery')
+    expect(remoteKeyState.key_id).not.toBe(
       await deriveTinfoilKeyIdHex(CHANGED_KEY_BYTES),
     )
-    expect(mockEmit).toHaveBeenCalledOnce()
+    expect(mockEmit).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -480,6 +480,55 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
       mockBundleToEnclave.mock.results.at(-1)?.value.encryptedKeysHex,
     )
     expect(mockEmit).toHaveBeenCalledOnce()
+  })
+
+  it('blocks success when state changes during bundle reconciliation', async () => {
+    enableInitialBundle()
+    remoteKeyState = {
+      key_id: await deriveTinfoilKeyIdHex(
+        Uint8Array.from(atob(TEST_KEY_B64), (character) =>
+          character.charCodeAt(0),
+        ),
+      ),
+      etag: '1',
+      bundles: {
+        AQID: {
+          credential_id: 'AQID',
+          kek_iv: 'stale',
+          encrypted_keys: 'stale',
+        },
+      },
+    }
+    let releaseBundleUpdate: () => void = () => {}
+    const bundleUpdateGate = new Promise<void>((resolve) => {
+      releaseBundleUpdate = resolve
+    })
+    mockAddBundle.mockImplementationOnce(
+      async (request: {
+        credentialId: string
+        kekIvHex: string
+        encryptedKeysHex: string
+      }) => {
+        await bundleUpdateGate
+        remoteKeyState.bundles[request.credentialId] = {
+          credential_id: request.credentialId,
+          kek_iv: request.kekIvHex,
+          encrypted_keys: request.encryptedKeysHex,
+        }
+        return { ok: true }
+      },
+    )
+
+    const adoption = adoptLocalKeyForMigration()
+    await vi.waitFor(() => expect(mockAddBundle).toHaveBeenCalledOnce())
+    localStorage.setItem(
+      USER_ENCRYPTION_KEY_HISTORY,
+      JSON.stringify(['key_changed_during_update']),
+    )
+    releaseBundleUpdate()
+
+    await expect(adoption).resolves.toBe(false)
+    expect(mockEmit).not.toHaveBeenCalled()
   })
 
   it('reconciles a create conflict against the actual current key', async () => {
