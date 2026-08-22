@@ -3,9 +3,11 @@ import {
   createAndWrapTinfoilKey,
   enclaveBundleFromTinfoilWrappedKey,
   evaluateTinfoilCredential,
+  getPasskeyCapability,
   passkeyKeyManager,
   PasskeyTimeoutError,
   PrfNotSupportedError,
+  resetPasskeyCapabilityCache,
   TINFOIL_PASSKEY_PROFILE,
   tinfoilPasskeyStorage,
   tinfoilWrappedKeyFromEnclaveBundle,
@@ -40,6 +42,21 @@ describe('Tinfoil passkey manager configuration', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    resetPasskeyCapabilityCache()
+  })
+
+  it('clears a rejected in-flight capability request', async () => {
+    const capability = vi
+      .spyOn(passkeyKeyManager, 'capability')
+      .mockRejectedValueOnce(new Error('capability unavailable'))
+      .mockResolvedValueOnce('supported')
+
+    await expect(getPasskeyCapability()).rejects.toThrow(
+      'capability unavailable',
+    )
+    await expect(getPasskeyCapability()).resolves.toBe('supported')
+    expect(capability).toHaveBeenCalledTimes(2)
+    capability.mockRestore()
   })
 
   it('owns the byte-identical Tinfoil v1 profile', () => {

@@ -97,17 +97,22 @@ export const passkeyKeyManager = createPasskeyKeyManager({
   storage: tinfoilPasskeyStorage,
 })
 
-let capabilityCache: PasskeyCapability | null = null
+let capabilityPromise: Promise<PasskeyCapability> | null = null
 
-export async function getPasskeyCapability(): Promise<PasskeyCapability> {
-  capabilityCache ??= await passkeyKeyManager.capability({
-    operation: 'enroll',
-  })
-  return capabilityCache
+export function getPasskeyCapability(): Promise<PasskeyCapability> {
+  if (!capabilityPromise) {
+    const request = passkeyKeyManager.capability({ operation: 'enroll' })
+    const cached = request.catch((error) => {
+      if (capabilityPromise === cached) capabilityPromise = null
+      throw error
+    })
+    capabilityPromise = cached
+  }
+  return capabilityPromise
 }
 
 export function resetPasskeyCapabilityCache(): void {
-  capabilityCache = null
+  capabilityPromise = null
 }
 
 export function clearCachedPrfResult(): void {
