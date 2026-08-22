@@ -233,15 +233,17 @@ export const ThoughtProcess = memo(function ThoughtProcess({
 
   // Reset max height when thinking stops
   useEffect(() => {
-    if (!isThinking && contentRef.current) {
-      setContentHeight(contentRef.current.scrollHeight)
+    const content = contentRef.current
+    if (!isThinking && content) {
+      setContentHeight(content.scrollHeight)
     }
   }, [isThinking])
 
   // Measure content height for smooth animation
   useLayoutEffect(() => {
-    if (contentRef.current) {
-      const measuredHeight = contentRef.current.scrollHeight
+    const content = contentRef.current
+    if (content) {
+      const measuredHeight = content.scrollHeight
       setContentHeight((prevHeight) =>
         // Same never-shrink guard as the ResizeObserver below: this effect
         // re-runs on every streaming chunk, and shrinking mid-stream causes
@@ -249,19 +251,20 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         isThinking ? Math.max(prevHeight, measuredHeight) : measuredHeight,
       )
       const resizeObserver = new ResizeObserver(() => {
-        if (contentRef.current) {
-          setContentHeight((prevHeight) => {
-            const newHeight = contentRef.current!.scrollHeight
-            // During streaming (isThinking), only allow height to grow, never shrink
-            // This prevents scroll resets when content temporarily contracts
-            if (isThinking) {
-              return Math.max(prevHeight, newHeight)
-            }
-            return newHeight
-          })
-        }
+        const currentContent = contentRef.current
+        if (!currentContent) return
+
+        const newHeight = currentContent.scrollHeight
+        setContentHeight((prevHeight) => {
+          // During streaming (isThinking), only allow height to grow, never shrink
+          // This prevents scroll resets when content temporarily contracts
+          if (isThinking) {
+            return Math.max(prevHeight, newHeight)
+          }
+          return newHeight
+        })
       })
-      resizeObserver.observe(contentRef.current)
+      resizeObserver.observe(content)
       return () => resizeObserver.disconnect()
     }
   }, [thoughts, isThinking, isExpanded, renderContent])
