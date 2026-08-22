@@ -29,7 +29,7 @@
 
 import { base64ToUint8Array, uint8ArrayToBase64 } from '@/utils/binary-codec'
 import { logError, logInfo } from '@/utils/error-handling'
-import type { WrappedKey } from '@tinfoilsh/passkey-kit'
+import type { PRFResult, WrappedKey } from '@tinfoilsh/passkey-kit'
 import { requirePrimaryKeyB64 } from '../cloud/cek-encoding'
 import type { CloudKeyAuthorizationMode } from '../cloud/cloud-key-authorization'
 import { encryptionService } from '../encryption/encryption-service'
@@ -524,6 +524,7 @@ export interface RecoveredPasskeyKeyBundle {
   syncVersion: number | null
   bundleVersion: number
   source?: 'enclave' | 'legacy'
+  prfResult?: PRFResult
 }
 
 function bytesToHex(bytes: Uint8Array): string {
@@ -633,15 +634,14 @@ export async function recoverPasskeyKeyBundle(
     if (!evaluated) return null
     credentialId = evaluated.credentialId
     evaluatedPrfOutput = evaluated.prfResult.output
-    if (genericEntries.some((entry) => entry.id === credentialId)) {
-      const recovered = await passkeyKeyManager.recoverKeyFromCache({
-        wrappedKeys,
-        preferredCredentialId: credentialId,
+    const wrappedKey = wrappedKeys.find(
+      (candidate) => candidate.credentialId === credentialId,
+    )
+    if (wrappedKey) {
+      rawKey = await passkeyKeyManager.unwrapKeyWithPRFResult({
+        wrappedKey,
+        prfResult: evaluated.prfResult,
       })
-      if (!recovered || recovered.credentialId !== credentialId) {
-        return null
-      }
-      rawKey = recovered.key
     }
   }
 
@@ -666,6 +666,7 @@ export async function recoverPasskeyKeyBundle(
     syncVersion: entry.sync_version ?? null,
     bundleVersion: entry.bundle_version ?? 0,
     source: entry.source,
+    prfResult: evaluatedPrfOutput ? { output: evaluatedPrfOutput } : undefined,
   }
 }
 
@@ -688,12 +689,13 @@ export async function addWrappedKeyForCurrentKey(input: {
 export async function promoteRecoveredCekToEnclave(input: {
   cek: Uint8Array
   credentialId: string
+  prfResult: PRFResult
 }): Promise<boolean> {
-  const wrappedKey = await passkeyKeyManager.rewrapKeyFromCache({
-    key: input.cek,
+  const wrappedKey = await passkeyKeyManager.wrapKeyWithPRFResult({
+    keyMaterial: input.cek,
+    credentialId: input.credentialId,
+    prfResult: input.prfResult,
   })
-  if (!wrappedKey || wrappedKey.credentialId !== input.credentialId)
-    return false
   const keyIdHex = await deriveTinfoilKeyIdHex(input.cek)
   let current: Awaited<ReturnType<typeof enclaveKeyCurrent>> | null = null
   try {

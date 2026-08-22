@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   loadRecoveryCandidates: vi.fn(),
   recoverPasskeyKeyBundle: vi.fn(),
   rewrapKeyFromCache: vi.fn(),
+  wrapKeyWithPRFResult: vi.fn(),
   storeEncryptedKeys: vi.fn(),
   getKey: vi.fn(),
   getAllKeys: vi.fn(),
@@ -82,7 +83,10 @@ vi.mock('@/services/passkey', () => {
     PasskeyTimeoutError: class MockPasskeyTimeoutError extends Error {},
     PrfNotSupportedError: class MockPrfNotSupportedError extends Error {},
     recoverPasskeyKeyBundle: mocks.recoverPasskeyKeyBundle,
-    passkeyKeyManager: { rewrapKeyFromCache: mocks.rewrapKeyFromCache },
+    passkeyKeyManager: {
+      rewrapKeyFromCache: mocks.rewrapKeyFromCache,
+      wrapKeyWithPRFResult: mocks.wrapKeyWithPRFResult,
+    },
     promoteRecoveredCekToEnclave: mocks.promoteRecoveredCekToEnclave,
     storeEncryptedKeys: mocks.storeEncryptedKeys,
   }
@@ -279,6 +283,7 @@ describe('usePasskeyBackup', () => {
       syncVersion: 1,
       bundleVersion: 1,
       source: 'legacy',
+      prfResult: { output: new Uint8Array(32) },
     })
     mocks.getAlternativeKeyBytes.mockReturnValue(new Uint8Array(32))
     mocks.promoteRecoveredCekToEnclave.mockResolvedValue(false)
@@ -308,6 +313,7 @@ describe('usePasskeyBackup', () => {
         credentialId: 'cred-legacy',
         keyBundle: { primary: 'key_x', alternatives: [] },
         source: 'legacy',
+        prfResult: { output: new Uint8Array(32) },
       })
       mocks.promoteRecoveredCekToEnclave.mockResolvedValue(true)
     })

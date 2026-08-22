@@ -1,5 +1,8 @@
 import { SECRET_PASSKEY_PRF_OUTPUT } from '@/constants/storage-keys'
-import { TINFOIL_PASSKEY_PROFILE } from '@/services/passkey/kit'
+import {
+  passkeyKeyManager,
+  TINFOIL_PASSKEY_PROFILE,
+} from '@/services/passkey/kit'
 import {
   encryptKeyBundle,
   promoteRecoveredCekToEnclave,
@@ -115,6 +118,46 @@ describe('recoverPasskeyKeyBundle', () => {
     expect(recovered?.keyBundle.alternatives).toEqual([])
   })
 
+  it('unwraps an evaluated current bundle without reading the PRF cache', async () => {
+    localStorage.clear()
+    const get = vi.fn(async () => ({
+      rawId: new Uint8Array([1, 2, 3]).buffer,
+      authenticatorAttachment: 'platform',
+      getClientExtensionResults: () => ({
+        prf: { results: { first: PRF_OUTPUT.buffer } },
+      }),
+    }))
+    Object.defineProperty(navigator, 'credentials', {
+      value: { create: vi.fn(), get },
+      configurable: true,
+    })
+    const cacheRecovery = vi.spyOn(passkeyKeyManager, 'recoverKeyFromCache')
+    const recovered = await recoverPasskeyKeyBundle([
+      entry({
+        iv: btoa(
+          String.fromCharCode(
+            ...new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
+          ),
+        ),
+        encrypted_keys: btoa(
+          String.fromCharCode(
+            ...new Uint8Array(
+              '53c8f700925c9f94a7cf679d8a892c82f7c443769103a322e477a38d9118f0a014a659136ee1b9f6ed4921877f17aca7'
+                .match(/../g)!
+                .map((byte) => parseInt(byte, 16)),
+            ),
+          ),
+        ),
+        source: 'enclave',
+      }),
+    ])
+
+    expect(recovered?.credentialId).toBe(CREDENTIAL_ID)
+    expect(recovered?.prfResult?.output).toEqual(PRF_OUTPUT)
+    expect(cacheRecovery).not.toHaveBeenCalled()
+    cacheRecovery.mockRestore()
+  })
+
   it('retains the legacy primary and alternatives decoder among candidates', async () => {
     const original = {
       primary: 'key_legacy_primary',
@@ -153,15 +196,21 @@ describe('recoverPasskeyKeyBundle', () => {
 
   it('returns false when legacy promotion registration fails', async () => {
     const cek = new Uint8Array(32).map((_, index) => 0xff - index)
+    localStorage.clear()
     mockRegisterKey.mockRejectedValue(new Error('register unavailable'))
 
     await expect(
-      promoteRecoveredCekToEnclave({ cek, credentialId: CREDENTIAL_ID }),
+      promoteRecoveredCekToEnclave({
+        cek,
+        credentialId: CREDENTIAL_ID,
+        prfResult: { output: PRF_OUTPUT },
+      }),
     ).resolves.toBe(false)
   })
 
   it('returns false when legacy promotion add-bundle fails', async () => {
     const cek = new Uint8Array(32).map((_, index) => 0xff - index)
+    localStorage.clear()
     const { deriveTinfoilKeyIdHex } =
       await import('@/services/sync-enclave/tinfoil-key-id')
     mockKeyCurrent.mockResolvedValue({
@@ -171,7 +220,11 @@ describe('recoverPasskeyKeyBundle', () => {
     mockAddBundle.mockRejectedValue(new Error('add unavailable'))
 
     await expect(
-      promoteRecoveredCekToEnclave({ cek, credentialId: CREDENTIAL_ID }),
+      promoteRecoveredCekToEnclave({
+        cek,
+        credentialId: CREDENTIAL_ID,
+        prfResult: { output: PRF_OUTPUT },
+      }),
     ).resolves.toBe(false)
   })
 })

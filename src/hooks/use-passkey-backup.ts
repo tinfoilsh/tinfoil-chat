@@ -41,6 +41,7 @@ import { keyCurrent as enclaveKeyCurrent } from '@/services/sync-enclave/sync-ap
 import { setCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import type { useUser } from '@clerk/nextjs'
+import type { PRFResult } from '@tinfoilsh/passkey-kit'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 type UserResource = NonNullable<ReturnType<typeof useUser>['user']>
@@ -437,6 +438,7 @@ export function usePasskeyBackup({
     syncVersion: number | null
     bundleVersion: number
     source?: 'enclave' | 'legacy'
+    prfResult?: PRFResult
   } | null> => {
     const entries = await loadRecoveryCandidates()
     return recoverPasskeyKeyBundle(entries)
@@ -490,8 +492,9 @@ export function usePasskeyBackup({
     keyBundle: { primary: string }
     credentialId: string
     source?: 'enclave' | 'legacy'
+    prfResult?: PRFResult
   }): Promise<void> => {
-    if (recovery.source !== 'legacy') return
+    if (recovery.source !== 'legacy' || !recovery.prfResult) return
     const cekBytes = encryptionService.getAlternativeKeyBytes(
       recovery.keyBundle.primary,
     )
@@ -506,6 +509,7 @@ export function usePasskeyBackup({
     const promoted = await promoteRecoveredCekToEnclave({
       cek: cekBytes,
       credentialId: recovery.credentialId,
+      prfResult: recovery.prfResult,
     })
     if (!promoted) {
       logError(
@@ -699,9 +703,13 @@ export function usePasskeyBackup({
           markBackupUpdateNeeded()
           return
         }
-        wrappedKey = await passkeyKeyManager.rewrapKeyFromCache({
-          key: primaryBytes,
-        })
+        wrappedKey = recovered.prfResult
+          ? await passkeyKeyManager.wrapKeyWithPRFResult({
+              keyMaterial: primaryBytes,
+              credentialId: recovered.credentialId,
+              prfResult: recovered.prfResult,
+            })
+          : null
       }
       if (!wrappedKey) {
         markBackupUpdateNeeded()
@@ -1664,10 +1672,11 @@ export function usePasskeyBackup({
       if (legacyEntries.length === 0) return false
 
       const recovered = await recoverPasskeyKeyBundle(legacyEntries)
-      if (!recovered) return false
+      if (!recovered?.prfResult) return false
       const promoted = await promoteRecoveredCekToEnclave({
         cek,
         credentialId: recovered.credentialId,
+        prfResult: recovered.prfResult,
       })
       if (!promoted) {
         logInfo('legacy promotion via add-device button failed', {
