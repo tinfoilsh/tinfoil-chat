@@ -396,11 +396,11 @@ function reshapeBundleToEntry(bundle: {
 
 export async function loadPasskeyCredentials(
   options: {
-    legacySignal?: AbortSignal
+    signal?: AbortSignal
   } = {},
 ): Promise<PasskeyCredentialEntry[]> {
   try {
-    const resp = await enclaveKeyCurrent()
+    const resp = await enclaveKeyCurrent(options.signal)
     if (resp.key_id) {
       const entries = Object.values(resp.bundles).map((bundle) => ({
         ...reshapeBundleToEntry(bundle),
@@ -412,12 +412,12 @@ export async function loadPasskeyCredentials(
       // bundle is written, so a key_id can exist with no way to unlock
       // it. Fall back to the legacy passkey so the user can still
       // recover instead of being forced into manual key entry.
-      return await loadLegacyFallback(options.legacySignal)
+      return await loadLegacyFallback(options.signal)
     }
-    return await loadLegacyFallback(options.legacySignal)
+    return await loadLegacyFallback(options.signal)
   } catch (err) {
     if (err instanceof SyncEnclaveError && err.status === 404) {
-      return loadLegacyFallback(options.legacySignal)
+      return loadLegacyFallback(options.signal)
     }
     throw err
   }

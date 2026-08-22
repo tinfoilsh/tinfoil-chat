@@ -74,6 +74,40 @@ async function applySuccessfulRegister(request: {
   return { ok: true, key_id: keyId }
 }
 
+interface AddBundleRequest {
+  keyId: string
+  keyB64: string
+  credentialId: string
+  kekIvHex: string
+  encryptedKeysHex: string
+}
+
+async function applySuccessfulAddBundle(request: AddBundleRequest) {
+  const requestKeyId = await deriveTinfoilKeyIdHex(
+    Uint8Array.from(atob(request.keyB64), (character) =>
+      character.charCodeAt(0),
+    ),
+  )
+  if (
+    request.keyId !== remoteKeyState.key_id ||
+    requestKeyId !== remoteKeyState.key_id
+  ) {
+    throw new Error('bundle target does not match remote key')
+  }
+  remoteKeyState = {
+    ...remoteKeyState,
+    bundles: {
+      ...remoteKeyState.bundles,
+      [request.credentialId]: {
+        credential_id: request.credentialId,
+        kek_iv: request.kekIvHex,
+        encrypted_keys: request.encryptedKeysHex,
+      },
+    },
+  }
+  return { ok: true }
+}
+
 function enableInitialBundle(): void {
   const primaryWrapped = { credentialId: 'AQID' }
   mockLoadPasskeyCredentials.mockResolvedValue([{ id: 'AQID' }])
@@ -162,28 +196,7 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
     nextEtag = 1
     mockRegisterKey.mockReset().mockImplementation(applySuccessfulRegister)
     mockKeyCurrent.mockReset().mockImplementation(async () => remoteKeyState)
-    mockAddBundle
-      .mockReset()
-      .mockImplementation(
-        async (request: {
-          credentialId: string
-          kekIvHex: string
-          encryptedKeysHex: string
-        }) => {
-          remoteKeyState = {
-            ...remoteKeyState,
-            bundles: {
-              ...remoteKeyState.bundles,
-              [request.credentialId]: {
-                credential_id: request.credentialId,
-                kek_iv: request.kekIvHex,
-                encrypted_keys: request.encryptedKeysHex,
-              },
-            },
-          }
-          return { ok: true }
-        },
-      )
+    mockAddBundle.mockReset().mockImplementation(applySuccessfulAddBundle)
     mockEmit.mockReset()
     mockRequirePrimaryKeyB64.mockReset()
     mockRequirePrimaryKeyB64.mockReturnValue(TEST_KEY_B64)
@@ -503,21 +516,10 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
     const bundleUpdateGate = new Promise<void>((resolve) => {
       releaseBundleUpdate = resolve
     })
-    mockAddBundle.mockImplementationOnce(
-      async (request: {
-        credentialId: string
-        kekIvHex: string
-        encryptedKeysHex: string
-      }) => {
-        await bundleUpdateGate
-        remoteKeyState.bundles[request.credentialId] = {
-          credential_id: request.credentialId,
-          kek_iv: request.kekIvHex,
-          encrypted_keys: request.encryptedKeysHex,
-        }
-        return { ok: true }
-      },
-    )
+    mockAddBundle.mockImplementationOnce(async (request: AddBundleRequest) => {
+      await bundleUpdateGate
+      return applySuccessfulAddBundle(request)
+    })
 
     const adoption = adoptLocalKeyForMigration()
     await vi.waitFor(() => expect(mockAddBundle).toHaveBeenCalledOnce())
@@ -529,6 +531,37 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
 
     await expect(adoption).resolves.toBe(false)
     expect(mockEmit).not.toHaveBeenCalled()
+  })
+
+  it('rejects bundle writes targeting the wrong remote key', async () => {
+    remoteKeyState = {
+      key_id: await deriveTinfoilKeyIdHex(
+        Uint8Array.from(atob(TEST_KEY_B64), (character) =>
+          character.charCodeAt(0),
+        ),
+      ),
+      etag: '1',
+      bundles: {},
+    }
+    const request = {
+      keyId: 'wrong-key-id',
+      keyB64: TEST_KEY_B64,
+      credentialId: 'AQID',
+      kekIvHex: '01'.repeat(12),
+      encryptedKeysHex: '02',
+    }
+
+    await expect(mockAddBundle(request)).rejects.toThrow(
+      'bundle target does not match remote key',
+    )
+    await expect(
+      mockAddBundle({
+        ...request,
+        keyId: remoteKeyState.key_id,
+        keyB64: CHANGED_KEY_B64,
+      }),
+    ).rejects.toThrow('bundle target does not match remote key')
+    expect(remoteKeyState.bundles).toEqual({})
   })
 
   it('reconciles a create conflict against the actual current key', async () => {
@@ -561,8 +594,8 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
     vi.useFakeTimers()
     let discoverySignal: AbortSignal | undefined
     mockLoadPasskeyCredentials.mockImplementationOnce(
-      (options: { legacySignal?: AbortSignal }) => {
-        discoverySignal = options.legacySignal
+      (options: { signal?: AbortSignal }) => {
+        discoverySignal = options.signal
         return new Promise(() => {})
       },
     )

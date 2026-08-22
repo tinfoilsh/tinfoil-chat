@@ -94,4 +94,15 @@ describe('AuthTokenManager', () => {
 
     await expect(read).rejects.toBeInstanceOf(AuthTokenUnavailableError)
   })
+
+  it('cancels a hanging authentication read with the caller signal', async () => {
+    const manager = new AuthTokenManager()
+    manager.initialize(vi.fn(() => new Promise(() => {})))
+    const controller = new AbortController()
+
+    const authenticated = manager.isAuthenticated(controller.signal)
+    controller.abort()
+
+    await expect(authenticated).rejects.toMatchObject({ name: 'AbortError' })
+  })
 })

@@ -430,7 +430,9 @@ function assertRelativeSyncEnclavePath(path: string): void {
  * Returns the lazily-initialized sync enclave client. Concurrent
  * callers share a single in-flight verification promise.
  */
-export function getSyncEnclaveClient(): Promise<SyncEnclaveClient> {
+export function getSyncEnclaveClient(
+  signal?: AbortSignal,
+): Promise<SyncEnclaveClient> {
   if (!clientPromise) {
     const pendingClient = SyncEnclaveClient.create()
     const trackedClient = pendingClient.catch((err) => {
@@ -443,7 +445,7 @@ export function getSyncEnclaveClient(): Promise<SyncEnclaveClient> {
     })
     clientPromise = trackedClient
   }
-  return clientPromise
+  return signal ? settleWithSignal(clientPromise, signal) : clientPromise
 }
 
 /**

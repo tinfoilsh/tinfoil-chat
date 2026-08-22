@@ -353,7 +353,7 @@ async function initialBundleFromCachedPrf(
       }, ADOPTION_INITIAL_BUNDLE_TIMEOUT_MS)
     })
     const entries = await Promise.race([
-      loadPasskeyCredentials({ legacySignal: controller.signal }),
+      loadPasskeyCredentials({ signal: controller.signal }),
       timeout,
     ])
     const primaryBytes = encryptionService.getAlternativeKeyBytes(
@@ -381,5 +381,6 @@ async function initialBundleFromCachedPrf(
     return null
   } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId)
+    controller.abort()
   }
 }

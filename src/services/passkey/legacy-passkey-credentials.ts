@@ -21,12 +21,12 @@ const API_BASE_URL =
 export async function fetchLegacyPasskeyCredentials(
   signal?: AbortSignal,
 ): Promise<PasskeyCredentialEntry[]> {
-  if (!(await authTokenManager.isAuthenticated())) {
+  if (!(await authTokenManager.isAuthenticated(signal))) {
     return []
   }
   try {
     const resp = await fetch(`${API_BASE_URL}/api/passkey-credentials/`, {
-      headers: await authTokenManager.getAuthHeaders(),
+      headers: await authTokenManager.getAuthHeaders(signal),
       signal,
     })
     if (resp.status === 404 || resp.status === 401) return []
@@ -37,10 +37,12 @@ export async function fetchLegacyPasskeyCredentials(
     if (!Array.isArray(body)) return []
     return body.filter(isPasskeyCredentialEntry)
   } catch (err) {
-    logError('failed to load legacy passkey credentials', err, {
-      component: 'LegacyPasskeyCredentials',
-      action: 'fetchLegacyPasskeyCredentials',
-    })
+    if (!signal?.aborted) {
+      logError('failed to load legacy passkey credentials', err, {
+        component: 'LegacyPasskeyCredentials',
+        action: 'fetchLegacyPasskeyCredentials',
+      })
+    }
     // Re-throw so callers can tell "no credentials exist" (404/401 or
     // an empty array) apart from "could not find out"; swallowing the
     // failure as [] would misroute recovery into first-time setup and
