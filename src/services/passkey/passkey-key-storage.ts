@@ -239,6 +239,22 @@ function decodeCanonicalWrappedKeyRecord(record: string): WrappedKey {
   return wrappedKey
 }
 
+function usesTinfoilPasskeyProfile(wrappedKey: WrappedKey): boolean {
+  const profile = wrappedKey.profile
+  return (
+    profile.version === TINFOIL_PASSKEY_PROFILE.version &&
+    profile.relyingPartyId === TINFOIL_PASSKEY_PROFILE.relyingPartyId &&
+    profile.prfSalt.length === TINFOIL_PASSKEY_PROFILE.prfSalt.length &&
+    profile.prfSalt.every(
+      (byte, index) => byte === TINFOIL_PASSKEY_PROFILE.prfSalt[index],
+    ) &&
+    profile.hkdfInfo.length === TINFOIL_PASSKEY_PROFILE.hkdfInfo.length &&
+    profile.hkdfInfo.every(
+      (byte, index) => byte === TINFOIL_PASSKEY_PROFILE.hkdfInfo[index],
+    )
+  )
+}
+
 function encodeGenericKeyEnvelope(
   wrappedKeys: TinfoilWrappedKeyBundle,
   keys: KeyBundle,
@@ -728,6 +744,7 @@ function parseRecoveryCandidate(
       )
       const records = [primary, ...alternatives]
       if (
+        records.some((wrappedKey) => !usesTinfoilPasskeyProfile(wrappedKey)) ||
         records.some((wrappedKey) => wrappedKey.credentialId !== entry.id) ||
         new Set(records.map((wrappedKey) => wrappedKey.kekIvHex)).size !==
           records.length ||
@@ -785,6 +802,63 @@ async function unwrapGenericEnvelope(
     }
     validateKeyBundle(keyBundle)
     return keyBundle
+  } catch {
+    return null
+  }
+}
+
+async function recoverGenericCandidateFromManagerCache(
+  candidates: RecoveryCandidate[],
+): Promise<{
+  candidate: Extract<RecoveryCandidate, { kind: 'envelope' | 'raw' }>
+  keyBundle: KeyBundle
+} | null> {
+  const generic = candidates.filter(
+    (
+      candidate,
+    ): candidate is Extract<RecoveryCandidate, { kind: 'envelope' | 'raw' }> =>
+      candidate.kind === 'envelope' || candidate.kind === 'raw',
+  )
+  if (generic.length === 0) return null
+  const recovered = await passkeyKeyManager.recoverKeyFromCache({
+    wrappedKeys: generic.map((candidate) =>
+      candidate.kind === 'envelope'
+        ? candidate.wrappedKeys.primary
+        : candidate.wrappedKey,
+    ),
+  })
+  if (!recovered) return null
+  const candidate = generic.find(
+    (item) => item.entry.id === recovered.credentialId,
+  )
+  if (!candidate) return null
+  if (candidate.kind === 'raw') {
+    return {
+      candidate,
+      keyBundle: {
+        primary: encryptionService.encodeKeyFromBytes(recovered.key),
+        alternatives: [],
+      },
+    }
+  }
+  const alternatives: string[] = []
+  for (const wrappedKey of candidate.wrappedKeys.alternatives) {
+    const alternative = await passkeyKeyManager.recoverKeyFromCache({
+      wrappedKeys: [wrappedKey],
+    })
+    if (!alternative || alternative.credentialId !== recovered.credentialId) {
+      return null
+    }
+    alternatives.push(encryptionService.encodeKeyFromBytes(alternative.key))
+  }
+  const keyBundle: KeyBundle = {
+    primary: encryptionService.encodeKeyFromBytes(recovered.key),
+    alternatives,
+    authorizationMode: candidate.envelope.authorizationMode,
+  }
+  try {
+    validateKeyBundle(keyBundle)
+    return { candidate, keyBundle }
   } catch {
     return null
   }
@@ -863,23 +937,54 @@ export async function recoverPasskeyKeyBundle(
     .filter((candidate): candidate is RecoveryCandidate => candidate !== null)
   if (candidates.length === 0) return null
 
-  let credentialId: string | null
-  let prfResult: PRFResult | undefined
-
   if (options.cachedOnly) {
-    credentialId = getCachedCredentialId()
+    const generic = await recoverGenericCandidateFromManagerCache(candidates)
+    if (generic) {
+      if (
+        !(await acceptLegacyBundleForCurrentKey(
+          generic.candidate.entry,
+          generic.keyBundle,
+        ))
+      ) {
+        return null
+      }
+      return {
+        keyBundle: generic.keyBundle,
+        credentialId: generic.candidate.entry.id,
+        syncVersion: generic.candidate.entry.sync_version ?? null,
+        bundleVersion: generic.candidate.entry.bundle_version ?? 0,
+        source: generic.candidate.entry.source,
+      }
+    }
+    const credentialId = getCachedCredentialId()
     const output = getCachedPrfOutputForLegacyBundle()
-    if (output) prfResult = { output }
-  } else {
-    const evaluated = await evaluateTinfoilCredential(
-      candidates.map((candidate) => candidate.entry.id),
+    if (!credentialId || !output) return null
+    const candidate = candidates.find(
+      (item) => item.kind === 'legacy' && item.entry.id === credentialId,
     )
-    if (!evaluated) return null
-    credentialId = evaluated.credentialId
-    prfResult = evaluated.prfResult
+    if (!candidate) return null
+    const keyBundle = await recoverLegacyEntry(candidate.entry, output)
+    if (
+      !keyBundle ||
+      !(await acceptLegacyBundleForCurrentKey(candidate.entry, keyBundle))
+    ) {
+      return null
+    }
+    return {
+      keyBundle,
+      credentialId,
+      syncVersion: candidate.entry.sync_version ?? null,
+      bundleVersion: candidate.entry.bundle_version ?? 0,
+      source: candidate.entry.source,
+    }
   }
 
-  if (!credentialId || !prfResult) return null
+  const evaluated = await evaluateTinfoilCredential(
+    candidates.map((candidate) => candidate.entry.id),
+  )
+  if (!evaluated) return null
+  const credentialId = evaluated.credentialId
+  const prfResult = evaluated.prfResult
   const candidate = candidates.find((item) => item.entry.id === credentialId)
   if (!candidate) return null
 
@@ -914,7 +1019,7 @@ export async function recoverPasskeyKeyBundle(
     syncVersion: candidate.entry.sync_version ?? null,
     bundleVersion: candidate.entry.bundle_version ?? 0,
     source: candidate.entry.source,
-    prfResult: options.cachedOnly ? undefined : prfResult,
+    prfResult,
   }
 }
 

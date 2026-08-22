@@ -18,7 +18,7 @@ import {
   decodeWrappedKeyRecord,
   encodeWrappedKeyRecord,
 } from '@tinfoilsh/passkey-kit'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/utils/error-handling', () => ({
   logError: vi.fn(),
@@ -125,6 +125,10 @@ describe('recoverPasskeyKeyBundle', () => {
     mockKeyCurrent.mockReset().mockResolvedValue({ key_id: null, bundles: {} })
     mockAddBundle.mockReset()
     mockRegisterKey.mockReset()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('adapts and unlocks existing raw bundle bytes through the manager', async () => {
@@ -269,6 +273,30 @@ describe('recoverPasskeyKeyBundle', () => {
     expect(new Set(ivs).size).toBe(3)
   })
 
+  it('uses manager cache recovery for generic envelopes without the legacy cache', async () => {
+    const primary = new Uint8Array(32).fill(0x48)
+    const alternative = new Uint8Array(32).fill(0x49)
+    const keyBundle = {
+      primary: encryptionService.encodeKeyFromBytes(primary),
+      alternatives: [encryptionService.encodeKeyFromBytes(alternative)],
+      authorizationMode: 'validated' as const,
+    }
+    const candidate = await genericEnvelopeEntry(keyBundle)
+    localStorage.removeItem(SECRET_PASSKEY_PRF_OUTPUT)
+    const recoverFromCache = vi
+      .spyOn(passkeyKeyManager, 'recoverKeyFromCache')
+      .mockResolvedValueOnce({ credentialId: CREDENTIAL_ID, key: primary })
+      .mockResolvedValueOnce({ credentialId: CREDENTIAL_ID, key: alternative })
+
+    const recovered = await recoverPasskeyKeyBundle([candidate], {
+      cachedOnly: true,
+    })
+
+    expect(localStorage.getItem(SECRET_PASSKEY_PRF_OUTPUT)).toBeNull()
+    expect(recoverFromCache).toHaveBeenCalledTimes(2)
+    expect(recovered?.keyBundle).toEqual(keyBundle)
+  })
+
   it('rejects generic envelopes encrypted for the wrong PRF', async () => {
     const keyBundle = {
       primary: encryptionService.encodeKeyFromBytes(
@@ -373,7 +401,7 @@ describe('recoverPasskeyKeyBundle', () => {
     expect(get.mock.calls[0][0].publicKey.allowCredentials).toHaveLength(3)
   })
 
-  it('recovers the selected generic envelope among raw and legacy credentials', async () => {
+  it('recovers Start Fresh authorization on another device among mixed credentials', async () => {
     const keyBundle = {
       primary: encryptionService.encodeKeyFromBytes(
         new Uint8Array(32).fill(0x75),
@@ -381,7 +409,7 @@ describe('recoverPasskeyKeyBundle', () => {
       alternatives: [
         encryptionService.encodeKeyFromBytes(new Uint8Array(32).fill(0x76)),
       ],
-      authorizationMode: 'validated' as const,
+      authorizationMode: 'explicit_start_fresh' as const,
     }
     const legacy = await encryptKeyBundle(await legacyKek(), {
       primary: 'key_legacy_primary',
