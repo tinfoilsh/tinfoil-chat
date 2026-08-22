@@ -12,6 +12,14 @@
  * on instead of optimistically storming the controlplane.
  */
 
+import {
+  AUTH_ACTIVE_USER_ID,
+  LEGACY_ENCRYPTION_KEY,
+  LEGACY_ENCRYPTION_KEY_HISTORY,
+  SECRET_CLOUD_KEY_AUTHORIZATION_PREFIX,
+  USER_ENCRYPTION_KEY,
+  USER_ENCRYPTION_KEY_HISTORY,
+} from '@/constants/storage-keys'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { encryptionService } from '../encryption/encryption-service'
 import { passkeyKeyManager } from '../passkey/kit'
@@ -19,22 +27,99 @@ import {
   loadPasskeyCredentials,
   tinfoilWrappedKeyBundleToEnclave,
   wrapTinfoilKeyBundle,
+  type KeyBundle,
 } from '../passkey/passkey-key-storage'
 import { passkeyEvents } from '../sync-enclave/passkey-events'
 import {
+  bytesToBase64,
   newIdempotencyKey,
   registerKey,
   type KeyRegisterBundleInput,
 } from '../sync-enclave/sync-api'
 import { IF_MATCH_SENTINELS } from '../sync-enclave/wire-contract'
-import {
-  persistedPrimaryKeyB64,
-  requirePrimaryKeyB64,
-  requirePrimaryKeyBytes,
-} from './cek-encoding'
+import { requirePrimaryKeyB64 } from './cek-encoding'
+import type { CloudKeyAuthorizationMode } from './cloud-key-authorization'
 
 let inflightAdoption: { keyB64: string; promise: Promise<boolean> } | null =
   null
+
+interface PersistedAdoptionSnapshot {
+  keyB64: string
+  keyBundle: KeyBundle
+  fingerprint: string
+}
+
+function parsePersistedAlternatives(raw: string | null): string[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === 'string')
+      : []
+  } catch {
+    return []
+  }
+}
+
+function parsePersistedAuthorizationMode(
+  raw: string | null,
+): CloudKeyAuthorizationMode {
+  try {
+    const parsed = raw ? (JSON.parse(raw) as { mode?: unknown }) : null
+    return parsed?.mode === 'explicit_start_fresh'
+      ? 'explicit_start_fresh'
+      : 'validated'
+  } catch {
+    return 'validated'
+  }
+}
+
+function readPersistedAdoptionSnapshot(): PersistedAdoptionSnapshot | null {
+  if (typeof localStorage === 'undefined') return null
+  const userPrimary = localStorage.getItem(USER_ENCRYPTION_KEY)
+  const legacyPrimary = localStorage.getItem(LEGACY_ENCRYPTION_KEY)
+  const userHistory = localStorage.getItem(USER_ENCRYPTION_KEY_HISTORY)
+  const legacyHistory = localStorage.getItem(LEGACY_ENCRYPTION_KEY_HISTORY)
+  const activeUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
+  const authorization = activeUserId
+    ? localStorage.getItem(
+        `${SECRET_CLOUD_KEY_AUTHORIZATION_PREFIX}${activeUserId}`,
+      )
+    : null
+  const primary = userPrimary ?? legacyPrimary
+  if (!primary) return null
+  const primaryBytes = encryptionService.getAlternativeKeyBytes(primary)
+  if (!primaryBytes) return null
+  const keyB64 = bytesToBase64(primaryBytes)
+  return {
+    keyB64,
+    keyBundle: {
+      primary,
+      alternatives: parsePersistedAlternatives(userHistory ?? legacyHistory),
+      authorizationMode: parsePersistedAuthorizationMode(authorization),
+    },
+    fingerprint: JSON.stringify({
+      userPrimary,
+      legacyPrimary,
+      userHistory,
+      legacyHistory,
+      activeUserId,
+      authorization,
+    }),
+  }
+}
+
+function persistedSnapshotStillCurrent(
+  snapshot: PersistedAdoptionSnapshot,
+): boolean {
+  const current = readPersistedAdoptionSnapshot()
+  if (!current || current.fingerprint !== snapshot.fingerprint) return false
+  try {
+    return requirePrimaryKeyB64() === snapshot.keyB64
+  } catch {
+    return false
+  }
+}
 
 /**
  * Drop any in-flight adoption registration. Called on logout / auth
@@ -75,31 +160,31 @@ export function resetInflightAdoption(): void {
  * rolls back, so the registered key and the write key always agree.
  */
 export async function adoptLocalKeyForMigration(): Promise<boolean> {
-  const keyB64 = persistedPrimaryKeyB64()
-  if (!keyB64) return false
+  const snapshot = readPersistedAdoptionSnapshot()
+  if (!snapshot) return false
   let activeKeyB64: string
   try {
     activeKeyB64 = requirePrimaryKeyB64()
   } catch {
     return false
   }
-  if (activeKeyB64 !== keyB64) return false
+  if (activeKeyB64 !== snapshot.keyB64) return false
   // Dedupe concurrent adoptions per key. The upload coalescer fires the
   // write gate for many chats at once; without this they would each
   // race a register-key, and every loser of the if_match='*' CAS would
   // defer its push. Sharing one in-flight registration lets the whole
   // batch proceed the moment the single winner lands. A different key
   // (e.g. after the user changes it) gets its own registration.
-  if (inflightAdoption?.keyB64 === keyB64) {
+  if (inflightAdoption?.keyB64 === snapshot.keyB64) {
     return inflightAdoption.promise
   }
   const entry: { keyB64: string; promise: Promise<boolean> } = {
-    keyB64,
+    keyB64: snapshot.keyB64,
     promise: Promise.resolve(false),
   }
   entry.promise = (async () => {
     try {
-      return await registerAdoptedKey(keyB64)
+      return await registerAdoptedKey(snapshot)
     } finally {
       if (inflightAdoption === entry) {
         inflightAdoption = null
@@ -110,11 +195,14 @@ export async function adoptLocalKeyForMigration(): Promise<boolean> {
   return entry.promise
 }
 
-async function registerAdoptedKey(keyB64: string): Promise<boolean> {
-  const initialBundle = await initialBundleFromCachedPrf()
+async function registerAdoptedKey(
+  snapshot: PersistedAdoptionSnapshot,
+): Promise<boolean> {
+  const initialBundle = await initialBundleFromCachedPrf(snapshot)
+  if (!persistedSnapshotStillCurrent(snapshot)) return false
   try {
     await registerKey({
-      keyB64,
+      keyB64: snapshot.keyB64,
       ifMatch: IF_MATCH_SENTINELS.AnyKey,
       createdVia: 'recovery',
       idempotencyKey: newIdempotencyKey(),
@@ -147,25 +235,27 @@ async function registerAdoptedKey(keyB64: string): Promise<boolean> {
  * re-created) must not attach an unopenable bundle, which would make
  * the account look passkey-recoverable when it is not.
  */
-async function initialBundleFromCachedPrf(): Promise<KeyRegisterBundleInput | null> {
+async function initialBundleFromCachedPrf(
+  snapshot: PersistedAdoptionSnapshot,
+): Promise<KeyRegisterBundleInput | null> {
   try {
     const entries = await loadPasskeyCredentials()
+    const primaryBytes = encryptionService.getAlternativeKeyBytes(
+      snapshot.keyBundle.primary,
+    )
+    if (!primaryBytes) return null
     const wrappedKey = await passkeyKeyManager.rewrapKeyFromCache({
-      key: requirePrimaryKeyBytes(),
+      key: primaryBytes,
     })
     if (!wrappedKey) return null
     if (!entries.some((entry) => entry.id === wrappedKey.credentialId))
       return null
-    const keys = encryptionService.getAllKeys()
-    if (!keys.primary) return null
-    const keyBundle = {
-      primary: keys.primary,
-      alternatives: keys.alternatives,
-      authorizationMode: 'validated' as const,
-    }
-    const wrappedKeys = await wrapTinfoilKeyBundle(wrappedKey, keyBundle)
+    const wrappedKeys = await wrapTinfoilKeyBundle(
+      wrappedKey,
+      snapshot.keyBundle,
+    )
     if (!wrappedKeys) return null
-    return tinfoilWrappedKeyBundleToEnclave(wrappedKeys, keyBundle)
+    return tinfoilWrappedKeyBundleToEnclave(wrappedKeys, snapshot.keyBundle)
   } catch (err) {
     logWarning('Could not build initial bundle for key adoption', {
       component: 'CloudSync',
