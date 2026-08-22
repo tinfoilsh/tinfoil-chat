@@ -428,7 +428,9 @@ function assertRelativeSyncEnclavePath(path: string): void {
 
 /**
  * Returns the lazily-initialized sync enclave client. Concurrent
- * callers share a single in-flight verification promise.
+ * callers share a single in-flight verification promise. SecureClient.ready()
+ * does not accept an AbortSignal or injectable fetch, so caller cancellation
+ * only stops waiting; it never evicts or duplicates the cold-start attestation.
  */
 export function getSyncEnclaveClient(
   signal?: AbortSignal,
