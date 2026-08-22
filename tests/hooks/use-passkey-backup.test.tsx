@@ -9,18 +9,16 @@ const mocks = vi.hoisted(() => ({
   authorizeCurrentPrimaryKeyOrThrow: vi.fn(),
   getCurrentCloudKeyAuthorizationMode: vi.fn(),
   isPrfSupported: vi.fn(),
-  authenticatePrfPasskey: vi.fn(),
-  createPrfPasskey: vi.fn(),
-  decryptKeyBundle: vi.fn(),
+  addWrappedKeyForCurrentKey: vi.fn(),
+  createAndWrapTinfoilKey: vi.fn(),
   deletePasskeyCredential: vi.fn(),
-  deriveKeyEncryptionKey: vi.fn(),
-  getCachedPrfResult: vi.fn(),
   getLocalPasskeyCredentialId: vi.fn(),
   getPasskeyCredentialState: vi.fn(),
   getPasskeyDeviceState: vi.fn(),
   loadPasskeyCredentials: vi.fn(),
   loadRecoveryCandidates: vi.fn(),
-  retrieveEncryptedKeys: vi.fn(),
+  recoverPasskeyKeyBundle: vi.fn(),
+  rewrapKeyFromCache: vi.fn(),
   storeEncryptedKeys: vi.fn(),
   getKey: vi.fn(),
   getAllKeys: vi.fn(),
@@ -29,8 +27,6 @@ const mocks = vi.hoisted(() => ({
   getAlternativeKeyBytes: vi.fn(),
   encodeKeyFromBytes: vi.fn(),
   generateKey: vi.fn(),
-  cekBytesToHex: vi.fn(),
-  addBundleForCurrentKey: vi.fn(),
   promoteRecoveredCekToEnclave: vi.fn(),
   keyCurrent: vi.fn(),
   setCloudSyncEnabled: vi.fn(),
@@ -74,12 +70,9 @@ vi.mock('@/services/passkey', () => {
   }
 
   return {
-    authenticatePrfPasskey: mocks.authenticatePrfPasskey,
-    createPrfPasskey: mocks.createPrfPasskey,
-    decryptKeyBundle: mocks.decryptKeyBundle,
+    addWrappedKeyForCurrentKey: mocks.addWrappedKeyForCurrentKey,
+    createAndWrapTinfoilKey: mocks.createAndWrapTinfoilKey,
     deletePasskeyCredential: mocks.deletePasskeyCredential,
-    deriveKeyEncryptionKey: mocks.deriveKeyEncryptionKey,
-    getCachedPrfResult: mocks.getCachedPrfResult,
     getLocalPasskeyCredentialId: mocks.getLocalPasskeyCredentialId,
     getPasskeyCredentialState: mocks.getPasskeyCredentialState,
     getPasskeyDeviceState: mocks.getPasskeyDeviceState,
@@ -88,7 +81,9 @@ vi.mock('@/services/passkey', () => {
     PasskeyCredentialConflictError: MockPasskeyCredentialConflictError,
     PasskeyTimeoutError: class MockPasskeyTimeoutError extends Error {},
     PrfNotSupportedError: class MockPrfNotSupportedError extends Error {},
-    retrieveEncryptedKeys: mocks.retrieveEncryptedKeys,
+    recoverPasskeyKeyBundle: mocks.recoverPasskeyKeyBundle,
+    passkeyKeyManager: { rewrapKeyFromCache: mocks.rewrapKeyFromCache },
+    promoteRecoveredCekToEnclave: mocks.promoteRecoveredCekToEnclave,
     storeEncryptedKeys: mocks.storeEncryptedKeys,
   }
 })
@@ -105,20 +100,11 @@ vi.mock('@/services/encryption/encryption-service', () => ({
   },
 }))
 
-vi.mock('@/services/sync-enclave/key-bundle', () => ({
-  cekBytesToHex: mocks.cekBytesToHex,
-}))
-
 vi.mock('@/services/sync-enclave/passkey-events', () => ({
   passkeyEvents: {
     on: mocks.passkeyEventsOn,
     emit: mocks.passkeyEventsEmit,
   },
-}))
-
-vi.mock('@/services/sync-enclave/passkey-key-flow', () => ({
-  addBundleForCurrentKey: mocks.addBundleForCurrentKey,
-  promoteRecoveredCekToEnclave: mocks.promoteRecoveredCekToEnclave,
 }))
 
 vi.mock('@/services/sync-enclave/sync-api', () => ({
@@ -152,7 +138,6 @@ describe('usePasskeyBackup', () => {
     mocks.getPasskeyCredentialState.mockResolvedValue('empty')
     mocks.getPasskeyDeviceState.mockResolvedValue('empty')
     mocks.loadPasskeyCredentials.mockResolvedValue([])
-    mocks.getCachedPrfResult.mockReturnValue(null)
     mocks.getLocalPasskeyCredentialId.mockReturnValue(null)
     mocks.getKey.mockReturnValue(null)
     mocks.getAllKeys.mockReturnValue({ primary: null, alternatives: [] })
@@ -288,16 +273,15 @@ describe('usePasskeyBackup', () => {
     beforeEach(() => {
       mocks.getAllKeys.mockReturnValue({ primary: 'key_x', alternatives: [] })
       mocks.getAlternativeKeyBytes.mockReturnValue(new Uint8Array(32))
-      mocks.cekBytesToHex.mockReturnValue('deadbeef')
       mocks.loadRecoveryCandidates.mockResolvedValue([
         { id: 'cred-legacy', source: 'legacy' },
       ])
-      mocks.authenticatePrfPasskey.mockResolvedValue({
-        prfOutput: new Uint8Array(32),
+      mocks.recoverPasskeyKeyBundle.mockResolvedValue({
         credentialId: 'cred-legacy',
+        keyBundle: { primary: 'key_x', alternatives: [] },
+        source: 'legacy',
       })
-      mocks.deriveKeyEncryptionKey.mockResolvedValue({} as CryptoKey)
-      mocks.promoteRecoveredCekToEnclave.mockResolvedValue({ ok: true })
+      mocks.promoteRecoveredCekToEnclave.mockResolvedValue(true)
     })
 
     it('proceeds with promotion when remote legacy data exists', async () => {
@@ -311,7 +295,7 @@ describe('usePasskeyBackup', () => {
       })
 
       expect(success).toBe(true)
-      expect(mocks.authenticatePrfPasskey).toHaveBeenCalledOnce()
+      expect(mocks.recoverPasskeyKeyBundle).toHaveBeenCalledOnce()
       expect(mocks.promoteRecoveredCekToEnclave).toHaveBeenCalledOnce()
     })
 

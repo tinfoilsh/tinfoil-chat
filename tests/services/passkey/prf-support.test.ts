@@ -6,9 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('prf-support', () => {
   const originalPublicKeyCredential = globalThis.PublicKeyCredential
+  const originalCredentials = navigator.credentials
 
   beforeEach(() => {
     resetPrfSupportCache()
+    Object.defineProperty(navigator, 'credentials', {
+      value: { create: vi.fn(), get: vi.fn() },
+      writable: true,
+      configurable: true,
+    })
   })
 
   afterEach(() => {
@@ -16,6 +22,11 @@ describe('prf-support', () => {
     // otherwise a test that defines PublicKeyCredential will leak it.
     Object.defineProperty(globalThis, 'PublicKeyCredential', {
       value: originalPublicKeyCredential,
+      writable: true,
+      configurable: true,
+    })
+    Object.defineProperty(navigator, 'credentials', {
+      value: originalCredentials,
       writable: true,
       configurable: true,
     })
@@ -71,7 +82,7 @@ describe('prf-support', () => {
           .mockResolvedValue(true),
         getClientCapabilities: vi
           .fn()
-          .mockResolvedValue({ 'extension-prf': true }),
+          .mockResolvedValue({ 'extension:prf': true }),
       },
       writable: true,
       configurable: true,
