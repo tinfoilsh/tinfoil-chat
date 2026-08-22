@@ -24,6 +24,8 @@ export {
   recoverPasskeyKeyBundle,
   savePasskeyCredentials,
   storeEncryptedKeys,
+  tinfoilWrappedKeyBundleToEnclave,
+  wrapTinfoilKeyBundle,
 } from './passkey-key-storage'
 export type {
   KeyBundle,
@@ -31,5 +33,6 @@ export type {
   PasskeyCredentialState,
   PasskeyDeviceState,
   StoreEncryptedKeysOptions,
+  TinfoilWrappedKeyBundle,
 } from './passkey-key-storage'
 export { isPrfSupported, resetPrfSupportCache } from './prf-support'

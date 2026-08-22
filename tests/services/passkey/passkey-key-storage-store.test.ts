@@ -13,6 +13,7 @@ import { TINFOIL_PASSKEY_PROFILE } from '@/services/passkey/kit'
 import {
   PasskeyCredentialConflictError,
   storeEncryptedKeys,
+  tinfoilWrappedKeyBundleToEnclave,
   type KeyBundle,
 } from '@/services/passkey/passkey-key-storage'
 import { SyncEnclaveError } from '@/services/sync-enclave/sync-enclave-client'
@@ -49,6 +50,7 @@ vi.mock('@/services/encryption/encryption-service', () => ({
 }))
 
 const PRIMARY_BYTES = new Uint8Array(32).fill(0x11)
+const ALTERNATIVE_BYTES = new Uint8Array(32).fill(0x22)
 const KEY_BUNDLE: KeyBundle = {
   primary: 'key_primary',
   alternatives: ['key_alt1'],
@@ -57,11 +59,21 @@ const KEY_BUNDLE: KeyBundle = {
 
 describe('passkey-key-storage storeEncryptedKeys (enclave wire)', () => {
   let expectedKeyId: string
-  const wrappedKey = (credentialId: string) => ({
-    profile: TINFOIL_PASSKEY_PROFILE,
-    credentialId,
-    kekIvHex: '01'.repeat(12),
-    wrappedKeyHex: '02'.repeat(48),
+  const wrappedKeys = (credentialId: string) => ({
+    primary: {
+      profile: TINFOIL_PASSKEY_PROFILE,
+      credentialId,
+      kekIvHex: '01'.repeat(12),
+      wrappedKeyHex: '02'.repeat(48),
+    },
+    alternatives: [
+      {
+        profile: TINFOIL_PASSKEY_PROFILE,
+        credentialId,
+        kekIvHex: '03'.repeat(12),
+        wrappedKeyHex: '04'.repeat(48),
+      },
+    ],
   })
 
   beforeEach(async () => {
@@ -69,9 +81,11 @@ describe('passkey-key-storage storeEncryptedKeys (enclave wire)', () => {
     mockAddBundle.mockReset()
     mockKeyCurrent.mockReset()
     mockGetAlternativeKeyBytes.mockReset()
-    mockGetAlternativeKeyBytes.mockImplementation((k) =>
-      k === 'key_primary' ? PRIMARY_BYTES : null,
-    )
+    mockGetAlternativeKeyBytes.mockImplementation((k) => {
+      if (k === 'key_primary') return PRIMARY_BYTES
+      if (k === 'key_alt1') return ALTERNATIVE_BYTES
+      return null
+    })
 
     expectedKeyId = await deriveTinfoilKeyIdHex(PRIMARY_BYTES)
   })
@@ -89,7 +103,8 @@ describe('passkey-key-storage storeEncryptedKeys (enclave wire)', () => {
       })
     mockRegisterKey.mockResolvedValue({ ok: true, key_id: expectedKeyId })
 
-    const result = await storeEncryptedKeys(wrappedKey('AQID'), KEY_BUNDLE)
+    const bundle = wrappedKeys('AQID')
+    const result = await storeEncryptedKeys(bundle, KEY_BUNDLE)
 
     expect(result).toEqual({ syncVersion: 1, bundleVersion: 1 })
     expect(mockRegisterKey).toHaveBeenCalledOnce()
@@ -97,6 +112,9 @@ describe('passkey-key-storage storeEncryptedKeys (enclave wire)', () => {
     const arg = mockRegisterKey.mock.calls[0][0]
     expect(arg.createdVia).toBe('passkey')
     expect(arg.initialBundle.credentialId).toBe('AQID')
+    expect(arg.initialBundle).toEqual(
+      tinfoilWrappedKeyBundleToEnclave(bundle, KEY_BUNDLE),
+    )
   })
 
   it('uses created_via=start_fresh when the bundle is marked explicit_start_fresh', async () => {
@@ -107,7 +125,7 @@ describe('passkey-key-storage storeEncryptedKeys (enclave wire)', () => {
         bundles: { AQID: { bundle_version: 1 } },
       })
     mockRegisterKey.mockResolvedValue({ ok: true, key_id: expectedKeyId })
-    await storeEncryptedKeys(wrappedKey('AQID'), {
+    await storeEncryptedKeys(wrappedKeys('AQID'), {
       ...KEY_BUNDLE,
       authorizationMode: 'explicit_start_fresh',
     })
@@ -123,7 +141,7 @@ describe('passkey-key-storage storeEncryptedKeys (enclave wire)', () => {
       })
     mockRegisterKey.mockResolvedValue({ ok: true, key_id: expectedKeyId })
 
-    await storeEncryptedKeys(wrappedKey('AQID'), KEY_BUNDLE)
+    await storeEncryptedKeys(wrappedKeys('AQID'), KEY_BUNDLE)
 
     expect(mockRegisterKey).toHaveBeenCalledOnce()
     const arg = mockRegisterKey.mock.calls[0][0]
@@ -138,7 +156,7 @@ describe('passkey-key-storage storeEncryptedKeys (enclave wire)', () => {
       new SyncEnclaveError('exists', 409, 'EXISTING_DATA_UNDER_OTHER_KEY'),
     )
     await expect(
-      storeEncryptedKeys(wrappedKey('AQID'), KEY_BUNDLE),
+      storeEncryptedKeys(wrappedKeys('AQID'), KEY_BUNDLE),
     ).rejects.toBeInstanceOf(PasskeyCredentialConflictError)
   })
 
@@ -151,13 +169,17 @@ describe('passkey-key-storage storeEncryptedKeys (enclave wire)', () => {
       })
     mockAddBundle.mockResolvedValue({ ok: true })
 
-    const result = await storeEncryptedKeys(wrappedKey('BAUG'), KEY_BUNDLE)
+    const bundle = wrappedKeys('BAUG')
+    const result = await storeEncryptedKeys(bundle, KEY_BUNDLE)
     expect(result).toEqual({ syncVersion: 7, bundleVersion: 7 })
     expect(mockRegisterKey).not.toHaveBeenCalled()
     expect(mockAddBundle).toHaveBeenCalledOnce()
     const arg = mockAddBundle.mock.calls[0][0]
     expect(arg.keyId).toBe(expectedKeyId)
     expect(arg.credentialId).toBe('BAUG')
+    const expectedBundle = tinfoilWrappedKeyBundleToEnclave(bundle, KEY_BUNDLE)
+    expect(arg.kekIvHex).toBe(expectedBundle.kekIvHex)
+    expect(arg.encryptedKeysHex).toBe(expectedBundle.encryptedKeysHex)
     expect(typeof arg.idempotencyKey).toBe('string')
   })
 
@@ -167,7 +189,7 @@ describe('passkey-key-storage storeEncryptedKeys (enclave wire)', () => {
       bundles: { BwgJ: { bundle_version: 2 } },
     })
     await expect(
-      storeEncryptedKeys(wrappedKey('BwgJ'), KEY_BUNDLE),
+      storeEncryptedKeys(wrappedKeys('BwgJ'), KEY_BUNDLE),
     ).rejects.toBeInstanceOf(PasskeyCredentialConflictError)
     expect(mockRegisterKey).not.toHaveBeenCalled()
     expect(mockAddBundle).not.toHaveBeenCalled()
@@ -176,7 +198,7 @@ describe('passkey-key-storage storeEncryptedKeys (enclave wire)', () => {
   it('returns null when an unexpected error escapes the enclave call', async () => {
     mockKeyCurrent.mockResolvedValue({ key_id: null, bundles: {} })
     mockRegisterKey.mockRejectedValue(new Error('boom'))
-    const result = await storeEncryptedKeys(wrappedKey('AQID'), KEY_BUNDLE)
+    const result = await storeEncryptedKeys(wrappedKeys('AQID'), KEY_BUNDLE)
     expect(result).toBeNull()
   })
 })

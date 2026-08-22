@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   recoverPasskeyKeyBundle: vi.fn(),
   rewrapKeyFromCache: vi.fn(),
   wrapKeyWithPRFResult: vi.fn(),
+  wrapTinfoilKeyBundle: vi.fn(),
   storeEncryptedKeys: vi.fn(),
   getKey: vi.fn(),
   getAllKeys: vi.fn(),
@@ -89,6 +90,7 @@ vi.mock('@/services/passkey', () => {
     },
     promoteRecoveredCekToEnclave: mocks.promoteRecoveredCekToEnclave,
     storeEncryptedKeys: mocks.storeEncryptedKeys,
+    wrapTinfoilKeyBundle: mocks.wrapTinfoilKeyBundle,
   }
 })
 
@@ -145,6 +147,10 @@ describe('usePasskeyBackup', () => {
     mocks.getLocalPasskeyCredentialId.mockReturnValue(null)
     mocks.getKey.mockReturnValue(null)
     mocks.getAllKeys.mockReturnValue({ primary: null, alternatives: [] })
+    mocks.wrapTinfoilKeyBundle.mockImplementation(async (primary) => ({
+      primary,
+      alternatives: [],
+    }))
     mocks.passkeyEventsOn.mockReturnValue(() => {})
   })
 
@@ -300,6 +306,32 @@ describe('usePasskeyBackup', () => {
     expect(recovered).toBe('key_recovered')
     expect(result.current.passkeyRecoveryFailure).toBeNull()
     expect(result.current.passkeyActive).toBe(true)
+    expect(mocks.promoteRecoveredCekToEnclave).toHaveBeenCalledOnce()
+  })
+
+  it('fails enrollment before remote storage when alternatives cannot be wrapped', async () => {
+    mocks.getCurrentCloudKeyAuthorizationMode.mockResolvedValue('validated')
+    mocks.getAllKeys.mockReturnValue({
+      primary: 'key_primary',
+      alternatives: ['key_alternative'],
+    })
+    mocks.getAlternativeKeyBytes.mockReturnValue(new Uint8Array(32))
+    mocks.createAndWrapTinfoilKey.mockResolvedValue({
+      credentialId: 'AQID',
+      wrappedKey: { credentialId: 'AQID' },
+    })
+    mocks.wrapTinfoilKeyBundle.mockResolvedValue(null)
+
+    const { result } = renderHook(() =>
+      usePasskeyBackup({ ...baseOptions, initialized: false }),
+    )
+    let enrolled = true
+    await act(async () => {
+      enrolled = await result.current.setupPasskey()
+    })
+
+    expect(enrolled).toBe(false)
+    expect(mocks.storeEncryptedKeys).not.toHaveBeenCalled()
   })
 
   describe('addPasskeyToThisDevice legacy promotion', () => {

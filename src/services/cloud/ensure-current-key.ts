@@ -13,8 +13,13 @@
  */
 
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
+import { encryptionService } from '../encryption/encryption-service'
 import { passkeyKeyManager } from '../passkey/kit'
-import { loadPasskeyCredentials } from '../passkey/passkey-key-storage'
+import {
+  loadPasskeyCredentials,
+  tinfoilWrappedKeyBundleToEnclave,
+  wrapTinfoilKeyBundle,
+} from '../passkey/passkey-key-storage'
 import { passkeyEvents } from '../sync-enclave/passkey-events'
 import {
   newIdempotencyKey,
@@ -132,8 +137,8 @@ async function registerAdoptedKey(keyB64: string): Promise<boolean> {
 }
 
 /**
- * Best-effort initial bundle for key adoption: wrap the CEK being
- * registered under the KEK derived from this device's cached passkey
+ * Best-effort initial bundle for key adoption: wrap the complete key
+ * history into the generic envelope using this device's cached passkey
  * PRF. Adoption must never be blocked by bundle problems, so every
  * failure path returns null and the caller registers bundleless.
  *
@@ -151,11 +156,16 @@ async function initialBundleFromCachedPrf(): Promise<KeyRegisterBundleInput | nu
     if (!wrappedKey) return null
     if (!entries.some((entry) => entry.id === wrappedKey.credentialId))
       return null
-    return {
-      credentialId: wrappedKey.credentialId,
-      kekIvHex: wrappedKey.kekIvHex,
-      encryptedKeysHex: wrappedKey.wrappedKeyHex,
+    const keys = encryptionService.getAllKeys()
+    if (!keys.primary) return null
+    const keyBundle = {
+      primary: keys.primary,
+      alternatives: keys.alternatives,
+      authorizationMode: 'validated' as const,
     }
+    const wrappedKeys = await wrapTinfoilKeyBundle(wrappedKey, keyBundle)
+    if (!wrappedKeys) return null
+    return tinfoilWrappedKeyBundleToEnclave(wrappedKeys, keyBundle)
   } catch (err) {
     logWarning('Could not build initial bundle for key adoption', {
       component: 'CloudSync',
