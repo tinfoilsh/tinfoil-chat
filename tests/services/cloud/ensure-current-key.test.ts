@@ -4,9 +4,12 @@ import {
   USER_ENCRYPTION_KEY,
   USER_ENCRYPTION_KEY_HISTORY,
 } from '@/constants/storage-keys'
+import { deriveTinfoilKeyIdHex } from '@/services/sync-enclave/tinfoil-key-id'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockRegisterKey = vi.fn()
+const mockKeyCurrent = vi.fn()
+const mockAddBundle = vi.fn()
 const mockEmit = vi.fn()
 const mockLoadPasskeyCredentials = vi.fn()
 const mockRewrapKeyFromCache = vi.fn()
@@ -19,6 +22,82 @@ const TEST_KEY_B64 = vi.hoisted(() => {
   for (let i = 0; i < 32; i++) bin += String.fromCharCode(i + 1)
   return btoa(bin)
 })
+
+const CHANGED_KEY_BYTES = new Uint8Array(32).fill(0x7a)
+const CHANGED_KEY_B64 = btoa(String.fromCharCode(...CHANGED_KEY_BYTES))
+
+interface RemoteKeyState {
+  key_id: string | null
+  etag?: string
+  bundles: Record<
+    string,
+    { credential_id: string; kek_iv: string; encrypted_keys: string }
+  >
+}
+
+let remoteKeyState: RemoteKeyState
+let nextEtag: number
+
+async function applySuccessfulRegister(request: {
+  keyB64: string
+  ifMatch: string
+  initialBundle?: {
+    credentialId: string
+    kekIvHex: string
+    encryptedKeysHex: string
+  }
+}) {
+  if (request.ifMatch === '*' && remoteKeyState.key_id) {
+    throw new Error('create conflict')
+  }
+  if (request.ifMatch !== '*' && request.ifMatch !== remoteKeyState.etag) {
+    throw new Error('etag conflict')
+  }
+  const keyId = await deriveTinfoilKeyIdHex(
+    Uint8Array.from(atob(request.keyB64), (character) =>
+      character.charCodeAt(0),
+    ),
+  )
+  remoteKeyState = {
+    key_id: keyId,
+    etag: String(nextEtag++),
+    bundles: request.initialBundle
+      ? {
+          [request.initialBundle.credentialId]: {
+            credential_id: request.initialBundle.credentialId,
+            kek_iv: request.initialBundle.kekIvHex,
+            encrypted_keys: request.initialBundle.encryptedKeysHex,
+          },
+        }
+      : {},
+  }
+  return { ok: true, key_id: keyId }
+}
+
+function enableInitialBundle(): void {
+  const primaryWrapped = { credentialId: 'AQID' }
+  mockLoadPasskeyCredentials.mockResolvedValue([{ id: 'AQID' }])
+  mockRewrapKeyFromCache.mockResolvedValue(primaryWrapped)
+  mockWrapTinfoilKeyBundle.mockImplementation(
+    async (
+      primary: { credentialId: string },
+      keyBundle: { alternatives: string[] },
+    ) => ({ primary, alternatives: keyBundle.alternatives }),
+  )
+  mockBundleToEnclave.mockImplementation(
+    (
+      _: unknown,
+      keyBundle: { alternatives: string[]; authorizationMode: string },
+    ) => ({
+      credentialId: 'AQID',
+      kekIvHex: '01'.repeat(12),
+      encryptedKeysHex: JSON.stringify({
+        alternatives: keyBundle.alternatives,
+        authorizationMode: keyBundle.authorizationMode,
+      }),
+    }),
+  )
+}
 
 vi.mock('@/utils/error-handling', () => ({
   logError: vi.fn(),
@@ -39,6 +118,8 @@ vi.mock('@/services/sync-enclave/sync-api', async () => {
   >('@/services/sync-enclave/sync-api')
   return {
     ...real,
+    addBundle: (...args: unknown[]) => mockAddBundle(...args),
+    keyCurrent: (...args: unknown[]) => mockKeyCurrent(...args),
     registerKey: (...args: unknown[]) => mockRegisterKey(...args),
     newIdempotencyKey: () => 'idem-test',
   }
@@ -70,11 +151,39 @@ vi.mock('@/services/sync-enclave/passkey-events', () => ({
   passkeyEvents: { emit: (...args: unknown[]) => mockEmit(...args) },
 }))
 
-import { adoptLocalKeyForMigration } from '@/services/cloud/ensure-current-key'
+import {
+  ADOPTION_INITIAL_BUNDLE_TIMEOUT_MS,
+  adoptLocalKeyForMigration,
+} from '@/services/cloud/ensure-current-key'
 
 describe('ensure-current-key adoptLocalKeyForMigration', () => {
   beforeEach(() => {
-    mockRegisterKey.mockReset()
+    remoteKeyState = { key_id: null, bundles: {} }
+    nextEtag = 1
+    mockRegisterKey.mockReset().mockImplementation(applySuccessfulRegister)
+    mockKeyCurrent.mockReset().mockImplementation(async () => remoteKeyState)
+    mockAddBundle
+      .mockReset()
+      .mockImplementation(
+        async (request: {
+          credentialId: string
+          kekIvHex: string
+          encryptedKeysHex: string
+        }) => {
+          remoteKeyState = {
+            ...remoteKeyState,
+            bundles: {
+              ...remoteKeyState.bundles,
+              [request.credentialId]: {
+                credential_id: request.credentialId,
+                kek_iv: request.kekIvHex,
+                encrypted_keys: request.encryptedKeysHex,
+              },
+            },
+          }
+          return { ok: true }
+        },
+      )
     mockEmit.mockReset()
     mockRequirePrimaryKeyB64.mockReset()
     mockRequirePrimaryKeyB64.mockReturnValue(TEST_KEY_B64)
@@ -100,13 +209,12 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.clearAllMocks()
     localStorage.clear()
   })
 
   it('registers the local CEK bundleless with created_via=recovery and if_match=*', async () => {
-    mockRegisterKey.mockResolvedValue({ ok: true, key_id: 'kid' })
-
     const ok = await adoptLocalKeyForMigration()
 
     expect(ok).toBe(true)
@@ -158,7 +266,6 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
     mockRewrapKeyFromCache.mockResolvedValue(primaryWrapped)
     mockWrapTinfoilKeyBundle.mockResolvedValue(wrappedBundle)
     mockBundleToEnclave.mockReturnValue(transport)
-    mockRegisterKey.mockResolvedValue({ ok: true, key_id: 'kid' })
 
     await expect(adoptLocalKeyForMigration()).resolves.toBe(true)
 
@@ -229,20 +336,19 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
   ])(
     'does not release writes when persisted %s changes during registration',
     async (_, mutate) => {
-      let resolveRegistration: (value: {
-        ok: boolean
-        key_id: string
-      }) => void = () => {}
-      mockRegisterKey.mockReturnValue(
-        new Promise((resolve) => {
-          resolveRegistration = resolve
-        }),
-      )
+      let releaseRegistration: () => void = () => {}
+      const registrationGate = new Promise<void>((resolve) => {
+        releaseRegistration = resolve
+      })
+      mockRegisterKey.mockImplementationOnce(async (request) => {
+        await registrationGate
+        return applySuccessfulRegister(request)
+      })
 
       const adoption = adoptLocalKeyForMigration()
       await vi.waitFor(() => expect(mockRegisterKey).toHaveBeenCalledOnce())
       mutate()
-      resolveRegistration({ ok: true, key_id: 'kid' })
+      releaseRegistration()
 
       await expect(adoption).resolves.toBe(false)
       expect(mockRegisterKey).toHaveBeenCalledOnce()
@@ -269,17 +375,14 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
     ],
     ['account', () => localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-2')],
   ])('queues a new adoption when snapshot %s changes', async (_, mutate) => {
-    let resolveFirstRegistration: (value: {
-      ok: boolean
-      key_id: string
-    }) => void = () => {}
-    mockRegisterKey
-      .mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveFirstRegistration = resolve
-        }),
-      )
-      .mockResolvedValueOnce({ ok: true, key_id: 'kid' })
+    let releaseFirstRegistration: () => void = () => {}
+    const registrationGate = new Promise<void>((resolve) => {
+      releaseFirstRegistration = resolve
+    })
+    mockRegisterKey.mockImplementationOnce(async (request) => {
+      await registrationGate
+      return applySuccessfulRegister(request)
+    })
 
     const staleAdoption = adoptLocalKeyForMigration()
     await vi.waitFor(() => expect(mockRegisterKey).toHaveBeenCalledOnce())
@@ -287,16 +390,150 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
     const currentAdoption = adoptLocalKeyForMigration()
 
     expect(mockRegisterKey).toHaveBeenCalledOnce()
-    resolveFirstRegistration({ ok: true, key_id: 'kid' })
+    releaseFirstRegistration()
     await expect(staleAdoption).resolves.toBe(false)
     await expect(currentAdoption).resolves.toBe(true)
-    expect(mockRegisterKey).toHaveBeenCalledTimes(2)
+    expect(mockRegisterKey).toHaveBeenCalledOnce()
+    expect(mockKeyCurrent.mock.calls.length).toBeGreaterThanOrEqual(3)
     expect(mockEmit).toHaveBeenCalledOnce()
   })
 
-  it('deduplicates concurrent adoptions for the exact snapshot', async () => {
-    mockRegisterKey.mockResolvedValue({ ok: true, key_id: 'kid' })
+  it('reconciles a changed Start Fresh key after a delayed create', async () => {
+    let releaseFirstRegistration: () => void = () => {}
+    const registrationGate = new Promise<void>((resolve) => {
+      releaseFirstRegistration = resolve
+    })
+    mockRegisterKey.mockImplementationOnce(async (request) => {
+      await registrationGate
+      return applySuccessfulRegister(request)
+    })
 
+    const staleAdoption = adoptLocalKeyForMigration()
+    await vi.waitFor(() => expect(mockRegisterKey).toHaveBeenCalledOnce())
+    localStorage.setItem(USER_ENCRYPTION_KEY, 'key_changed')
+    localStorage.setItem(
+      `${SECRET_CLOUD_KEY_AUTHORIZATION_PREFIX}user-1`,
+      JSON.stringify({ mode: 'explicit_start_fresh' }),
+    )
+    mockGetAlternativeKeyBytes.mockImplementation((key: string) =>
+      key === 'key_changed'
+        ? CHANGED_KEY_BYTES
+        : Uint8Array.from(atob(TEST_KEY_B64), (character) =>
+            character.charCodeAt(0),
+          ),
+    )
+    mockRequirePrimaryKeyB64.mockReturnValue(CHANGED_KEY_B64)
+    const currentAdoption = adoptLocalKeyForMigration()
+
+    releaseFirstRegistration()
+    await expect(staleAdoption).resolves.toBe(false)
+    await expect(currentAdoption).resolves.toBe(true)
+
+    expect(mockRegisterKey).toHaveBeenCalledTimes(2)
+    expect(mockRegisterKey.mock.calls[0][0].ifMatch).toBe('*')
+    expect(mockRegisterKey.mock.calls[1][0].ifMatch).not.toBe('*')
+    expect(remoteKeyState.key_id).toBe(
+      await deriveTinfoilKeyIdHex(CHANGED_KEY_BYTES),
+    )
+    expect(mockEmit).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    [
+      'history',
+      () =>
+        localStorage.setItem(
+          USER_ENCRYPTION_KEY_HISTORY,
+          JSON.stringify(['key_latest_history']),
+        ),
+    ],
+    [
+      'authorization',
+      () =>
+        localStorage.setItem(
+          `${SECRET_CLOUD_KEY_AUTHORIZATION_PREFIX}user-1`,
+          JSON.stringify({ mode: 'explicit_start_fresh' }),
+        ),
+    ],
+  ])('reconciles changed %s after a delayed create', async (_, mutate) => {
+    enableInitialBundle()
+    let releaseFirstRegistration: () => void = () => {}
+    const registrationGate = new Promise<void>((resolve) => {
+      releaseFirstRegistration = resolve
+    })
+    mockRegisterKey.mockImplementationOnce(async (request) => {
+      await registrationGate
+      return applySuccessfulRegister(request)
+    })
+
+    const staleAdoption = adoptLocalKeyForMigration()
+    await vi.waitFor(() => expect(mockRegisterKey).toHaveBeenCalledOnce())
+    mutate()
+    const currentAdoption = adoptLocalKeyForMigration()
+    releaseFirstRegistration()
+
+    await expect(staleAdoption).resolves.toBe(false)
+    await expect(currentAdoption).resolves.toBe(true)
+    expect(mockRegisterKey).toHaveBeenCalledOnce()
+    expect(mockAddBundle).toHaveBeenCalledOnce()
+    expect(remoteKeyState.bundles.AQID.encrypted_keys).toBe(
+      mockBundleToEnclave.mock.results.at(-1)?.value.encryptedKeysHex,
+    )
+    expect(mockEmit).toHaveBeenCalledOnce()
+  })
+
+  it('reconciles a create conflict against the actual current key', async () => {
+    mockRegisterKey.mockImplementationOnce(async (request) => {
+      await applySuccessfulRegister(request)
+      throw new Error('response reported conflict')
+    })
+
+    await expect(adoptLocalKeyForMigration()).resolves.toBe(true)
+
+    expect(mockRegisterKey).toHaveBeenCalledOnce()
+    expect(mockKeyCurrent.mock.calls.length).toBeGreaterThanOrEqual(2)
+    expect(mockEmit).toHaveBeenCalledOnce()
+  })
+
+  it('blocks when a create conflict reveals a different validated key', async () => {
+    mockRegisterKey.mockImplementationOnce(async () => {
+      remoteKeyState = { key_id: 'different-key-id', etag: '7', bundles: {} }
+      throw new Error('create conflict')
+    })
+
+    await expect(adoptLocalKeyForMigration()).resolves.toBe(false)
+
+    expect(mockRegisterKey).toHaveBeenCalledOnce()
+    expect(remoteKeyState.key_id).toBe('different-key-id')
+    expect(mockEmit).not.toHaveBeenCalled()
+  })
+
+  it('times out legacy discovery and allows the next adoption to progress', async () => {
+    vi.useFakeTimers()
+    let discoverySignal: AbortSignal | undefined
+    mockLoadPasskeyCredentials.mockImplementationOnce(
+      (options: { legacySignal?: AbortSignal }) => {
+        discoverySignal = options.legacySignal
+        return new Promise(() => {})
+      },
+    )
+
+    const firstAdoption = adoptLocalKeyForMigration()
+    await vi.advanceTimersByTimeAsync(ADOPTION_INITIAL_BUNDLE_TIMEOUT_MS)
+    await expect(firstAdoption).resolves.toBe(true)
+    expect(discoverySignal?.aborted).toBe(true)
+    expect(mockRegisterKey).toHaveBeenCalledOnce()
+
+    localStorage.setItem(
+      USER_ENCRYPTION_KEY_HISTORY,
+      JSON.stringify(['key_after_timeout']),
+    )
+    mockLoadPasskeyCredentials.mockResolvedValue([])
+    await expect(adoptLocalKeyForMigration()).resolves.toBe(true)
+    expect(mockKeyCurrent.mock.calls.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('deduplicates concurrent adoptions for the exact snapshot', async () => {
     const [ra, rb] = await Promise.all([
       adoptLocalKeyForMigration(),
       adoptLocalKeyForMigration(),

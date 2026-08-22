@@ -18,15 +18,16 @@ const API_BASE_URL =
  * Writes to /api/passkey-credentials/ are intentionally NOT exposed
  * here — the legacy table is read-only for the new client.
  */
-export async function fetchLegacyPasskeyCredentials(): Promise<
-  PasskeyCredentialEntry[]
-> {
+export async function fetchLegacyPasskeyCredentials(
+  signal?: AbortSignal,
+): Promise<PasskeyCredentialEntry[]> {
   if (!(await authTokenManager.isAuthenticated())) {
     return []
   }
   try {
     const resp = await fetch(`${API_BASE_URL}/api/passkey-credentials/`, {
       headers: await authTokenManager.getAuthHeaders(),
+      signal,
     })
     if (resp.status === 404 || resp.status === 401) return []
     if (!resp.ok) {

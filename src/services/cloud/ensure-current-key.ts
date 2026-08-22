@@ -31,14 +31,22 @@ import {
 } from '../passkey/passkey-key-storage'
 import { passkeyEvents } from '../sync-enclave/passkey-events'
 import {
+  addBundle,
+  base64ToBytes,
   bytesToBase64,
+  keyCurrent,
   newIdempotencyKey,
   registerKey,
+  type KeyCurrentResponse,
   type KeyRegisterBundleInput,
 } from '../sync-enclave/sync-api'
+import { deriveTinfoilKeyIdHex } from '../sync-enclave/tinfoil-key-id'
 import { IF_MATCH_SENTINELS } from '../sync-enclave/wire-contract'
 import { requirePrimaryKeyB64 } from './cek-encoding'
 import type { CloudKeyAuthorizationMode } from './cloud-key-authorization'
+
+/** Bounds best-effort legacy passkey discovery during key adoption. */
+export const ADOPTION_INITIAL_BUNDLE_TIMEOUT_MS = 3_000
 
 let inflightAdoption: {
   fingerprint: string
@@ -208,14 +216,19 @@ async function registerAdoptedKey(
   const initialBundle = await initialBundleFromCachedPrf(snapshot)
   if (!persistedSnapshotStillCurrent(snapshot)) return false
   try {
-    await registerKey({
-      keyB64: snapshot.keyB64,
-      ifMatch: IF_MATCH_SENTINELS.AnyKey,
-      createdVia: 'recovery',
-      idempotencyKey: newIdempotencyKey(),
-      ...(initialBundle ? { initialBundle } : {}),
-    })
+    const localKeyId = await deriveTinfoilKeyIdHex(
+      base64ToBytes(snapshot.keyB64),
+    )
     if (!persistedSnapshotStillCurrent(snapshot)) return false
+    const current = await keyCurrent()
+    if (!persistedSnapshotStillCurrent(snapshot)) return false
+    const converged = await reconcileAdoptedKey(
+      snapshot,
+      localKeyId,
+      current,
+      initialBundle,
+    )
+    if (!converged) return false
   } catch (err) {
     logError('Failed to adopt local key for migration', err, {
       component: 'CloudSync',
@@ -232,11 +245,108 @@ async function registerAdoptedKey(
   return true
 }
 
+function bundleMatches(
+  current: KeyCurrentResponse,
+  expected: KeyRegisterBundleInput,
+): boolean {
+  const bundle = current.bundles[expected.credentialId]
+  return (
+    bundle?.kek_iv === expected.kekIvHex &&
+    bundle.encrypted_keys === expected.encryptedKeysHex
+  )
+}
+
+async function verifyAdoptedKeyConvergence(
+  snapshot: PersistedAdoptionSnapshot,
+  localKeyId: string,
+  initialBundle: KeyRegisterBundleInput | null,
+): Promise<boolean> {
+  const current = await keyCurrent()
+  return (
+    persistedSnapshotStillCurrent(snapshot) &&
+    current.key_id === localKeyId &&
+    (!initialBundle || bundleMatches(current, initialBundle))
+  )
+}
+
+async function reconcileAdoptedKey(
+  snapshot: PersistedAdoptionSnapshot,
+  localKeyId: string,
+  current: KeyCurrentResponse,
+  initialBundle: KeyRegisterBundleInput | null,
+): Promise<boolean> {
+  if (!current.key_id) {
+    try {
+      await registerKey({
+        keyB64: snapshot.keyB64,
+        ifMatch: IF_MATCH_SENTINELS.AnyKey,
+        createdVia: 'recovery',
+        idempotencyKey: newIdempotencyKey(),
+        ...(initialBundle ? { initialBundle } : {}),
+      })
+    } catch {
+      const winner = await keyCurrent()
+      if (!persistedSnapshotStillCurrent(snapshot)) return false
+      return reconcileExistingAdoptedKey(
+        snapshot,
+        localKeyId,
+        winner,
+        initialBundle,
+      )
+    }
+    return verifyAdoptedKeyConvergence(snapshot, localKeyId, initialBundle)
+  }
+  return reconcileExistingAdoptedKey(
+    snapshot,
+    localKeyId,
+    current,
+    initialBundle,
+  )
+}
+
+async function reconcileExistingAdoptedKey(
+  snapshot: PersistedAdoptionSnapshot,
+  localKeyId: string,
+  current: KeyCurrentResponse,
+  initialBundle: KeyRegisterBundleInput | null,
+): Promise<boolean> {
+  if (current.key_id !== localKeyId) {
+    if (
+      snapshot.keyBundle.authorizationMode !== 'explicit_start_fresh' ||
+      !current.etag
+    ) {
+      return false
+    }
+    await registerKey({
+      keyB64: snapshot.keyB64,
+      ifMatch: current.etag,
+      createdVia: 'start_fresh',
+      idempotencyKey: newIdempotencyKey(),
+      ...(initialBundle ? { initialBundle } : {}),
+    })
+    return verifyAdoptedKeyConvergence(snapshot, localKeyId, initialBundle)
+  }
+
+  if (initialBundle && !bundleMatches(current, initialBundle)) {
+    await addBundle({
+      keyId: localKeyId,
+      keyB64: snapshot.keyB64,
+      credentialId: initialBundle.credentialId,
+      kekIvHex: initialBundle.kekIvHex,
+      encryptedKeysHex: initialBundle.encryptedKeysHex,
+      idempotencyKey: newIdempotencyKey(),
+    })
+    return verifyAdoptedKeyConvergence(snapshot, localKeyId, initialBundle)
+  }
+  return persistedSnapshotStillCurrent(snapshot)
+}
+
 /**
  * Best-effort initial bundle for key adoption: wrap the complete key
  * history into the generic envelope using this device's cached passkey
- * PRF. Adoption must never be blocked by bundle problems, so every
- * failure path returns null and the caller registers bundleless.
+ * PRF. Credential discovery is bounded so legacy auth or fetch hangs cannot
+ * starve the adoption queue. Every failure path returns null and the caller
+ * registers bundleless.
  *
  * The cached credential is only trusted when it still appears in the
  * user's stored credentials — a stale cache (passkey deleted or
@@ -246,8 +356,19 @@ async function registerAdoptedKey(
 async function initialBundleFromCachedPrf(
   snapshot: PersistedAdoptionSnapshot,
 ): Promise<KeyRegisterBundleInput | null> {
+  const controller = new AbortController()
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
   try {
-    const entries = await loadPasskeyCredentials()
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        controller.abort()
+        reject(new Error('Passkey bundle discovery timed out'))
+      }, ADOPTION_INITIAL_BUNDLE_TIMEOUT_MS)
+    })
+    const entries = await Promise.race([
+      loadPasskeyCredentials({ legacySignal: controller.signal }),
+      timeout,
+    ])
     const primaryBytes = encryptionService.getAlternativeKeyBytes(
       snapshot.keyBundle.primary,
     )
@@ -271,5 +392,7 @@ async function initialBundleFromCachedPrf(
       metadata: { error: err instanceof Error ? err.message : String(err) },
     })
     return null
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId)
   }
 }

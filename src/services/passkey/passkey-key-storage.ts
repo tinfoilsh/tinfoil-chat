@@ -394,9 +394,11 @@ function reshapeBundleToEntry(bundle: {
 
 // --- Public API ------------------------------------------------------------
 
-export async function loadPasskeyCredentials(): Promise<
-  PasskeyCredentialEntry[]
-> {
+export async function loadPasskeyCredentials(
+  options: {
+    legacySignal?: AbortSignal
+  } = {},
+): Promise<PasskeyCredentialEntry[]> {
   try {
     const resp = await enclaveKeyCurrent()
     if (resp.key_id) {
@@ -410,19 +412,21 @@ export async function loadPasskeyCredentials(): Promise<
       // bundle is written, so a key_id can exist with no way to unlock
       // it. Fall back to the legacy passkey so the user can still
       // recover instead of being forced into manual key entry.
-      return await loadLegacyFallback()
+      return await loadLegacyFallback(options.legacySignal)
     }
-    return await loadLegacyFallback()
+    return await loadLegacyFallback(options.legacySignal)
   } catch (err) {
     if (err instanceof SyncEnclaveError && err.status === 404) {
-      return loadLegacyFallback()
+      return loadLegacyFallback(options.legacySignal)
     }
     throw err
   }
 }
 
-async function loadLegacyFallback(): Promise<PasskeyCredentialEntry[]> {
-  const legacy = await fetchLegacyPasskeyCredentials()
+async function loadLegacyFallback(
+  signal?: AbortSignal,
+): Promise<PasskeyCredentialEntry[]> {
+  const legacy = await fetchLegacyPasskeyCredentials(signal)
   if (legacy.length === 0) return []
   logInfo('falling back to legacy passkey credentials for recovery', {
     component: 'PasskeyKeyStorage',
