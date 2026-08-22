@@ -348,6 +348,7 @@ describe('usePasskeyBackup', () => {
         prfResult: { output: new Uint8Array(32) },
       })
       mocks.promoteRecoveredCekToEnclave.mockResolvedValue(true)
+      mocks.getCurrentCloudKeyAuthorizationMode.mockResolvedValue('validated')
     })
 
     it('proceeds with promotion when remote legacy data exists', async () => {
@@ -387,6 +388,49 @@ describe('usePasskeyBackup', () => {
 
       expect(success).toBe(true)
       expect(mocks.promoteRecoveredCekToEnclave).toHaveBeenCalledOnce()
+    })
+
+    it('fails before reading remote key state when authorization is unavailable', async () => {
+      mocks.getCurrentCloudKeyAuthorizationMode.mockResolvedValue(null)
+
+      const { result } = renderHook(() => usePasskeyBackup(baseOptions))
+      let success = true
+      await act(async () => {
+        success = await result.current.addPasskeyToThisDevice()
+      })
+
+      expect(success).toBe(false)
+      expect(mocks.keyCurrent).not.toHaveBeenCalled()
+      expect(mocks.createAndWrapTinfoilKey).not.toHaveBeenCalled()
+      expect(mocks.promoteRecoveredCekToEnclave).not.toHaveBeenCalled()
+    })
+
+    it('makes no authorization or remote calls without a local primary key', async () => {
+      mocks.getAllKeys.mockReturnValue({ primary: null, alternatives: [] })
+
+      const { result } = renderHook(() => usePasskeyBackup(baseOptions))
+      let success = true
+      await act(async () => {
+        success = await result.current.addPasskeyToThisDevice()
+      })
+
+      expect(success).toBe(false)
+      expect(mocks.getCurrentCloudKeyAuthorizationMode).not.toHaveBeenCalled()
+      expect(mocks.keyCurrent).not.toHaveBeenCalled()
+    })
+
+    it('makes no authorization or remote calls for invalid local key bytes', async () => {
+      mocks.getAlternativeKeyBytes.mockReturnValue(null)
+
+      const { result } = renderHook(() => usePasskeyBackup(baseOptions))
+      let success = true
+      await act(async () => {
+        success = await result.current.addPasskeyToThisDevice()
+      })
+
+      expect(success).toBe(false)
+      expect(mocks.getCurrentCloudKeyAuthorizationMode).not.toHaveBeenCalled()
+      expect(mocks.keyCurrent).not.toHaveBeenCalled()
     })
 
     it('preserves Start Fresh authorization for current-key add-device enrollment', async () => {

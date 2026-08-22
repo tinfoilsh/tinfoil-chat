@@ -1735,11 +1735,18 @@ export function usePasskeyBackup({
     const userInfo = getPasskeyUserInfo()
     if (!userInfo) return false
 
+    const keys = encryptionService.getAllKeys()
+    if (!keys.primary) return false
+    const cekBytes = encryptionService.getAlternativeKeyBytes(keys.primary)
+    if (!cekBytes) return false
+
     let keyIdHex: string | null
     let authorizationMode: CloudKeyAuthorizationMode
     try {
-      authorizationMode =
-        (await getCurrentCloudKeyAuthorizationMode()) ?? 'validated'
+      const currentAuthorizationMode =
+        await getCurrentCloudKeyAuthorizationMode()
+      if (!currentAuthorizationMode) return false
+      authorizationMode = currentAuthorizationMode
       const resp = await enclaveKeyCurrent()
       keyIdHex = resp.key_id ?? null
     } catch (error) {
@@ -1749,16 +1756,11 @@ export function usePasskeyBackup({
       })
       return false
     }
-    const keys = encryptionService.getAllKeys()
-    if (!keys.primary) return false
     const keyBundle = {
       primary: keys.primary,
       alternatives: keys.alternatives,
       authorizationMode,
     }
-
-    const cekBytes = encryptionService.getAlternativeKeyBytes(keyBundle.primary)
-    if (!cekBytes) return false
 
     passkeyFlowInProgressRef.current = true
     try {
