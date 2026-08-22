@@ -202,7 +202,6 @@ describe('recoverPasskeyKeyBundle', () => {
     )
     expect(recovered?.prfResult?.output).toEqual(PRF_OUTPUT)
     expect(cacheRecovery).not.toHaveBeenCalled()
-    cacheRecovery.mockRestore()
   })
 
   it('skips a malformed generic envelope without aborting a valid candidate', async () => {
