@@ -250,7 +250,51 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
     },
   )
 
-  it('collapses concurrent adoptions for the same key into one registration', async () => {
+  it.each([
+    [
+      'history',
+      () =>
+        localStorage.setItem(
+          USER_ENCRYPTION_KEY_HISTORY,
+          JSON.stringify(['key_new_history']),
+        ),
+    ],
+    [
+      'authorization',
+      () =>
+        localStorage.setItem(
+          `${SECRET_CLOUD_KEY_AUTHORIZATION_PREFIX}user-1`,
+          JSON.stringify({ mode: 'explicit_start_fresh' }),
+        ),
+    ],
+    ['account', () => localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-2')],
+  ])('queues a new adoption when snapshot %s changes', async (_, mutate) => {
+    let resolveFirstRegistration: (value: {
+      ok: boolean
+      key_id: string
+    }) => void = () => {}
+    mockRegisterKey
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirstRegistration = resolve
+        }),
+      )
+      .mockResolvedValueOnce({ ok: true, key_id: 'kid' })
+
+    const staleAdoption = adoptLocalKeyForMigration()
+    await vi.waitFor(() => expect(mockRegisterKey).toHaveBeenCalledOnce())
+    mutate()
+    const currentAdoption = adoptLocalKeyForMigration()
+
+    expect(mockRegisterKey).toHaveBeenCalledOnce()
+    resolveFirstRegistration({ ok: true, key_id: 'kid' })
+    await expect(staleAdoption).resolves.toBe(false)
+    await expect(currentAdoption).resolves.toBe(true)
+    expect(mockRegisterKey).toHaveBeenCalledTimes(2)
+    expect(mockEmit).toHaveBeenCalledOnce()
+  })
+
+  it('deduplicates concurrent adoptions for the exact snapshot', async () => {
     mockRegisterKey.mockResolvedValue({ ok: true, key_id: 'kid' })
 
     const [ra, rb] = await Promise.all([

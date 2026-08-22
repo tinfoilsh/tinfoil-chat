@@ -40,8 +40,10 @@ import { IF_MATCH_SENTINELS } from '../sync-enclave/wire-contract'
 import { requirePrimaryKeyB64 } from './cek-encoding'
 import type { CloudKeyAuthorizationMode } from './cloud-key-authorization'
 
-let inflightAdoption: { keyB64: string; promise: Promise<boolean> } | null =
-  null
+let inflightAdoption: {
+  fingerprint: string
+  promise: Promise<boolean>
+} | null = null
 
 interface PersistedAdoptionSnapshot {
   keyB64: string
@@ -91,20 +93,21 @@ function readPersistedAdoptionSnapshot(): PersistedAdoptionSnapshot | null {
   const primaryBytes = encryptionService.getAlternativeKeyBytes(primary)
   if (!primaryBytes) return null
   const keyB64 = bytesToBase64(primaryBytes)
+  const alternatives = parsePersistedAlternatives(userHistory ?? legacyHistory)
+  const authorizationMode = parsePersistedAuthorizationMode(authorization)
   return {
     keyB64,
     keyBundle: {
       primary,
-      alternatives: parsePersistedAlternatives(userHistory ?? legacyHistory),
-      authorizationMode: parsePersistedAuthorizationMode(authorization),
+      alternatives,
+      authorizationMode,
     },
     fingerprint: JSON.stringify({
-      userPrimary,
-      legacyPrimary,
-      userHistory,
-      legacyHistory,
       activeUserId,
-      authorization,
+      primary,
+      alternatives,
+      authorizationMode,
+      committedKeyB64: keyB64,
     }),
   }
 }
@@ -169,21 +172,25 @@ export async function adoptLocalKeyForMigration(): Promise<boolean> {
     return false
   }
   if (activeKeyB64 !== snapshot.keyB64) return false
-  // Dedupe concurrent adoptions per key. The upload coalescer fires the
+  // Dedupe concurrent adoptions per committed snapshot. The upload coalescer fires the
   // write gate for many chats at once; without this they would each
   // race a register-key, and every loser of the if_match='*' CAS would
   // defer its push. Sharing one in-flight registration lets the whole
-  // batch proceed the moment the single winner lands. A different key
-  // (e.g. after the user changes it) gets its own registration.
-  if (inflightAdoption?.keyB64 === snapshot.keyB64) {
+  // batch proceed the moment the single winner lands. A changed snapshot
+  // queues behind the prior attempt so stale and current registrations
+  // cannot race each other.
+  if (inflightAdoption?.fingerprint === snapshot.fingerprint) {
     return inflightAdoption.promise
   }
-  const entry: { keyB64: string; promise: Promise<boolean> } = {
-    keyB64: snapshot.keyB64,
+  const priorAdoption = inflightAdoption?.promise
+  const entry: { fingerprint: string; promise: Promise<boolean> } = {
+    fingerprint: snapshot.fingerprint,
     promise: Promise.resolve(false),
   }
   entry.promise = (async () => {
     try {
+      if (priorAdoption) await priorAdoption
+      if (!persistedSnapshotStillCurrent(snapshot)) return false
       return await registerAdoptedKey(snapshot)
     } finally {
       if (inflightAdoption === entry) {
