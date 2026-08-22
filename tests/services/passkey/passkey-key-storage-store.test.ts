@@ -13,11 +13,12 @@ import { TINFOIL_PASSKEY_PROFILE } from '@/services/passkey/kit'
 import {
   PasskeyCredentialConflictError,
   storeEncryptedKeys,
-  tinfoilWrappedKeyBundleToEnclave,
   type KeyBundle,
+  type TinfoilWrappedKeyBundle,
 } from '@/services/passkey/passkey-key-storage'
 import { SyncEnclaveError } from '@/services/sync-enclave/sync-enclave-client'
 import { deriveTinfoilKeyIdHex } from '@/services/sync-enclave/tinfoil-key-id'
+import { encodeWrappedKeyRecord } from '@tinfoilsh/passkey-kit'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/utils/error-handling', () => ({
@@ -55,6 +56,25 @@ const KEY_BUNDLE: KeyBundle = {
   primary: 'key_primary',
   alternatives: ['key_alt1'],
   authorizationMode: 'validated',
+}
+
+function expectedEnvelope(
+  wrappedKeys: TinfoilWrappedKeyBundle,
+  authorizationMode: 'validated' | 'explicit_start_fresh' = 'validated',
+) {
+  const json = JSON.stringify({
+    version: 1,
+    authorizationMode,
+    primary: encodeWrappedKeyRecord(wrappedKeys.primary),
+    alternatives: wrappedKeys.alternatives.map(encodeWrappedKeyRecord),
+  })
+  return {
+    credentialId: wrappedKeys.primary.credentialId,
+    kekIvHex: wrappedKeys.primary.kekIvHex,
+    encryptedKeysHex: Array.from(new TextEncoder().encode(json), (byte) =>
+      byte.toString(16).padStart(2, '0'),
+    ).join(''),
+  }
 }
 
 describe('passkey-key-storage storeEncryptedKeys (enclave wire)', () => {
@@ -112,9 +132,7 @@ describe('passkey-key-storage storeEncryptedKeys (enclave wire)', () => {
     const arg = mockRegisterKey.mock.calls[0][0]
     expect(arg.createdVia).toBe('passkey')
     expect(arg.initialBundle.credentialId).toBe('AQID')
-    expect(arg.initialBundle).toEqual(
-      tinfoilWrappedKeyBundleToEnclave(bundle, KEY_BUNDLE),
-    )
+    expect(arg.initialBundle).toEqual(expectedEnvelope(bundle))
   })
 
   it('uses created_via=start_fresh when the bundle is marked explicit_start_fresh', async () => {
@@ -125,11 +143,15 @@ describe('passkey-key-storage storeEncryptedKeys (enclave wire)', () => {
         bundles: { AQID: { bundle_version: 1 } },
       })
     mockRegisterKey.mockResolvedValue({ ok: true, key_id: expectedKeyId })
-    await storeEncryptedKeys(wrappedKeys('AQID'), {
+    const bundle = wrappedKeys('AQID')
+    await storeEncryptedKeys(bundle, {
       ...KEY_BUNDLE,
       authorizationMode: 'explicit_start_fresh',
     })
     expect(mockRegisterKey.mock.calls[0][0].createdVia).toBe('start_fresh')
+    expect(mockRegisterKey.mock.calls[0][0].initialBundle).toEqual(
+      expectedEnvelope(bundle, 'explicit_start_fresh'),
+    )
   })
 
   it('adopts the existing CEK via created_via=recovery when legacy data exists', async () => {
@@ -177,7 +199,7 @@ describe('passkey-key-storage storeEncryptedKeys (enclave wire)', () => {
     const arg = mockAddBundle.mock.calls[0][0]
     expect(arg.keyId).toBe(expectedKeyId)
     expect(arg.credentialId).toBe('BAUG')
-    const expectedBundle = tinfoilWrappedKeyBundleToEnclave(bundle, KEY_BUNDLE)
+    const expectedBundle = expectedEnvelope(bundle)
     expect(arg.kekIvHex).toBe(expectedBundle.kekIvHex)
     expect(arg.encryptedKeysHex).toBe(expectedBundle.encryptedKeysHex)
     expect(typeof arg.idempotencyKey).toBe('string')

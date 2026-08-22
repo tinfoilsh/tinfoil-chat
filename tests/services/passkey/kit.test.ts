@@ -43,6 +43,7 @@ describe('Tinfoil passkey manager configuration', () => {
   afterEach(() => {
     vi.useRealTimers()
     resetPasskeyCapabilityCache()
+    vi.restoreAllMocks()
   })
 
   it('clears a rejected in-flight capability request', async () => {
@@ -56,7 +57,6 @@ describe('Tinfoil passkey manager configuration', () => {
     )
     await expect(getPasskeyCapability()).resolves.toBe('supported')
     expect(capability).toHaveBeenCalledTimes(2)
-    capability.mockRestore()
   })
 
   it('owns the byte-identical Tinfoil v1 profile', () => {
