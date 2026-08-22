@@ -17,7 +17,7 @@
  * dropped from the local model only after the client-side migration
  * loop has re-sealed every legacy row under the current primary CEK.
  *
- * The encrypt/decrypt primitives (`encryptKeyBundle`,
+ * The legacy decoder primitives (`encryptKeyBundle`,
  * `decryptKeyBundle`) are pure client-side AES-256-GCM. Optimistic
  * concurrency is enforced by the enclave: register-key uses
  * `if_match='*'` for first-time writes and returns
@@ -29,14 +29,10 @@
 
 import { base64ToUint8Array, uint8ArrayToBase64 } from '@/utils/binary-codec'
 import { logError, logInfo } from '@/utils/error-handling'
+import type { WrappedKey } from '@tinfoilsh/passkey-kit'
 import { requirePrimaryKeyB64 } from '../cloud/cek-encoding'
 import type { CloudKeyAuthorizationMode } from '../cloud/cloud-key-authorization'
 import { encryptionService } from '../encryption/encryption-service'
-import {
-  deriveKeyIdHex,
-  unwrapCekFromBundle,
-  wrapCekForCredential,
-} from '../sync-enclave/key-bundle'
 import {
   bytesToBase64,
   addBundle as enclaveAddBundle,
@@ -47,7 +43,17 @@ import {
   newIdempotencyKey,
 } from '../sync-enclave/sync-api'
 import { SyncEnclaveError } from '../sync-enclave/sync-enclave-client'
+import { deriveTinfoilKeyIdHex } from '../sync-enclave/tinfoil-key-id'
 import { IF_MATCH_SENTINELS, WIRE_CODES } from '../sync-enclave/wire-contract'
+import {
+  enclaveBundleFromTinfoilWrappedKey,
+  getCachedCredentialId,
+  getCachedPrfOutputForLegacyBundle,
+  passkeyKeyManager,
+  recoverTinfoilKey,
+  TINFOIL_PASSKEY_PROFILE,
+  tinfoilWrappedKeyFromEnclaveBundle,
+} from './kit'
 import { fetchLegacyPasskeyCredentials } from './legacy-passkey-credentials'
 
 const AES_GCM_IV_BYTES = 12
@@ -100,10 +106,7 @@ export type PasskeyCredentialState = 'exists' | 'empty' | 'unknown'
  *  - `unknown`: enclave was unreachable; caller should leave state alone.
  */
 export type PasskeyDeviceState =
-  | 'this-device'
-  | 'other-device-only'
-  | 'empty'
-  | 'unknown'
+  'this-device' | 'other-device-only' | 'empty' | 'unknown'
 
 export interface StoreEncryptedKeysOptions {
   expectedSyncVersion?: number | null
@@ -385,26 +388,19 @@ export async function getPasskeyDeviceState(
  * enclave reports for the freshly written bundle.
  */
 export async function storeEncryptedKeys(
-  credentialId: string,
-  kek: CryptoKey,
+  wrappedKey: WrappedKey,
   keys: KeyBundle,
   options: StoreEncryptedKeysOptions = {},
 ): Promise<{ syncVersion: number; bundleVersion: number } | null> {
   try {
+    const credentialId = wrappedKey.credentialId
+    const enclaveBundle = enclaveBundleFromTinfoilWrappedKey(wrappedKey)
     const current = await enclaveKeyCurrent()
     const primaryBytes = encryptionService.getAlternativeKeyBytes(keys.primary)
     if (!primaryBytes) {
       throw new Error('passkey-key-storage: primary key is not decodable')
     }
-    const localKeyId = await deriveKeyIdHex(primaryBytes)
-    // Bundle the raw CEK bytes — same wire shape iOS and every other
-    // v2 client uses. The legacy `{primary, alternatives, ...}` JSON
-    // envelope is no longer written by anyone.
-    const wrapped = await wrapCekForCredential({
-      credentialId,
-      kek,
-      cek: primaryBytes,
-    })
+    const localKeyId = await deriveTinfoilKeyIdHex(primaryBytes)
 
     if (!current.key_id) {
       try {
@@ -427,8 +423,8 @@ export async function storeEncryptedKeys(
           idempotencyKey: newIdempotencyKey(),
           initialBundle: {
             credentialId,
-            kekIvHex: wrapped.kekIvHex,
-            encryptedKeysHex: wrapped.wrappedKeyHex,
+            kekIvHex: enclaveBundle.kekIvHex,
+            encryptedKeysHex: enclaveBundle.encryptedKeysHex,
           },
         })
       } catch (err) {
@@ -468,8 +464,8 @@ export async function storeEncryptedKeys(
           idempotencyKey: newIdempotencyKey(),
           initialBundle: {
             credentialId,
-            kekIvHex: wrapped.kekIvHex,
-            encryptedKeysHex: wrapped.wrappedKeyHex,
+            kekIvHex: enclaveBundle.kekIvHex,
+            encryptedKeysHex: enclaveBundle.encryptedKeysHex,
           },
         })
         const created = await enclaveKeyCurrent()
@@ -495,8 +491,8 @@ export async function storeEncryptedKeys(
       keyId: current.key_id,
       keyB64: bytesToBase64(primaryBytes),
       credentialId,
-      kekIvHex: wrapped.kekIvHex,
-      encryptedKeysHex: wrapped.wrappedKeyHex,
+      kekIvHex: enclaveBundle.kekIvHex,
+      encryptedKeysHex: enclaveBundle.encryptedKeysHex,
       idempotencyKey: newIdempotencyKey(),
     })
 
@@ -522,139 +518,219 @@ export async function storeEncryptedKeys(
   }
 }
 
-export async function retrieveEncryptedKeys(
-  credentialId: string,
-  kek: CryptoKey,
-): Promise<KeyBundle | null> {
-  try {
-    const lookup = await tryRetrieveFromEnclave(credentialId, kek)
-    if (lookup.bundle) return lookup.bundle
-    if (!lookup.currentKeyId) {
-      // No registered key at all — safe to revive any legacy bundle for
-      // this credential, since there is no current key_id to mismatch.
-      return await tryRetrieveFromLegacy(credentialId, kek)
-    }
-    // A key is registered (even an orphan key with no bundles of its
-    // own). Revive the legacy bundle only when it wraps the SAME current
-    // CEK — i.e. a v1 user with the same passkey on another platform that
-    // hasn't been enrolled yet. A legacy bundle deriving a different
-    // key_id is a rotated-away CEK (e.g. left behind by a start_fresh)
-    // and must never be adopted as primary.
-    return await tryRetrieveFromLegacyIfCurrent(
-      credentialId,
-      kek,
-      lookup.currentKeyId,
-    )
-  } catch (err) {
-    logError('Failed to retrieve encrypted keys', err, {
-      component: 'PasskeyKeyStorage',
-      action: 'retrieveEncryptedKeys',
-    })
-    return null
-  }
+export interface RecoveredPasskeyKeyBundle {
+  keyBundle: KeyBundle
+  credentialId: string
+  syncVersion: number | null
+  bundleVersion: number
+  source?: 'enclave' | 'legacy'
 }
 
-interface EnclaveBundleLookup {
-  bundle: KeyBundle | null
-  currentKeyId: string | null
+const PLACEHOLDER_WRAPPED_KEY_HEX = '00'.repeat(48)
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join(
+    '',
+  )
 }
 
-async function tryRetrieveFromEnclave(
-  credentialId: string,
-  kek: CryptoKey,
-): Promise<EnclaveBundleLookup> {
-  try {
-    const resp = await enclaveKeyCurrent()
-    if (!resp.key_id) {
-      return { bundle: null, currentKeyId: null }
-    }
-    const bundle = resp.bundles[credentialId]
-    if (!bundle) {
-      // This credential has no enclave bundle under the current key
-      // (including the orphan-key case where the key has no bundles at
-      // all). The caller verifies any legacy bundle still wraps the
-      // current key_id before reviving it, so a rotated-away CEK is
-      // never adopted.
-      return {
-        bundle: null,
-        currentKeyId: resp.key_id,
-      }
-    }
-    // Try the v2 raw-CEK shape first — what iOS and the modern
-    // webapp flow write. If that succeeds we synthesize the legacy
-    // {primary, alternatives:[]} envelope the hook still consumes.
-    try {
-      const cekBytes = await unwrapCekFromBundle(kek, {
-        kekIvHex: bundle.kek_iv,
-        wrappedKeyHex: bundle.encrypted_keys,
-      } as Parameters<typeof unwrapCekFromBundle>[1])
-      return {
-        bundle: {
-          primary: encryptionService.encodeKeyFromBytes(cekBytes),
-          alternatives: [],
-        },
-        currentKeyId: resp.key_id,
-      }
-    } catch {
-      // Pre-v2 webapp wrapped a JSON envelope. Keep the legacy decode
-      // as a fallback so users who registered on the old wire still
-      // unlock without re-enrolling.
-      const decrypted = await decryptKeyBundle(kek, {
-        iv: hexToB64(bundle.kek_iv),
-        data: hexToB64(bundle.encrypted_keys),
-      })
-      return {
-        bundle: decrypted,
-        currentKeyId: resp.key_id,
-      }
-    }
-  } catch (err) {
-    if (err instanceof SyncEnclaveError && err.status === 404) {
-      return { bundle: null, currentKeyId: null }
-    }
-    throw err
-  }
-}
-
-async function tryRetrieveFromLegacy(
-  credentialId: string,
-  kek: CryptoKey,
-): Promise<KeyBundle | null> {
-  const legacy = await fetchLegacyPasskeyCredentials()
-  const entry = legacy.find((e) => e.id === credentialId)
-  if (!entry) return null
-  return await decryptKeyBundle(kek, {
-    iv: entry.iv,
-    data: entry.encrypted_keys,
+function entryToWrappedKey(entry: PasskeyCredentialEntry): WrappedKey {
+  const ciphertext = base64ToUint8Array(entry.encrypted_keys)
+  // Legacy web records encrypt a variable-length JSON envelope. A valid-size
+  // placeholder lets the manager run the credential ceremony and cache its
+  // PRF result; recoverLegacyEntry then applies the retained app-owned decoder.
+  return tinfoilWrappedKeyFromEnclaveBundle({
+    credentialId: entry.id,
+    kekIvHex: bytesToHex(base64ToUint8Array(entry.iv)),
+    wrappedKeyHex:
+      ciphertext.length === 48
+        ? bytesToHex(ciphertext)
+        : PLACEHOLDER_WRAPPED_KEY_HEX,
   })
 }
 
-/**
- * Revive a legacy bundle for a credential that has no enclave bundle,
- * but only when the CEK it unwraps matches the enclave's current
- * key_id. This is the multi-platform case: a v1 user with the same
- * passkey on another device, where the legacy bundle wraps the very
- * CEK already registered. A mismatch means the legacy bundle is a
- * rotated-away key and must not be adopted.
- */
-async function tryRetrieveFromLegacyIfCurrent(
-  credentialId: string,
-  kek: CryptoKey,
-  currentKeyId: string | null,
+async function deriveLegacyKek(prfOutput: Uint8Array): Promise<CryptoKey> {
+  const input = await crypto.subtle.importKey(
+    'raw',
+    prfOutput as BufferSource,
+    'HKDF',
+    false,
+    ['deriveKey'],
+  )
+  return crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: new Uint8Array(),
+      info: TINFOIL_PASSKEY_PROFILE.hkdfInfo as BufferSource,
+    },
+    input,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  )
+}
+
+async function recoverLegacyEntry(
+  entry: PasskeyCredentialEntry,
 ): Promise<KeyBundle | null> {
-  if (!currentKeyId) return null
-  const bundle = await tryRetrieveFromLegacy(credentialId, kek)
-  if (!bundle) return null
-  const primaryBytes = encryptionService.getAlternativeKeyBytes(bundle.primary)
-  if (!primaryBytes) return null
-  const legacyKeyId = await deriveKeyIdHex(primaryBytes)
-  if (legacyKeyId !== currentKeyId) {
-    logInfo('skipping legacy passkey bundle for a rotated-away key', {
-      component: 'PasskeyKeyStorage',
-      action: 'retrieveEncryptedKeys',
-      metadata: { credentialId, legacyKeyId, currentKeyId },
+  const prfOutput = getCachedPrfOutputForLegacyBundle()
+  if (!prfOutput) return null
+  try {
+    return await decryptKeyBundle(await deriveLegacyKek(prfOutput), {
+      iv: entry.iv,
+      data: entry.encrypted_keys,
     })
+  } catch {
     return null
   }
-  return bundle
+}
+
+async function acceptLegacyBundleForCurrentKey(
+  entry: PasskeyCredentialEntry,
+  bundle: KeyBundle,
+): Promise<boolean> {
+  if (entry.source !== 'legacy') return true
+  let currentKeyId: string | null = null
+  try {
+    currentKeyId = (await enclaveKeyCurrent()).key_id
+  } catch (error) {
+    if (!(error instanceof SyncEnclaveError) || error.status !== 404)
+      return false
+  }
+  if (!currentKeyId) return true
+  const primaryBytes = encryptionService.getAlternativeKeyBytes(bundle.primary)
+  if (!primaryBytes) return false
+  const legacyKeyId = await deriveTinfoilKeyIdHex(primaryBytes)
+  if (legacyKeyId === currentKeyId) return true
+  logInfo('skipping legacy passkey bundle for a rotated-away key', {
+    component: 'PasskeyKeyStorage',
+    action: 'recoverPasskeyKeyBundle',
+    metadata: { credentialId: entry.id, legacyKeyId, currentKeyId },
+  })
+  return false
+}
+
+export async function recoverPasskeyKeyBundle(
+  entries: PasskeyCredentialEntry[],
+  options: { cachedOnly?: boolean } = {},
+): Promise<RecoveredPasskeyKeyBundle | null> {
+  if (entries.length === 0) return null
+  const wrappedKeys = entries.map(entryToWrappedKey)
+  let credentialId: string | null = null
+  let rawKey: Uint8Array | null = null
+
+  if (options.cachedOnly) {
+    const recovered = await passkeyKeyManager.recoverKeyFromCache({
+      wrappedKeys,
+    })
+    credentialId = recovered?.credentialId ?? getCachedCredentialId()
+    rawKey = recovered?.key ?? null
+  } else {
+    try {
+      const recovered = await recoverTinfoilKey(wrappedKeys)
+      if (!recovered) return null
+      credentialId = recovered.credentialId
+      rawKey = recovered.key
+    } catch (error) {
+      credentialId = getCachedCredentialId()
+      if (
+        !credentialId ||
+        !entries.some((entry) => entry.id === credentialId)
+      ) {
+        throw error
+      }
+    }
+  }
+
+  if (!credentialId) return null
+  const entry = entries.find((candidate) => candidate.id === credentialId)
+  if (!entry) return null
+  const keyBundle = rawKey
+    ? {
+        primary: encryptionService.encodeKeyFromBytes(rawKey),
+        alternatives: [],
+      }
+    : await recoverLegacyEntry(entry)
+  if (
+    !keyBundle ||
+    !(await acceptLegacyBundleForCurrentKey(entry, keyBundle))
+  ) {
+    return null
+  }
+  return {
+    keyBundle,
+    credentialId,
+    syncVersion: entry.sync_version ?? null,
+    bundleVersion: entry.bundle_version ?? 0,
+    source: entry.source,
+  }
+}
+
+export async function addWrappedKeyForCurrentKey(input: {
+  wrappedKey: WrappedKey
+  cek: Uint8Array
+  keyIdHex: string
+}): Promise<void> {
+  const enclaveBundle = enclaveBundleFromTinfoilWrappedKey(input.wrappedKey)
+  await enclaveAddBundle({
+    keyId: input.keyIdHex,
+    keyB64: bytesToBase64(input.cek),
+    credentialId: enclaveBundle.credentialId,
+    kekIvHex: enclaveBundle.kekIvHex,
+    encryptedKeysHex: enclaveBundle.encryptedKeysHex,
+    idempotencyKey: newIdempotencyKey(),
+  })
+}
+
+export async function promoteRecoveredCekToEnclave(input: {
+  cek: Uint8Array
+  credentialId: string
+}): Promise<boolean> {
+  const wrappedKey = await passkeyKeyManager.rewrapKeyFromCache({
+    key: input.cek,
+  })
+  if (!wrappedKey || wrappedKey.credentialId !== input.credentialId)
+    return false
+  const keyIdHex = await deriveTinfoilKeyIdHex(input.cek)
+  let current: Awaited<ReturnType<typeof enclaveKeyCurrent>> | null = null
+  try {
+    current = await enclaveKeyCurrent()
+  } catch (error) {
+    if (!(error instanceof SyncEnclaveError) || error.status !== 404)
+      return false
+  }
+  if (current?.key_id) {
+    if (current.key_id !== keyIdHex) return false
+    if (current.bundles[input.credentialId]) return true
+    await addWrappedKeyForCurrentKey({
+      wrappedKey,
+      cek: input.cek,
+      keyIdHex,
+    })
+    return true
+  }
+  try {
+    const enclaveBundle = enclaveBundleFromTinfoilWrappedKey(wrappedKey)
+    await enclaveRegisterKey({
+      keyB64: bytesToBase64(input.cek),
+      ifMatch: IF_MATCH_SENTINELS.AnyKey,
+      createdVia: 'recovery',
+      idempotencyKey: newIdempotencyKey(),
+      initialBundle: {
+        credentialId: enclaveBundle.credentialId,
+        kekIvHex: enclaveBundle.kekIvHex,
+        encryptedKeysHex: enclaveBundle.encryptedKeysHex,
+      },
+    })
+    return true
+  } catch (error) {
+    if (
+      error instanceof SyncEnclaveError &&
+      error.code === WIRE_CODES.ExistingDataUnderOtherKey
+    ) {
+      return false
+    }
+    throw error
+  }
 }

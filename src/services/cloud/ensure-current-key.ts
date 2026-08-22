@@ -13,12 +13,8 @@
  */
 
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
+import { passkeyKeyManager } from '../passkey/kit'
 import { loadPasskeyCredentials } from '../passkey/passkey-key-storage'
-import {
-  deriveKeyEncryptionKey,
-  getCachedPrfResult,
-} from '../passkey/passkey-service'
-import { wrapCekForCredential } from '../sync-enclave/key-bundle'
 import { passkeyEvents } from '../sync-enclave/passkey-events'
 import {
   newIdempotencyKey,
@@ -148,20 +144,17 @@ async function registerAdoptedKey(keyB64: string): Promise<boolean> {
  */
 async function initialBundleFromCachedPrf(): Promise<KeyRegisterBundleInput | null> {
   try {
-    const cached = getCachedPrfResult()
-    if (!cached) return null
     const entries = await loadPasskeyCredentials()
-    if (!entries.some((e) => e.id === cached.credentialId)) return null
-    const kek = await deriveKeyEncryptionKey(cached.prfOutput)
-    const bundle = await wrapCekForCredential({
-      credentialId: cached.credentialId,
-      kek,
-      cek: requirePrimaryKeyBytes(),
+    const wrappedKey = await passkeyKeyManager.rewrapKeyFromCache({
+      key: requirePrimaryKeyBytes(),
     })
+    if (!wrappedKey) return null
+    if (!entries.some((entry) => entry.id === wrappedKey.credentialId))
+      return null
     return {
-      credentialId: bundle.credentialId,
-      kekIvHex: bundle.kekIvHex,
-      encryptedKeysHex: bundle.wrappedKeyHex,
+      credentialId: wrappedKey.credentialId,
+      kekIvHex: wrappedKey.kekIvHex,
+      encryptedKeysHex: wrappedKey.wrappedKeyHex,
     }
   } catch (err) {
     logWarning('Could not build initial bundle for key adoption', {

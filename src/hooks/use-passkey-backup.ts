@@ -19,30 +19,24 @@ import {
 } from '@/services/cloud/cloud-key-preflight'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import {
-  authenticatePrfPasskey,
-  createPrfPasskey,
-  decryptKeyBundle,
+  addWrappedKeyForCurrentKey,
+  createAndWrapTinfoilKey,
   deletePasskeyCredential,
-  deriveKeyEncryptionKey,
-  getCachedPrfResult,
   getLocalPasskeyCredentialId,
   getPasskeyCredentialState,
   getPasskeyDeviceState,
   loadPasskeyCredentials,
   loadRecoveryCandidates,
   PasskeyCredentialConflictError,
+  passkeyKeyManager,
   PasskeyTimeoutError,
   PrfNotSupportedError,
-  retrieveEncryptedKeys,
+  promoteRecoveredCekToEnclave,
+  recoverPasskeyKeyBundle,
   storeEncryptedKeys,
 } from '@/services/passkey'
 import { isPrfSupported } from '@/services/passkey/prf-support'
-import { cekBytesToHex } from '@/services/sync-enclave/key-bundle'
 import { passkeyEvents } from '@/services/sync-enclave/passkey-events'
-import {
-  addBundleForCurrentKey,
-  promoteRecoveredCekToEnclave,
-} from '@/services/sync-enclave/passkey-key-flow'
 import { keyCurrent as enclaveKeyCurrent } from '@/services/sync-enclave/sync-api'
 import { setCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
@@ -319,8 +313,8 @@ export function usePasskeyBackup({
   }, [isSignedIn, user?.id])
 
   /**
-   * Build the (userId, userName, displayName) tuple for createPrfPasskey
-   * from the current Clerk user, or return null if no user is available.
+   * Build the passkey user projection from the current Clerk user.
+   * Returns null if no user is available.
    */
   const getPasskeyUserInfo = (): {
     userId: string
@@ -354,24 +348,23 @@ export function usePasskeyBackup({
       enforceRemoteBundleVersion?: boolean
     },
   ): Promise<StoredPasskeyBackup | null> => {
-    const passkeyResult = await createPrfPasskey(
-      userInfo.userId,
-      userInfo.userName,
-      userInfo.displayName,
-    )
+    const primaryBytes = encryptionService.getAlternativeKeyBytes(keys.primary)
+    if (!primaryBytes) return null
+    const passkeyResult = await createAndWrapTinfoilKey({
+      user: {
+        id: new TextEncoder().encode(userInfo.userId),
+        name: userInfo.userName,
+        displayName: userInfo.displayName,
+      },
+      key: primaryBytes,
+    })
     if (!passkeyResult) return null
 
-    const kek = await deriveKeyEncryptionKey(passkeyResult.prfOutput)
-    const result = await storeEncryptedKeys(
-      passkeyResult.credentialId,
-      kek,
-      keys,
-      {
-        knownBundleVersion: options?.knownBundleVersion,
-        incrementBundleVersion: options?.incrementBundleVersion,
-        enforceRemoteBundleVersion: options?.enforceRemoteBundleVersion,
-      },
-    )
+    const result = await storeEncryptedKeys(passkeyResult.wrappedKey, keys, {
+      knownBundleVersion: options?.knownBundleVersion,
+      incrementBundleVersion: options?.incrementBundleVersion,
+      enforceRemoteBundleVersion: options?.enforceRemoteBundleVersion,
+    })
     if (!result) return null
     localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
     setLocalSyncVersion(passkeyResult.credentialId, result.syncVersion)
@@ -443,28 +436,10 @@ export function usePasskeyBackup({
     credentialId: string
     syncVersion: number | null
     bundleVersion: number
-    legacyKek?: CryptoKey
+    source?: 'enclave' | 'legacy'
   } | null> => {
     const entries = await loadRecoveryCandidates()
-    if (entries.length === 0) return null
-
-    const credentialIds = entries.map((e) => e.id)
-    const result = await authenticatePrfPasskey(credentialIds)
-    if (!result) return null
-
-    const kek = await deriveKeyEncryptionKey(result.prfOutput)
-    const keyBundle = await retrieveEncryptedKeys(result.credentialId, kek)
-    if (!keyBundle) return null
-
-    const entry = entries.find((e) => e.id === result.credentialId)
-    const isLegacy = entry?.source === 'legacy'
-    return {
-      keyBundle,
-      credentialId: result.credentialId,
-      syncVersion: entry?.sync_version ?? null,
-      bundleVersion: entry?.bundle_version ?? 0,
-      legacyKek: isLegacy ? kek : undefined,
-    }
+    return recoverPasskeyKeyBundle(entries)
   }
 
   /**
@@ -514,9 +489,9 @@ export function usePasskeyBackup({
   const maybePromoteLegacyKey = async (recovery: {
     keyBundle: { primary: string }
     credentialId: string
-    legacyKek?: CryptoKey
+    source?: 'enclave' | 'legacy'
   }): Promise<void> => {
-    if (!recovery.legacyKek) return
+    if (recovery.source !== 'legacy') return
     const cekBytes = encryptionService.getAlternativeKeyBytes(
       recovery.keyBundle.primary,
     )
@@ -528,20 +503,17 @@ export function usePasskeyBackup({
       )
       return
     }
-    const cekHex = cekBytesToHex(cekBytes)
-    const result = await promoteRecoveredCekToEnclave({
-      cekHex,
+    const promoted = await promoteRecoveredCekToEnclave({
+      cek: cekBytes,
       credentialId: recovery.credentialId,
-      kek: recovery.legacyKek,
     })
-    if (!result.ok) {
+    if (!promoted) {
       logError(
         'failed to promote legacy passkey credential to enclave',
-        new Error(result.reason),
+        new Error('legacy passkey promotion failed'),
         {
           component: 'usePasskeyBackup',
           action: 'maybePromoteLegacyKey',
-          metadata: { reason: result.reason },
         },
       )
     }
@@ -706,45 +678,59 @@ export function usePasskeyBackup({
       const entries = await loadPasskeyCredentials()
       if (entries.length === 0) return
 
-      // Use the cached PRF result to avoid re-prompting biometrics.
-      // Falls back to a full WebAuthn authentication if no cache is available
-      // or if the cached credential is no longer registered on the backend.
-      const cached = getCachedPrfResult()
-      const result =
-        cached && entries.some((e) => e.id === cached.credentialId)
-          ? cached
-          : await authenticatePrfPasskey(entries.map((e) => e.id))
-      if (!result) {
+      const keys = encryptionService.getAllKeys()
+      if (!keys.primary) return
+      const primaryBytes = encryptionService.getAlternativeKeyBytes(
+        keys.primary,
+      )
+      if (!primaryBytes) return
+      let wrappedKey = await passkeyKeyManager.rewrapKeyFromCache({
+        key: primaryBytes,
+      })
+      let recovered = await recoverPasskeyKeyBundle(entries, {
+        cachedOnly: true,
+      })
+      if (
+        !wrappedKey ||
+        !entries.some((entry) => entry.id === wrappedKey?.credentialId)
+      ) {
+        recovered = await recoverPasskeyKeyBundle(entries)
+        if (!recovered) {
+          markBackupUpdateNeeded()
+          return
+        }
+        wrappedKey = await passkeyKeyManager.rewrapKeyFromCache({
+          key: primaryBytes,
+        })
+      }
+      if (!wrappedKey) {
         markBackupUpdateNeeded()
         return
       }
+      const currentEntry = entries.find(
+        (entry) => entry.id === wrappedKey.credentialId,
+      )
 
-      const kek = await deriveKeyEncryptionKey(result.prfOutput)
-      const keys = encryptionService.getAllKeys()
-      if (!keys.primary) return
-      const currentEntry = entries.find((e) => e.id === result.credentialId)
-
-      let localSyncVersion = getLocalSyncVersion(result.credentialId)
+      let localSyncVersion = getLocalSyncVersion(wrappedKey.credentialId)
       let localBundleVersion = getLocalBundleVersion()
 
       if (
         (localSyncVersion === null || localBundleVersion === null) &&
         currentEntry
       ) {
-        const currentRemoteBundle = await decryptKeyBundle(kek, {
-          iv: currentEntry.iv,
-          data: currentEntry.encrypted_keys,
-        })
+        const currentRemoteBundle = recovered?.keyBundle
 
-        if (await doesCurrentStateMatchBundle(currentRemoteBundle)) {
+        if (
+          currentRemoteBundle &&
+          (await doesCurrentStateMatchBundle(currentRemoteBundle))
+        ) {
           localSyncVersion ??= currentEntry.sync_version
           localBundleVersion ??= currentEntry.bundle_version ?? 0
         }
       }
 
       const stored = await storeEncryptedKeys(
-        result.credentialId,
-        kek,
+        wrappedKey,
         {
           primary: keys.primary,
           alternatives: keys.alternatives,
@@ -763,7 +749,7 @@ export function usePasskeyBackup({
         return
       }
 
-      setLocalSyncVersion(result.credentialId, stored.syncVersion)
+      setLocalSyncVersion(wrappedKey.credentialId, stored.syncVersion)
       setLocalBundleVersion(stored.bundleVersion)
       if (isMountedRef.current) {
         setState((prev) => ({
@@ -810,25 +796,22 @@ export function usePasskeyBackup({
    */
   const refreshKeyFromPasskeyBackup = useCallback(async (): Promise<void> => {
     try {
-      const cached = getCachedPrfResult()
-      if (!cached) return
-
       const entries = await loadPasskeyCredentials()
-      const entry = entries.find((e) => e.id === cached.credentialId)
+      const recovery = await recoverPasskeyKeyBundle(entries, {
+        cachedOnly: true,
+      })
+      if (!recovery) return
+      const entry = entries.find((e) => e.id === recovery.credentialId)
       if (!entry) return
 
-      const localVersion = getLocalSyncVersion(cached.credentialId)
+      const localVersion = getLocalSyncVersion(recovery.credentialId)
       if (localVersion !== null && entry.sync_version <= localVersion) return
 
       // sync_version increased — another device updated the backup
-      const kek = await deriveKeyEncryptionKey(cached.prfOutput)
-      const bundle = await decryptKeyBundle(kek, {
-        iv: entry.iv,
-        data: entry.encrypted_keys,
-      })
+      const bundle = recovery.keyBundle
 
       if (await doesCurrentStateMatchBundle(bundle)) {
-        setLocalSyncVersion(cached.credentialId, entry.sync_version)
+        setLocalSyncVersion(recovery.credentialId, entry.sync_version)
         if (entry.bundle_version !== undefined) {
           setLocalBundleVersion(entry.bundle_version)
         }
@@ -841,7 +824,7 @@ export function usePasskeyBackup({
         return
       }
 
-      setLocalSyncVersion(cached.credentialId, entry.sync_version)
+      setLocalSyncVersion(recovery.credentialId, entry.sync_version)
       if (entry.bundle_version !== undefined) {
         setLocalBundleVersion(entry.bundle_version)
       }
@@ -1674,27 +1657,22 @@ export function usePasskeyBackup({
    * register-key.
    */
   const promoteLegacyPasskeyForCurrentDevice = useCallback(
-    async (cekHex: string): Promise<boolean> => {
+    async (cek: Uint8Array): Promise<boolean> => {
       const legacyEntries = (await loadRecoveryCandidates()).filter(
         (entry) => entry.source === 'legacy',
       )
       if (legacyEntries.length === 0) return false
 
-      const credentialIds = legacyEntries.map((entry) => entry.id)
-      const prf = await authenticatePrfPasskey(credentialIds)
-      if (!prf) return false
-
-      const kek = await deriveKeyEncryptionKey(prf.prfOutput)
-      const result = await promoteRecoveredCekToEnclave({
-        cekHex,
-        credentialId: prf.credentialId,
-        kek,
+      const recovered = await recoverPasskeyKeyBundle(legacyEntries)
+      if (!recovered) return false
+      const promoted = await promoteRecoveredCekToEnclave({
+        cek,
+        credentialId: recovered.credentialId,
       })
-      if (!result.ok) {
+      if (!promoted) {
         logInfo('legacy promotion via add-device button failed', {
           component: 'usePasskeyBackup',
           action: 'promoteLegacyPasskeyForCurrentDevice',
-          metadata: { reason: result.reason },
         })
         return false
       }
@@ -1726,8 +1704,6 @@ export function usePasskeyBackup({
 
     const cekBytes = encryptionService.getAlternativeKeyBytes(keys.primary)
     if (!cekBytes) return false
-    const cekHex = cekBytesToHex(cekBytes)
-
     let keyIdHex: string | null
     try {
       const resp = await enclaveKeyCurrent()
@@ -1743,19 +1719,20 @@ export function usePasskeyBackup({
     passkeyFlowInProgressRef.current = true
     try {
       if (keyIdHex) {
-        const result = await addBundleForCurrentKey({
-          cekHex,
-          keyIdHex,
-          user: userInfo,
+        const created = await createAndWrapTinfoilKey({
+          user: {
+            id: new TextEncoder().encode(userInfo.userId),
+            name: userInfo.userName,
+            displayName: userInfo.displayName,
+          },
+          key: cekBytes,
         })
-        if (!result.ok) {
-          logInfo('add-bundle attempt failed', {
-            component: 'usePasskeyBackup',
-            action: 'addPasskeyToThisDevice',
-            metadata: { reason: result.reason },
-          })
-          return false
-        }
+        if (!created) return false
+        await addWrappedKeyForCurrentKey({
+          wrappedKey: created.wrappedKey,
+          cek: cekBytes,
+          keyIdHex,
+        })
       } else {
         // Legacy v1 user: local CEK already exists, the enclave has
         // no `user_keys` row yet, but `/api/passkey-credentials/`
@@ -1764,7 +1741,7 @@ export function usePasskeyBackup({
         // promotion path so the user lands on the v2 wire reusing
         // their existing passkey instead of being asked to enroll
         // a brand-new one.
-        const promoted = await promoteLegacyPasskeyForCurrentDevice(cekHex)
+        const promoted = await promoteLegacyPasskeyForCurrentDevice(cekBytes)
         if (!promoted) return false
       }
 
