@@ -5,8 +5,6 @@ import {
 import { base64ToUint8Array, uint8ArrayToBase64 } from '@/utils/binary-codec'
 import {
   createPasskeyKeyManager,
-  decodeWrappedKeyRecord,
-  encodeWrappedKeyRecord,
   PasskeyKeyError,
   type CachedPRFResult,
   type EvaluatedCredential,
@@ -142,14 +140,12 @@ export function tinfoilWrappedKeyFromEnclaveBundle(input: {
   kekIvHex: string
   wrappedKeyHex: string
 }): WrappedKey {
-  return decodeWrappedKeyRecord(
-    encodeWrappedKeyRecord({
-      profile: TINFOIL_PASSKEY_PROFILE,
-      credentialId: input.credentialId,
-      kekIvHex: input.kekIvHex,
-      wrappedKeyHex: input.wrappedKeyHex,
-    }),
-  )
+  return {
+    profile: TINFOIL_PASSKEY_PROFILE,
+    credentialId: input.credentialId,
+    kekIvHex: input.kekIvHex,
+    wrappedKeyHex: input.wrappedKeyHex,
+  }
 }
 
 export function enclaveBundleFromTinfoilWrappedKey(wrappedKey: WrappedKey): {
@@ -157,11 +153,10 @@ export function enclaveBundleFromTinfoilWrappedKey(wrappedKey: WrappedKey): {
   kekIvHex: string
   encryptedKeysHex: string
 } {
-  const canonical = decodeWrappedKeyRecord(encodeWrappedKeyRecord(wrappedKey))
   return {
-    credentialId: canonical.credentialId,
-    kekIvHex: canonical.kekIvHex,
-    encryptedKeysHex: canonical.wrappedKeyHex,
+    credentialId: wrappedKey.credentialId,
+    kekIvHex: wrappedKey.kekIvHex,
+    encryptedKeysHex: wrappedKey.wrappedKeyHex,
   }
 }
 

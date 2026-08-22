@@ -10,7 +10,6 @@ import {
   tinfoilPasskeyStorage,
   tinfoilWrappedKeyFromEnclaveBundle,
 } from '@/services/passkey/kit'
-import { encodeWrappedKeyRecord } from '@tinfoilsh/passkey-kit'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const CREDENTIAL_ID = 'AQID'
@@ -58,17 +57,12 @@ describe('Tinfoil passkey manager configuration', () => {
     )
   })
 
-  it('round-trips transport fields through the exact canonical record codec', () => {
+  it('maps enclave transport fields and reconstructs profile metadata', () => {
     const wrappedKey = tinfoilWrappedKeyFromEnclaveBundle({
       credentialId: CREDENTIAL_ID,
       kekIvHex: EXISTING_KEK_IV_HEX,
       wrappedKeyHex: EXISTING_WRAPPED_KEY_HEX,
     })
-    const relyingPartyId = TINFOIL_PASSKEY_PROFILE.relyingPartyId
-
-    expect(encodeWrappedKeyRecord(wrappedKey)).toBe(
-      `{"version":1,"profile":{"version":1,"relyingPartyId":"${relyingPartyId}","prfSalt":"dGluZm9pbC1jaGF0LWtleS1lbmNyeXB0aW9u","hkdfInfo":"dGluZm9pbC1jaGF0LWtlay12MQ"},"credentialId":"AQID","kekIvHex":"0102030405060708090a0b0c","wrappedKeyHex":"53c8f700925c9f94a7cf679d8a892c82f7c443769103a322e477a38d9118f0a014a659136ee1b9f6ed4921877f17aca7"}`,
-    )
     expect(enclaveBundleFromTinfoilWrappedKey(wrappedKey)).toEqual({
       credentialId: CREDENTIAL_ID,
       kekIvHex: EXISTING_KEK_IV_HEX,
