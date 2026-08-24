@@ -1151,7 +1151,9 @@ export class IndexedDBStorage {
     db?.close()
 
     const reset = this.ensureDB().then((resetDb) => {
-      const storeNames = Array.from(resetDb.objectStoreNames)
+      const storeNames = Array.from(resetDb.objectStoreNames).filter(
+        (storeName) => storeName !== MIGRATIONS_STORE,
+      )
       return new Promise<void>((resolve, reject) => {
         const transaction = resetDb.transaction(storeNames, 'readwrite')
         const timeout = window.setTimeout(() => {

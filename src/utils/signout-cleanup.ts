@@ -119,11 +119,6 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
         localStorage.removeItem(key)
       }
     }
-    window.dispatchEvent(
-      new CustomEvent(PINNED_CHAT_IDS_CHANGED_EVENT, {
-        detail: { pinnedChatIds: [] },
-      }),
-    )
   } catch {
     // best-effort — don't let localStorage failures skip remaining cleanup
   }
@@ -188,6 +183,11 @@ export async function performSignoutCleanup(opts?: {
       context: 'signoutCleanup',
       preserveEncryptionKey: preserveKey,
     })
+    window.dispatchEvent(
+      new CustomEvent(PINNED_CHAT_IDS_CHANGED_EVENT, {
+        detail: { pinnedChatIds: [] },
+      }),
+    )
 
     logInfo(
       `Signout cleanup completed${preserveKey ? ' (encryption key preserved)' : ''}`,

@@ -112,14 +112,36 @@ describe('performSignoutCleanup', () => {
       handlePinnedChatsChanged,
     )
 
-    await performSignoutCleanup()
+    try {
+      await performSignoutCleanup()
 
-    expect(localStorage.getItem(USER_PREFS_PINNED_CHAT_IDS)).toBeNull()
-    expect(handlePinnedChatsChanged).toHaveBeenCalledTimes(1)
-    window.removeEventListener(
+      expect(localStorage.getItem(USER_PREFS_PINNED_CHAT_IDS)).toBeNull()
+      expect(handlePinnedChatsChanged).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener(
+        PINNED_CHAT_IDS_CHANGED_EVENT,
+        handlePinnedChatsChanged,
+      )
+    }
+  })
+
+  it('does not dispatch pinned-chat changes during an account switch', async () => {
+    const handlePinnedChatsChanged = vi.fn()
+    window.addEventListener(
       PINNED_CHAT_IDS_CHANGED_EVENT,
       handlePinnedChatsChanged,
     )
+
+    try {
+      await performUserSwitchCleanup('user_new')
+
+      expect(handlePinnedChatsChanged).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener(
+        PINNED_CHAT_IDS_CHANGED_EVENT,
+        handlePinnedChatsChanged,
+      )
+    }
   })
 
   it('clears the encryption key and every user data cache', async () => {

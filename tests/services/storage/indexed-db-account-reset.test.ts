@@ -30,29 +30,22 @@ describe('IndexedDBStorage account reset', () => {
     const clearRemoteState = vi.fn(() => ({ onerror: null }))
     const clearOutbox = vi.fn(() => ({ onerror: null }))
     const clearMigrations = vi.fn(() => ({ onerror: null }))
+    const clearByStoreName = new Map([
+      ['chats', clear],
+      ['projects', clearProjects],
+      ['attachmentPayloads', clearPayloads],
+      ['chatSummaries', clearSummaries],
+      ['sync_state', clearSyncState],
+      ['remote_chat_state', clearRemoteState],
+      ['sync_outbox', clearOutbox],
+      ['migrations', clearMigrations],
+    ])
     const transaction: FakeResetTransaction = {
       oncomplete: null,
       onerror: null,
       onabort: null,
       abort: vi.fn(),
-      objectStore: (storeName) => ({
-        clear:
-          storeName === 'chats'
-            ? clear
-            : storeName === 'projects'
-              ? clearProjects
-              : storeName === 'attachmentPayloads'
-                ? clearPayloads
-                : storeName === 'chatSummaries'
-                  ? clearSummaries
-                  : storeName === 'sync_state'
-                    ? clearSyncState
-                    : storeName === 'remote_chat_state'
-                      ? clearRemoteState
-                      : storeName === 'sync_outbox'
-                        ? clearOutbox
-                        : clearMigrations,
-      }),
+      objectStore: (storeName) => ({ clear: clearByStoreName.get(storeName)! }),
     }
     const resetDb = {
       objectStoreNames: [
@@ -125,7 +118,7 @@ describe('IndexedDBStorage account reset', () => {
     expect(clearSyncState).toHaveBeenCalledTimes(1)
     expect(clearRemoteState).toHaveBeenCalledTimes(1)
     expect(clearOutbox).toHaveBeenCalledTimes(1)
-    expect(clearMigrations).toHaveBeenCalledTimes(1)
+    expect(clearMigrations).not.toHaveBeenCalled()
     await completeReset(transaction)
     await reset
   })
