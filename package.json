@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "prepare": "husky install",
+    "release": "node scripts/release.mjs",
     "find-unused": "ts-unused-exports tsconfig.json",
     "test": "vitest run && playwright test",
     "test:unit": "vitest",

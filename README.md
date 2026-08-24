@@ -12,6 +12,7 @@
 - [Development](#development)
   - [Quick Start](#quick-start)
   - [Local Testing & Dev Mode](#local-testing--dev-mode)
+- [Releases](#releases)
 - [Reporting Vulnerabilities](#reporting-vulnerabilities)
 
 ## Built With
@@ -92,6 +93,23 @@ Learn more about the security model:
 ### Local Testing & Dev Mode
 
 For running the app against a local model router (bypassing attestation and encryption), see **[LOCAL_TESTING.md](./LOCAL_TESTING.md)**.
+
+## Releases
+
+Prepare a release from an up-to-date `main` branch:
+
+```bash
+npm run release -- prepare 1.0.2
+```
+
+This updates `package.json` and `package-lock.json`, then opens a pull request. After the pull request merges, publish its matching tag:
+
+```bash
+git switch main
+npm run release -- publish 1.0.2
+```
+
+Pushing the tag starts the GitHub release workflow.
 
 ## Reporting Vulnerabilities
 
