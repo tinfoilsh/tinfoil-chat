@@ -1,5 +1,9 @@
 import { setGenUIConfig } from '@/components/chat/genui/config'
 import { API_BASE_URL, IS_DEV } from '@/config'
+import {
+  CONFIG_CACHED_MODELS,
+  CONFIG_CACHED_SYSTEM_PROMPT,
+} from '@/constants/storage-keys'
 import { DEV_SIMULATOR_MODEL } from '@/utils/dev-simulator'
 import { logError } from '@/utils/error-handling'
 import {
@@ -333,9 +337,126 @@ const isLocalDevelopment = (): boolean => {
   )
 }
 
+const CONFIG_CACHE_VERSION = 1
+const CONFIG_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+const CONFIG_REQUEST_TIMEOUT_MS = 10_000
+
+type CachedConfig<T> = {
+  version: number
+  cachedAt: number
+  value: T
+}
+
+type SystemPromptAndRules = {
+  systemPrompt: string
+  rules: string
+}
+
+type CachedSystemPromptAndRules = SystemPromptAndRules & {
+  genUI?: unknown
+}
+
+function readCachedConfig<T>(
+  key: string,
+  validate: (value: unknown) => value is T,
+): T | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) ?? '') as Partial<
+      CachedConfig<unknown>
+    >
+    if (
+      parsed.version !== CONFIG_CACHE_VERSION ||
+      typeof parsed.cachedAt !== 'number' ||
+      Date.now() - parsed.cachedAt < 0 ||
+      Date.now() - parsed.cachedAt > CONFIG_CACHE_MAX_AGE_MS ||
+      !validate(parsed.value)
+    ) {
+      return null
+    }
+    return parsed.value
+  } catch {
+    return null
+  }
+}
+
+function writeCachedConfig<T>(key: string, value: T): void {
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        version: CONFIG_CACHE_VERSION,
+        cachedAt: Date.now(),
+        value,
+      } satisfies CachedConfig<T>),
+    )
+  } catch {
+    // best-effort
+  }
+}
+
+function isBaseModelArray(value: unknown): value is BaseModel[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (model) =>
+        typeof model === 'object' &&
+        model !== null &&
+        typeof model.modelName === 'string' &&
+        typeof model.name === 'string' &&
+        typeof model.type === 'string',
+    )
+  )
+}
+
+function isSystemPromptAndRules(
+  value: unknown,
+): value is CachedSystemPromptAndRules {
+  const candidate = value as Record<string, unknown> | null
+  return (
+    typeof candidate === 'object' &&
+    candidate !== null &&
+    typeof candidate.systemPrompt === 'string' &&
+    typeof candidate.rules === 'string'
+  )
+}
+
+async function fetchConfig(url: string): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = setTimeout(
+    () => controller.abort(),
+    CONFIG_REQUEST_TIMEOUT_MS,
+  )
+  try {
+    return await fetch(url, { signal: controller.signal })
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+export function getCachedAIModels(): BaseModel[] | null {
+  const models = readCachedConfig(CONFIG_CACHED_MODELS, isBaseModelArray)
+  return models ? rememberModelDisplayNames(models) : null
+}
+
+export function getCachedSystemPromptAndRules(): SystemPromptAndRules | null {
+  const cached = readCachedConfig(
+    CONFIG_CACHED_SYSTEM_PROMPT,
+    isSystemPromptAndRules,
+  )
+  if (!cached) return null
+  applyGenUIConfigFromResponse(cached.genUI)
+  return {
+    systemPrompt: cached.systemPrompt,
+    rules: cached.rules,
+  }
+}
+
 // Fetch models from the API
 export const getAIModels = async (): Promise<BaseModel[]> => {
   const isLocalDev = isLocalDevelopment()
+  const cachedModels = getCachedAIModels()
 
   // In dev mode on localhost, return hardcoded models instead of fetching
   if (IS_DEV && isLocalDev) {
@@ -343,7 +464,7 @@ export const getAIModels = async (): Promise<BaseModel[]> => {
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/config/models`)
+    const response = await fetchConfig(`${API_BASE_URL}/api/config/models`)
 
     if (!response.ok) {
       throw new Error(`Failed to fetch models: ${response.status}`)
@@ -362,46 +483,57 @@ export const getAIModels = async (): Promise<BaseModel[]> => {
       models.unshift(DEV_SIMULATOR_MODEL)
     }
 
-    return rememberModelDisplayNames(models)
+    const rememberedModels = rememberModelDisplayNames(models)
+    writeCachedConfig(CONFIG_CACHED_MODELS, rememberedModels)
+    return rememberedModels
   } catch (error) {
     logError('Failed to fetch AI models', error, {
       component: 'getAIModels',
     })
-    return []
+    return cachedModels ?? []
   }
 }
 
 // Fetch system prompt and rules from the API
-export const getSystemPromptAndRules = async (): Promise<{
-  systemPrompt: string
-  rules: string
-}> => {
-  try {
-    const url = `${API_BASE_URL}/api/config/system-prompt`
-    const response = await fetch(url)
+export const getSystemPromptAndRules =
+  async (): Promise<SystemPromptAndRules> => {
+    const cachedPrompt = getCachedSystemPromptAndRules()
+    try {
+      const url = `${API_BASE_URL}/api/config/system-prompt`
+      const response = await fetchConfig(url)
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch system prompt: ${response.status}`)
-    }
+      if (!response.ok) {
+        throw new Error(`Failed to fetch system prompt: ${response.status}`)
+      }
 
-    const data = await response.json()
-    applyGenUIConfigFromResponse(data?.genUI)
-    return {
-      systemPrompt: data.systemPrompt,
-      rules: data.rules,
-    }
-  } catch (error) {
-    logError('Failed to fetch system prompt', error, {
-      component: 'getSystemPromptAndRules',
-    })
-    setGenUIConfig(null)
-    // Return a basic fallback
-    return {
-      systemPrompt: 'You are an intelligent and helpful assistant named Tin.',
-      rules: '',
+      const data = await response.json()
+      const result: CachedSystemPromptAndRules = {
+        systemPrompt: data.systemPrompt,
+        rules: data.rules,
+        genUI: data?.genUI,
+      }
+      if (!isSystemPromptAndRules(result)) {
+        throw new Error('System prompt response is malformed')
+      }
+      applyGenUIConfigFromResponse(result.genUI)
+      writeCachedConfig(CONFIG_CACHED_SYSTEM_PROMPT, result)
+      return result
+    } catch (error) {
+      logError('Failed to fetch system prompt', error, {
+        component: 'getSystemPromptAndRules',
+      })
+      if (!cachedPrompt) {
+        setGenUIConfig(null)
+      }
+      return (
+        cachedPrompt ?? {
+          systemPrompt:
+            'You are an intelligent and helpful assistant named Tin.',
+          rules: '',
+        }
+      )
     }
   }
-}
 
 /**
  * Validates the optional `genUI` block from the system-prompt response and

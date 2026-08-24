@@ -3,6 +3,8 @@ import { PINNED_CHAT_IDS_CHANGED_EVENT } from '@/constants/settings-events'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
+  CONFIG_CACHED_MODELS,
+  CONFIG_CACHED_SYSTEM_PROMPT,
   SECRET_PASSKEY_BACKED_UP,
   SETTINGS_HAS_SEEN_ONBOARDING,
   USER_ENCRYPTION_KEY,
@@ -108,6 +110,8 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   try {
     const preservedKeys = new Set([
       AUTH_ACTIVE_USER_ID,
+      CONFIG_CACHED_MODELS,
+      CONFIG_CACHED_SYSTEM_PROMPT,
       SETTINGS_HAS_SEEN_ONBOARDING,
       ...(preserveEncryptionKey ? [USER_ENCRYPTION_KEY] : []),
     ])

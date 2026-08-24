@@ -1,6 +1,8 @@
 import {
   findSelectableModel,
   getAIModels,
+  getCachedAIModels,
+  getCachedSystemPromptAndRules,
   getReasoningHistoryPolicy,
   getResolvedModelContextWindowTokens,
   getSystemPromptAndRules,
@@ -99,6 +101,11 @@ import {
 import { logError } from '@/utils/error-handling'
 import { isProbablyTextFile, isSupportedFile } from '@/utils/file-types'
 import { getNewChatPath, isPlainPrimaryClick } from '@/utils/navigation'
+import {
+  PERFORMANCE_METRICS,
+  recordPerformanceDuration,
+  startPerformanceTimer,
+} from '@/utils/performance-metrics'
 import {
   estimateMessageTokens,
   estimateTokenCount,
@@ -338,6 +345,15 @@ export function ChatInterface({
       )
   }, [toast])
   const { isSignedIn, isLoaded: isAuthLoaded, userId: authUserId } = useAuth()
+  const [authRestorationStartedAt] = useState(startPerformanceTimer)
+  useEffect(() => {
+    if (isAuthLoaded) {
+      recordPerformanceDuration(
+        PERFORMANCE_METRICS.AUTH_RESTORATION,
+        authRestorationStartedAt,
+      )
+    }
+  }, [authRestorationStartedAt, isAuthLoaded])
   // TODO: unflip this
   const canUseCodeExecution = false
   const { user } = useUser()
@@ -528,9 +544,12 @@ export function ChatInterface({
 
   // State for right sidebar
   const [isVerifierSidebarOpen, setIsVerifierSidebarOpen] = useState(false)
+  const [hasMountedVerifierSidebar, setHasMountedVerifierSidebar] =
+    useState(false)
 
   // State for settings modal
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
+  const [hasMountedSettingsModal, setHasMountedSettingsModal] = useState(false)
   const [settingsInitialTab, setSettingsInitialTab] = useState<
     SettingsTab | undefined
   >(undefined)
@@ -538,6 +557,7 @@ export function ChatInterface({
 
   // State for share modal
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+  const [hasMountedShareModal, setHasMountedShareModal] = useState(false)
 
   // State for cloud sync setup modal
   const [showCloudSyncSetupModal, setShowCloudSyncSetupModal] = useState(false)
@@ -679,6 +699,7 @@ export function ChatInterface({
   const [activePresetId, setActivePresetId] = useState<string | null>(null)
   const [isPromptLibraryModalOpen, setIsPromptLibraryModalOpen] =
     useState(false)
+  const [hasMountedPromptLibrary, setHasMountedPromptLibrary] = useState(false)
   const { getPresetById } = usePromptLibrary()
   const activePreset = getPresetById(activePresetId)
 
@@ -777,7 +798,31 @@ export function ChatInterface({
   // Load models and system prompt immediately in parallel.
   useEffect(() => {
     let cancelled = false
+    const configStartedAt = startPerformanceTimer()
+    let recordedConfigReady = false
+    const recordConfigReady = () => {
+      if (recordedConfigReady) return
+      recordedConfigReady = true
+      recordPerformanceDuration(
+        PERFORMANCE_METRICS.CONFIG_READY,
+        configStartedAt,
+      )
+    }
     const loadInitial = async () => {
+      const cachedPrompt = getCachedSystemPromptAndRules()
+      const cachedModels = getCachedAIModels()
+      if (cachedPrompt) {
+        setSystemPrompt(cachedPrompt.systemPrompt)
+        setRules(cachedPrompt.rules)
+      }
+      if (cachedModels) {
+        setModels(cachedModels)
+      }
+      if (cachedPrompt && cachedModels) {
+        setIsLoadingConfig(false)
+        recordConfigReady()
+      }
+
       try {
         const [promptData, models] = await Promise.all([
           getSystemPromptAndRules(),
@@ -789,6 +834,7 @@ export function ChatInterface({
           setRules(promptData.rules)
           setModels(models)
           setIsLoadingConfig(false)
+          recordConfigReady()
         }
       } catch (error) {
         logError('Failed to load chat configuration', error, {
@@ -797,6 +843,7 @@ export function ChatInterface({
         })
         if (!cancelled) {
           setIsLoadingConfig(false)
+          recordConfigReady()
         }
       }
     }
@@ -1244,6 +1291,7 @@ export function ChatInterface({
   )
 
   const handleOpenPromptLibrary = useCallback(() => {
+    setHasMountedPromptLibrary(true)
     setIsPromptLibraryModalOpen(true)
   }, [])
 
@@ -2097,6 +2145,7 @@ export function ChatInterface({
 
   // Handler for setting verifier sidebar state
   const handleSetVerifierSidebarOpen = (isOpen: boolean) => {
+    if (isOpen) setHasMountedVerifierSidebar(true)
     setIsVerifierSidebarOpen(isOpen)
     if (isOpen) {
       // If window is narrow, close left sidebar when opening right sidebar
@@ -2114,6 +2163,7 @@ export function ChatInterface({
     } else {
       // Open settings and close verifier if open
       setSettingsInitialTab(syncNeedsAttention ? 'cloud-sync' : undefined)
+      setHasMountedSettingsModal(true)
       setIsSettingsModalOpen(true)
       handleSetVerifierSidebarOpen(false)
       setIsAskSidebarOpen(false)
@@ -2127,12 +2177,14 @@ export function ChatInterface({
 
   // Handler for opening share modal
   const handleOpenShareModal = () => {
+    setHasMountedShareModal(true)
     setIsShareModalOpen(true)
   }
 
   // Handler for encryption key button - opens settings modal to cloud-sync tab
   const handleOpenEncryptionKeyModal = () => {
     setSettingsInitialTab('cloud-sync')
+    setHasMountedSettingsModal(true)
     setIsSettingsModalOpen(true)
     handleSetVerifierSidebarOpen(false)
     if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
@@ -3534,6 +3586,7 @@ export function ChatInterface({
         }
         onSettingsTabReady={(tab) => {
           setSettingsInitialTab(tab)
+          setHasMountedSettingsModal(true)
           setIsSettingsModalOpen(true)
           handleSetVerifierSidebarOpen(false)
           if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
@@ -3920,16 +3973,18 @@ export function ChatInterface({
       </DragProvider>
 
       {/* Right Verifier Sidebar */}
-      <VerifierSidebarLazy
-        isOpen={isVerifierSidebarOpen}
-        setIsOpen={handleSetVerifierSidebarOpen}
-        onVerificationComplete={(success) =>
-          setVerificationStatus(success ? 'verified' : 'failed')
-        }
-        onVerificationUpdate={setVerificationDocument}
-        isDarkMode={isDarkMode}
-        isClient={isClient}
-      />
+      {hasMountedVerifierSidebar && (
+        <VerifierSidebarLazy
+          isOpen={isVerifierSidebarOpen}
+          setIsOpen={handleSetVerifierSidebarOpen}
+          onVerificationComplete={(success) =>
+            setVerificationStatus(success ? 'verified' : 'failed')
+          }
+          onVerificationUpdate={setVerificationDocument}
+          isDarkMode={isDarkMode}
+          isClient={isClient}
+        />
+      )}
 
       {/* Ask Sidebar - ephemeral, context-aware side conversation seeded from
           highlighted text. Discarded on close or on the next "Ask" click. */}
@@ -3965,69 +4020,75 @@ export function ChatInterface({
       />
 
       {/* Share Modal */}
-      <ShareModalLazy
-        isOpen={isShareModalOpen}
-        onClose={() => setIsShareModalOpen(false)}
-        messages={currentChat?.messages || []}
-        isDarkMode={isDarkMode}
-        isSidebarOpen={
-          isSidebarOpen && windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-        }
-        isRightSidebarOpen={
-          (isVerifierSidebarOpen ||
-            isSettingsModalOpen ||
-            isAskSidebarOpen ||
-            isArtifactSidebarOpen) &&
-          windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-        }
-        chatTitle={currentChat?.title}
-        chatCreatedAt={currentChat?.createdAt}
-        chatId={currentChat?.id}
-      />
+      {hasMountedShareModal && (
+        <ShareModalLazy
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          messages={currentChat?.messages || []}
+          isDarkMode={isDarkMode}
+          isSidebarOpen={
+            isSidebarOpen && windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
+          }
+          isRightSidebarOpen={
+            (isVerifierSidebarOpen ||
+              isSettingsModalOpen ||
+              isAskSidebarOpen ||
+              isArtifactSidebarOpen) &&
+            windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
+          }
+          chatTitle={currentChat?.title}
+          chatCreatedAt={currentChat?.createdAt}
+          chatId={currentChat?.id}
+        />
+      )}
 
       {/* Prompt Library Modal */}
-      <PromptLibraryModalLazy
-        isOpen={isPromptLibraryModalOpen}
-        onClose={handleClosePromptLibrary}
-        activePresetId={activePresetId}
-        onSelectPreset={handleSetActivePreset}
-        isSidebarOpen={
-          isSidebarOpen && windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-        }
-        isRightSidebarOpen={
-          (isVerifierSidebarOpen ||
-            isSettingsModalOpen ||
-            isAskSidebarOpen ||
-            isArtifactSidebarOpen) &&
-          windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-        }
-      />
+      {hasMountedPromptLibrary && (
+        <PromptLibraryModalLazy
+          isOpen={isPromptLibraryModalOpen}
+          onClose={handleClosePromptLibrary}
+          activePresetId={activePresetId}
+          onSelectPreset={handleSetActivePreset}
+          isSidebarOpen={
+            isSidebarOpen && windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
+          }
+          isRightSidebarOpen={
+            (isVerifierSidebarOpen ||
+              isSettingsModalOpen ||
+              isAskSidebarOpen ||
+              isArtifactSidebarOpen) &&
+            windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
+          }
+        />
+      )}
 
       {/* Settings Modal */}
-      <SettingsModalLazy
-        isOpen={isSettingsModalOpen}
-        setIsOpen={setIsSettingsModalOpen}
-        isDarkMode={isDarkMode}
-        themeMode={themeMode}
-        setThemeMode={setThemeMode}
-        isClient={isClient}
-        defaultSystemPrompt={systemPrompt}
-        onCloudSyncSetupClick={
-          isSignedIn ? handleOpenCloudSyncSetup : undefined
-        }
-        onChatsUpdated={reloadChats}
-        isSignedIn={isSignedIn}
-        isPremium={isPremium}
-        encryptionKey={encryptionKey}
-        passkeyActive={passkeyActive}
-        passkeySetupAvailable={passkeySetupAvailable}
-        passkeyAddDeviceAvailable={passkeyAddDeviceAvailable}
-        onSetupPasskey={setupPasskey}
-        onAddPasskeyToThisDevice={addPasskeyToThisDevice}
-        onRefreshBundleState={refreshBundleState}
-        initialTab={settingsInitialTab}
-        chats={chats}
-      />
+      {hasMountedSettingsModal && (
+        <SettingsModalLazy
+          isOpen={isSettingsModalOpen}
+          setIsOpen={setIsSettingsModalOpen}
+          isDarkMode={isDarkMode}
+          themeMode={themeMode}
+          setThemeMode={setThemeMode}
+          isClient={isClient}
+          defaultSystemPrompt={systemPrompt}
+          onCloudSyncSetupClick={
+            isSignedIn ? handleOpenCloudSyncSetup : undefined
+          }
+          onChatsUpdated={reloadChats}
+          isSignedIn={isSignedIn}
+          isPremium={isPremium}
+          encryptionKey={encryptionKey}
+          passkeyActive={passkeyActive}
+          passkeySetupAvailable={passkeySetupAvailable}
+          passkeyAddDeviceAvailable={passkeyAddDeviceAvailable}
+          onSetupPasskey={setupPasskey}
+          onAddPasskeyToThisDevice={addPasskeyToThisDevice}
+          onRefreshBundleState={refreshBundleState}
+          initialTab={settingsInitialTab}
+          chats={chats}
+        />
+      )}
 
       {/* Main Chat Area - Modified for sliding effect */}
       <div
