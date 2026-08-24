@@ -611,7 +611,10 @@ const DefaultMessageComponent = ({
                   <div className="mt-3 flex items-center justify-between">
                     <div className="hidden items-center gap-2 text-sm text-content-muted sm:flex">
                       <InformationCircleIcon className="h-4 w-4 shrink-0" />
-                      <span>All messages after this point will be removed</span>
+                      <span>
+                        Editing this message will restart the conversation from
+                        this point.
+                      </span>
                     </div>
                     <div className="flex flex-1 justify-end gap-2">
                       <button
