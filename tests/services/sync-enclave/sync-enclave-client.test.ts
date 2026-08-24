@@ -406,6 +406,31 @@ describe('SyncEnclaveClient', () => {
     expect(mockReady).toHaveBeenCalledTimes(1)
   })
 
+  it('shares one non-cancelable cold start across canceled callers', async () => {
+    let resolveReady: () => void = () => {}
+    mockReady.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveReady = resolve
+      }),
+    )
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const controller = new AbortController()
+      const client = getSyncEnclaveClient(controller.signal)
+      controller.abort()
+      await expect(client).rejects.toMatchObject({ name: 'AbortError' })
+    }
+    expect(mockReady).toHaveBeenCalledOnce()
+    expect(mockSecureClientConstructor).toHaveBeenCalledOnce()
+
+    resolveReady()
+    await expect(getSyncEnclaveClient()).resolves.toBeDefined()
+    expect(mockReady).toHaveBeenCalledOnce()
+    expect(mockSecureClientConstructor).toHaveBeenCalledOnce()
+  })
+
   it('drops the cache when verification fails so the next call can retry', async () => {
     const { getSyncEnclaveClient } =
       await import('@/services/sync-enclave/sync-enclave-client')

@@ -187,6 +187,32 @@ describe('passkey-key-storage load + delete (enclave wire)', () => {
       mockFetchLegacy.mockResolvedValue([])
       expect(await loadPasskeyCredentials()).toEqual([])
     })
+
+    it('aborts hanging key-current discovery without accumulating requests', async () => {
+      let activeRequests = 0
+      mockKeyCurrent.mockImplementation((signal?: AbortSignal) => {
+        activeRequests++
+        return new Promise((_, reject) => {
+          const onAbort = () => {
+            activeRequests--
+            reject(signal?.reason)
+          }
+          signal?.addEventListener('abort', onAbort, { once: true })
+        })
+      })
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const controller = new AbortController()
+        const discovery = loadPasskeyCredentials({
+          signal: controller.signal,
+        })
+        expect(activeRequests).toBe(1)
+        controller.abort()
+        await expect(discovery).rejects.toMatchObject({ name: 'AbortError' })
+        expect(activeRequests).toBe(0)
+      }
+      expect(mockFetchLegacy).not.toHaveBeenCalled()
+    })
   })
 
   describe('loadRecoveryCandidates', () => {

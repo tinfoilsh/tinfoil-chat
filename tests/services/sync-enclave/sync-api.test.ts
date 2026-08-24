@@ -335,6 +335,29 @@ describe('sync-api (enclave JSON-RPC)', () => {
     })
   })
 
+  it('forwards keyCurrent cancellation to the secure fetch', async () => {
+    const api = await import('@/services/sync-enclave/sync-api')
+    let requestSignal: AbortSignal | undefined
+    mockFetch.mockImplementationOnce((_, init) => {
+      requestSignal = init?.signal ?? undefined
+      return new Promise((_, reject) => {
+        requestSignal?.addEventListener(
+          'abort',
+          () => reject(requestSignal?.reason),
+          { once: true },
+        )
+      })
+    })
+    const controller = new AbortController()
+
+    const request = api.keyCurrent(controller.signal)
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledOnce())
+    controller.abort()
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    expect(requestSignal?.aborted).toBe(true)
+  })
+
   it('migrate posts /v1/blobs/migrate with target key', async () => {
     const api = await import('@/services/sync-enclave/sync-api')
     mockFetch.mockResolvedValueOnce(

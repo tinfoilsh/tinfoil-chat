@@ -9,18 +9,18 @@ const mocks = vi.hoisted(() => ({
   authorizeCurrentPrimaryKeyOrThrow: vi.fn(),
   getCurrentCloudKeyAuthorizationMode: vi.fn(),
   isPrfSupported: vi.fn(),
-  authenticatePrfPasskey: vi.fn(),
-  createPrfPasskey: vi.fn(),
-  decryptKeyBundle: vi.fn(),
+  addWrappedKeyForCurrentKey: vi.fn(),
+  createAndWrapTinfoilKey: vi.fn(),
   deletePasskeyCredential: vi.fn(),
-  deriveKeyEncryptionKey: vi.fn(),
-  getCachedPrfResult: vi.fn(),
   getLocalPasskeyCredentialId: vi.fn(),
   getPasskeyCredentialState: vi.fn(),
   getPasskeyDeviceState: vi.fn(),
   loadPasskeyCredentials: vi.fn(),
   loadRecoveryCandidates: vi.fn(),
-  retrieveEncryptedKeys: vi.fn(),
+  recoverPasskeyKeyBundle: vi.fn(),
+  rewrapKeyFromCache: vi.fn(),
+  wrapKeyWithPRFResult: vi.fn(),
+  wrapTinfoilKeyBundle: vi.fn(),
   storeEncryptedKeys: vi.fn(),
   getKey: vi.fn(),
   getAllKeys: vi.fn(),
@@ -29,8 +29,6 @@ const mocks = vi.hoisted(() => ({
   getAlternativeKeyBytes: vi.fn(),
   encodeKeyFromBytes: vi.fn(),
   generateKey: vi.fn(),
-  cekBytesToHex: vi.fn(),
-  addBundleForCurrentKey: vi.fn(),
   promoteRecoveredCekToEnclave: vi.fn(),
   keyCurrent: vi.fn(),
   setCloudSyncEnabled: vi.fn(),
@@ -74,12 +72,9 @@ vi.mock('@/services/passkey', () => {
   }
 
   return {
-    authenticatePrfPasskey: mocks.authenticatePrfPasskey,
-    createPrfPasskey: mocks.createPrfPasskey,
-    decryptKeyBundle: mocks.decryptKeyBundle,
+    addWrappedKeyForCurrentKey: mocks.addWrappedKeyForCurrentKey,
+    createAndWrapTinfoilKey: mocks.createAndWrapTinfoilKey,
     deletePasskeyCredential: mocks.deletePasskeyCredential,
-    deriveKeyEncryptionKey: mocks.deriveKeyEncryptionKey,
-    getCachedPrfResult: mocks.getCachedPrfResult,
     getLocalPasskeyCredentialId: mocks.getLocalPasskeyCredentialId,
     getPasskeyCredentialState: mocks.getPasskeyCredentialState,
     getPasskeyDeviceState: mocks.getPasskeyDeviceState,
@@ -88,8 +83,14 @@ vi.mock('@/services/passkey', () => {
     PasskeyCredentialConflictError: MockPasskeyCredentialConflictError,
     PasskeyTimeoutError: class MockPasskeyTimeoutError extends Error {},
     PrfNotSupportedError: class MockPrfNotSupportedError extends Error {},
-    retrieveEncryptedKeys: mocks.retrieveEncryptedKeys,
+    recoverPasskeyKeyBundle: mocks.recoverPasskeyKeyBundle,
+    passkeyKeyManager: {
+      rewrapKeyFromCache: mocks.rewrapKeyFromCache,
+      wrapKeyWithPRFResult: mocks.wrapKeyWithPRFResult,
+    },
+    promoteRecoveredCekToEnclave: mocks.promoteRecoveredCekToEnclave,
     storeEncryptedKeys: mocks.storeEncryptedKeys,
+    wrapTinfoilKeyBundle: mocks.wrapTinfoilKeyBundle,
   }
 })
 
@@ -105,20 +106,11 @@ vi.mock('@/services/encryption/encryption-service', () => ({
   },
 }))
 
-vi.mock('@/services/sync-enclave/key-bundle', () => ({
-  cekBytesToHex: mocks.cekBytesToHex,
-}))
-
 vi.mock('@/services/sync-enclave/passkey-events', () => ({
   passkeyEvents: {
     on: mocks.passkeyEventsOn,
     emit: mocks.passkeyEventsEmit,
   },
-}))
-
-vi.mock('@/services/sync-enclave/passkey-key-flow', () => ({
-  addBundleForCurrentKey: mocks.addBundleForCurrentKey,
-  promoteRecoveredCekToEnclave: mocks.promoteRecoveredCekToEnclave,
 }))
 
 vi.mock('@/services/sync-enclave/sync-api', () => ({
@@ -152,10 +144,13 @@ describe('usePasskeyBackup', () => {
     mocks.getPasskeyCredentialState.mockResolvedValue('empty')
     mocks.getPasskeyDeviceState.mockResolvedValue('empty')
     mocks.loadPasskeyCredentials.mockResolvedValue([])
-    mocks.getCachedPrfResult.mockReturnValue(null)
     mocks.getLocalPasskeyCredentialId.mockReturnValue(null)
     mocks.getKey.mockReturnValue(null)
     mocks.getAllKeys.mockReturnValue({ primary: null, alternatives: [] })
+    mocks.wrapTinfoilKeyBundle.mockImplementation(async (primary) => ({
+      primary,
+      alternatives: [],
+    }))
     mocks.passkeyEventsOn.mockReturnValue(() => {})
   })
 
@@ -284,24 +279,83 @@ describe('usePasskeyBackup', () => {
     })
   })
 
+  it('keeps recovery successful when legacy promotion fails', async () => {
+    mocks.loadRecoveryCandidates.mockResolvedValue([
+      { id: 'cred-legacy', source: 'legacy' },
+    ])
+    mocks.recoverPasskeyKeyBundle.mockResolvedValue({
+      credentialId: 'cred-legacy',
+      keyBundle: { primary: 'key_recovered', alternatives: [] },
+      syncVersion: 1,
+      bundleVersion: 1,
+      source: 'legacy',
+      prfResult: { output: new Uint8Array(32) },
+    })
+    mocks.getAlternativeKeyBytes.mockReturnValue(new Uint8Array(32))
+    mocks.promoteRecoveredCekToEnclave.mockResolvedValue(false)
+    mocks.authorizeCurrentPrimaryKeyOrThrow.mockResolvedValue(undefined)
+
+    const { result } = renderHook(() =>
+      usePasskeyBackup({ ...baseOptions, initialized: false }),
+    )
+    let recovered: string | null = null
+    await act(async () => {
+      recovered = await result.current.recoverWithPasskey()
+    })
+
+    expect(recovered).toBe('key_recovered')
+    expect(result.current.passkeyRecoveryFailure).toBeNull()
+    expect(result.current.passkeyActive).toBe(true)
+    expect(mocks.promoteRecoveredCekToEnclave).toHaveBeenCalledOnce()
+  })
+
+  it('fails enrollment before remote storage when alternatives cannot be wrapped', async () => {
+    mocks.getCurrentCloudKeyAuthorizationMode.mockResolvedValue('validated')
+    mocks.getAllKeys.mockReturnValue({
+      primary: 'key_primary',
+      alternatives: ['key_alternative'],
+    })
+    mocks.getAlternativeKeyBytes.mockReturnValue(new Uint8Array(32))
+    mocks.createAndWrapTinfoilKey.mockResolvedValue({
+      credentialId: 'AQID',
+      wrappedKey: { credentialId: 'AQID' },
+    })
+    mocks.wrapTinfoilKeyBundle.mockResolvedValue(null)
+
+    const { result } = renderHook(() =>
+      usePasskeyBackup({ ...baseOptions, initialized: false }),
+    )
+    let enrolled = true
+    await act(async () => {
+      enrolled = await result.current.setupPasskey()
+    })
+
+    expect(enrolled).toBe(false)
+    expect(mocks.storeEncryptedKeys).not.toHaveBeenCalled()
+  })
+
   describe('addPasskeyToThisDevice legacy promotion', () => {
     beforeEach(() => {
       mocks.getAllKeys.mockReturnValue({ primary: 'key_x', alternatives: [] })
       mocks.getAlternativeKeyBytes.mockReturnValue(new Uint8Array(32))
-      mocks.cekBytesToHex.mockReturnValue('deadbeef')
       mocks.loadRecoveryCandidates.mockResolvedValue([
         { id: 'cred-legacy', source: 'legacy' },
       ])
-      mocks.authenticatePrfPasskey.mockResolvedValue({
-        prfOutput: new Uint8Array(32),
+      mocks.recoverPasskeyKeyBundle.mockResolvedValue({
         credentialId: 'cred-legacy',
+        keyBundle: { primary: 'key_x', alternatives: [] },
+        source: 'legacy',
+        prfResult: { output: new Uint8Array(32) },
       })
-      mocks.deriveKeyEncryptionKey.mockResolvedValue({} as CryptoKey)
-      mocks.promoteRecoveredCekToEnclave.mockResolvedValue({ ok: true })
+      mocks.promoteRecoveredCekToEnclave.mockResolvedValue(true)
+      mocks.getCurrentCloudKeyAuthorizationMode.mockResolvedValue('validated')
     })
 
     it('proceeds with promotion when remote legacy data exists', async () => {
       mocks.keyCurrent.mockResolvedValue({ key_id: null, has_data: true })
+      mocks.getCurrentCloudKeyAuthorizationMode.mockResolvedValue(
+        'explicit_start_fresh',
+      )
 
       const { result } = renderHook(() => usePasskeyBackup(baseOptions))
 
@@ -311,8 +365,15 @@ describe('usePasskeyBackup', () => {
       })
 
       expect(success).toBe(true)
-      expect(mocks.authenticatePrfPasskey).toHaveBeenCalledOnce()
+      expect(mocks.recoverPasskeyKeyBundle).toHaveBeenCalledOnce()
       expect(mocks.promoteRecoveredCekToEnclave).toHaveBeenCalledOnce()
+      expect(mocks.promoteRecoveredCekToEnclave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          keyBundle: expect.objectContaining({
+            authorizationMode: 'explicit_start_fresh',
+          }),
+        }),
+      )
     })
 
     it('proceeds with promotion when no remote data exists', async () => {
@@ -327,6 +388,91 @@ describe('usePasskeyBackup', () => {
 
       expect(success).toBe(true)
       expect(mocks.promoteRecoveredCekToEnclave).toHaveBeenCalledOnce()
+    })
+
+    it('fails before reading remote key state when authorization is unavailable', async () => {
+      mocks.getCurrentCloudKeyAuthorizationMode.mockResolvedValue(null)
+
+      const { result } = renderHook(() => usePasskeyBackup(baseOptions))
+      let success = true
+      await act(async () => {
+        success = await result.current.addPasskeyToThisDevice()
+      })
+
+      expect(success).toBe(false)
+      expect(mocks.keyCurrent).not.toHaveBeenCalled()
+      expect(mocks.createAndWrapTinfoilKey).not.toHaveBeenCalled()
+      expect(mocks.promoteRecoveredCekToEnclave).not.toHaveBeenCalled()
+    })
+
+    it('makes no authorization or remote calls without a local primary key', async () => {
+      mocks.getAllKeys.mockReturnValue({ primary: null, alternatives: [] })
+
+      const { result } = renderHook(() => usePasskeyBackup(baseOptions))
+      let success = true
+      await act(async () => {
+        success = await result.current.addPasskeyToThisDevice()
+      })
+
+      expect(success).toBe(false)
+      expect(mocks.getCurrentCloudKeyAuthorizationMode).not.toHaveBeenCalled()
+      expect(mocks.keyCurrent).not.toHaveBeenCalled()
+    })
+
+    it('makes no authorization or remote calls for invalid local key bytes', async () => {
+      mocks.getAlternativeKeyBytes.mockReturnValue(null)
+
+      const { result } = renderHook(() => usePasskeyBackup(baseOptions))
+      let success = true
+      await act(async () => {
+        success = await result.current.addPasskeyToThisDevice()
+      })
+
+      expect(success).toBe(false)
+      expect(mocks.getCurrentCloudKeyAuthorizationMode).not.toHaveBeenCalled()
+      expect(mocks.keyCurrent).not.toHaveBeenCalled()
+    })
+
+    it('preserves Start Fresh authorization for current-key add-device enrollment', async () => {
+      mocks.getAllKeys.mockReturnValue({
+        primary: 'key_x',
+        alternatives: ['key_previous'],
+      })
+      mocks.getCurrentCloudKeyAuthorizationMode.mockResolvedValue(
+        'explicit_start_fresh',
+      )
+      mocks.keyCurrent.mockResolvedValue({ key_id: 'kid-current', bundles: {} })
+      const primary = { credentialId: 'AQID' }
+      mocks.createAndWrapTinfoilKey.mockResolvedValue({
+        credentialId: 'AQID',
+        wrappedKey: primary,
+      })
+      const wrappedKeys = { primary, alternatives: [{ credentialId: 'AQID' }] }
+      mocks.wrapTinfoilKeyBundle.mockResolvedValue(wrappedKeys)
+      mocks.addWrappedKeyForCurrentKey.mockResolvedValue(undefined)
+
+      const { result } = renderHook(() => usePasskeyBackup(baseOptions))
+      let success = false
+      await act(async () => {
+        success = await result.current.addPasskeyToThisDevice()
+      })
+
+      expect(success).toBe(true)
+      const keyBundle = {
+        primary: 'key_x',
+        alternatives: ['key_previous'],
+        authorizationMode: 'explicit_start_fresh',
+      }
+      expect(mocks.wrapTinfoilKeyBundle).toHaveBeenCalledWith(
+        primary,
+        keyBundle,
+      )
+      expect(mocks.addWrappedKeyForCurrentKey).toHaveBeenCalledWith({
+        wrappedKeys,
+        keyBundle,
+        cek: new Uint8Array(32),
+        keyIdHex: 'kid-current',
+      })
     })
   })
 })

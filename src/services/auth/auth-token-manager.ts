@@ -73,7 +73,8 @@ export class AuthTokenManager {
     })
   }
 
-  async getValidToken(): Promise<string> {
+  async getValidToken(signal?: AbortSignal): Promise<string> {
+    signal?.throwIfAborted()
     const getToken = this.getToken
     const generation = this.generation
     if (!getToken) {
@@ -81,7 +82,7 @@ export class AuthTokenManager {
     }
     let token: string | null
     try {
-      token = await getToken()
+      token = await settleWithAbortSignal(getToken(), signal)
     } catch (error) {
       throw new AuthTokenUnavailableError('unavailable', { cause: error })
     }
@@ -113,18 +114,19 @@ export class AuthTokenManager {
     this.refreshByRejectedToken.clear()
   }
 
-  async getAuthHeaders(): Promise<Record<string, string>> {
-    const token = await this.getValidToken()
+  async getAuthHeaders(signal?: AbortSignal): Promise<Record<string, string>> {
+    const token = await this.getValidToken(signal)
     return {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     }
   }
 
-  async isAuthenticated(): Promise<boolean> {
+  async isAuthenticated(signal?: AbortSignal): Promise<boolean> {
     try {
-      return !!(await this.getValidToken())
+      return !!(await this.getValidToken(signal))
     } catch {
+      signal?.throwIfAborted()
       return false
     }
   }
@@ -151,6 +153,21 @@ export class AuthTokenManager {
       throw new AuthTokenRefreshError({ cause: error })
     }
   }
+}
+
+function settleWithAbortSignal<T>(
+  operation: Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (!signal) return operation
+  signal.throwIfAborted()
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    operation.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', onAbort)
+    })
+  })
 }
 
 export const authTokenManager = new AuthTokenManager()
