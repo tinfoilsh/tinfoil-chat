@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { getClerkErrorMessage } from '@/utils/clerk-errors'
 import { logError } from '@/utils/error-handling'
 import { sanitizeRelativeRedirect } from '@/utils/redirect-url'
-import { useClerk, useSignIn, useSignUp } from '@clerk/nextjs'
+import { useAuth, useClerk, useSignIn, useSignUp } from '@clerk/nextjs'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { useEffect, useRef, useState } from 'react'
@@ -58,6 +58,7 @@ function clerkErrorCode(error: unknown): string | undefined {
 export default function SignInPage() {
   const router = useRouter()
   const clerk = useClerk()
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth()
   const { signIn, errors: signInErrors } = useSignIn()
   const { signUp } = useSignUp()
   const [isDarkMode, setIsDarkMode] = useState(false)
@@ -87,6 +88,11 @@ export default function SignInPage() {
   const postAuthRedirectUrl =
     sanitizeRelativeRedirect(router.query.redirect_url) ??
     POST_AUTH_REDIRECT_URL
+
+  useEffect(() => {
+    if (!router.isReady || !isAuthLoaded || !isSignedIn) return
+    void router.replace(postAuthRedirectUrl)
+  }, [isAuthLoaded, isSignedIn, postAuthRedirectUrl, router])
 
   const navigateAfterAuth = async ({
     session,
@@ -470,6 +476,14 @@ export default function SignInPage() {
   }
 
   const isPending = pendingAction !== null
+
+  if (!isAuthLoaded || isSignedIn) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-surface-chat-background font-aeonik">
+        <PiSpinner className="h-6 w-6 animate-spin text-content-secondary" />
+      </main>
+    )
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-surface-chat-background px-6 py-16 font-aeonik">

@@ -25,6 +25,11 @@ export const SECRET_CLOUD_KEY_AUTHORIZATION_PREFIX =
 // --- localStorage: Auth ----------------------------------------------------
 export const AUTH_ACTIVE_USER_ID = 'tinfoil-auth-active-user-id'
 export const AUTH_ACCOUNT_RESET_SIGNAL = 'tinfoil-auth-account-reset-signal'
+export const AUTH_SIGNOUT_REQUESTED_AT = 'tinfoil-auth-signout-requested-at'
+
+// --- localStorage: Public app configuration -------------------------------
+export const CONFIG_CACHED_MODELS = 'tinfoil-config-cached-models'
+export const CONFIG_CACHED_SYSTEM_PROMPT = 'tinfoil-config-cached-system-prompt'
 
 // --- localStorage: App settings --------------------------------------------
 export const SETTINGS_CLOUD_SYNC_ENABLED = 'tinfoil-settings-cloud-sync-enabled'

@@ -51,6 +51,10 @@ import { projectCache } from '@/services/storage/project-cache'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { attachmentGet } from '@/services/sync-enclave/sync-api'
 import { TINFOIL_COLORS } from '@/theme/colors'
+import {
+  clearExplicitSignoutIntent,
+  requestExplicitSignout,
+} from '@/utils/auth-signout-intent'
 import { base64ToUint8Array } from '@/utils/binary-codec'
 import {
   parseChatGPTConversations,
@@ -1273,9 +1277,11 @@ export function SettingsModal({
   const handleSignOut = useCallback(async () => {
     setIsSigningOut(true)
     showSignoutProgress()
+    requestExplicitSignout()
     try {
       await signOut()
     } catch (error) {
+      clearExplicitSignoutIntent()
       logError('Sign out failed', error, {
         component: 'SettingsModal',
         action: 'handleSignOut',
