@@ -13,6 +13,11 @@ import { AUTO_MODEL_OPTIONS_FIELD, AUTO_REQUEST_MODEL } from '@/config/models'
 import { shouldRetryTestFail } from '@/utils/dev-simulator'
 import { logError, logInfo } from '@/utils/error-handling'
 import {
+  PERFORMANCE_METRICS,
+  recordPerformanceDuration,
+  startPerformanceTimer,
+} from '@/utils/performance-metrics'
+import {
   APIConnectionError,
   APIUserAbortError,
   AuthenticationError,
@@ -22,14 +27,14 @@ import type { SessionRecoveryToken } from 'tinfoil'
 import { ChatQueryBuilder } from './chat-query-builder'
 import { chatChunkStreamFromSSE, type ChatChunkStream } from './chat-stream'
 import {
+  acquireRecoverableTinfoilTransport,
   createRecoverableTinfoilClient,
-  createRecoverableTinfoilTransport,
   discardRateLimitSnapshot,
   getRateLimitInfo,
   getTinfoilClient,
   refreshRateLimit,
   resetTinfoilClient,
-  type RecoverableTinfoilTransport,
+  type RecoverableTinfoilTransportLease,
 } from './tinfoil-client'
 
 const CHAT_COMPLETIONS_ENDPOINT = '/v1/chat/completions'
@@ -432,11 +437,17 @@ export async function sendChatStream(
 
   let lastError: unknown = null
   const maxRetries = CONSTANTS.MESSAGE_SEND_MAX_RETRIES
-  let recoverableTransport: RecoverableTinfoilTransport | null = null
+  let recoverableTransportLease: RecoverableTinfoilTransportLease | null = null
+
+  const releaseRecoverableTransport = () => {
+    recoverableTransportLease?.release()
+    recoverableTransportLease = null
+  }
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     let recoverySessionId: string | null = null
     if (signal.aborted) {
+      releaseRecoverableTransport()
       throw new DOMException('Aborted', 'AbortError')
     }
 
@@ -451,6 +462,7 @@ export async function sendChatStream(
       const connectionWaitStart = Date.now()
       while (!isOnline() && Date.now() - connectionWaitStart < 10000) {
         if (signal.aborted) {
+          releaseRecoverableTransport()
           throw new DOMException('Aborted', 'AbortError')
         }
         await delay(500)
@@ -509,11 +521,15 @@ export async function sendChatStream(
         }
       }
 
+      const streamStartedAt = startPerformanceTimer()
       let client
       let waitForTokenCapture: (() => Promise<void>) | undefined
       let recoverySessionCleanup: (() => Promise<void>) | undefined
       if (recovery) {
-        recoverableTransport ??= await createRecoverableTinfoilTransport()
+        if (!recoverableTransportLease) {
+          recoverableTransportLease = await acquireRecoverableTinfoilTransport()
+        }
+        const recoverableTransport = recoverableTransportLease.transport
         recoverySessionId = generateRecoverySessionId()
         recovery.onAttemptStarted(recoverySessionId)
         const recoverable = await createRecoverableTinfoilClient(
@@ -542,7 +558,12 @@ export async function sendChatStream(
         requestBody,
         { signal, maxRetries: 0 },
       )
+      recordPerformanceDuration(
+        PERFORMANCE_METRICS.INFERENCE_STREAM_READY,
+        streamStartedAt,
+      )
       if (!waitForTokenCapture || !recoverySessionCleanup) {
+        releaseRecoverableTransport()
         return stream as ChatChunkStream
       }
       const abandonRecovery = recoverySessionCleanup
@@ -565,9 +586,22 @@ export async function sendChatStream(
       void recoveryReady.catch(() => undefined)
       return {
         recoveryReady,
-        abandonRecovery,
-        [Symbol.asyncIterator]: () =>
-          (stream as ChatChunkStream)[Symbol.asyncIterator](),
+        abandonRecovery: async () => {
+          try {
+            await abandonRecovery()
+          } finally {
+            releaseRecoverableTransport()
+          }
+        },
+        async *[Symbol.asyncIterator]() {
+          try {
+            for await (const chunk of stream as ChatChunkStream) {
+              yield chunk
+            }
+          } finally {
+            releaseRecoverableTransport()
+          }
+        },
       }
     } catch (err: unknown) {
       if (recoverySessionId && recovery) {
@@ -591,6 +625,7 @@ export async function sendChatStream(
           anyErr.name === 'AbortError') ||
         anyErr?.name === 'AbortError'
       ) {
+        releaseRecoverableTransport()
         throw err
       }
 
@@ -605,6 +640,7 @@ export async function sendChatStream(
       if (getHttpStatus(err) === 429) {
         const quotaError = await classifyQuotaExhausted429(err)
         if (quotaError) {
+          releaseRecoverableTransport()
           throw quotaError
         }
       }
@@ -644,12 +680,14 @@ export async function sendChatStream(
         },
       })
 
+      releaseRecoverableTransport()
       throw toTerminalChatError(err)
     }
   }
 
   // Fallback: every branch above should already have thrown, but if the
   // retry loop exits without doing so we still need to surface an error.
+  releaseRecoverableTransport()
   throw toTerminalChatError(lastError, maxRetries)
 }
 
