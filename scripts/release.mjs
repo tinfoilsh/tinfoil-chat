@@ -120,6 +120,7 @@ function prepareRelease(requestedVersion) {
   run('node', ['scripts/check-release-settings.mjs', releaseTag])
   run('git', ['add', 'package.json', 'package-lock.json'])
   run('git', ['commit', '-m', `chore: prepare release ${releaseTag}`])
+  const releaseCommit = run('git', ['rev-parse', 'HEAD'], true)
   run('git', ['push', '-u', REMOTE, releaseBranch])
 
   const pullRequestUrl = run(
@@ -139,8 +140,27 @@ function prepareRelease(requestedVersion) {
     true,
   )
 
+  process.stdout.write(`Release PR created: ${pullRequestUrl}\n`)
+
+  try {
+    run('gh', [
+      'pr',
+      'merge',
+      pullRequestUrl,
+      '--squash',
+      '--delete-branch',
+      '--match-head-commit',
+      releaseCommit,
+    ])
+  } catch (error) {
+    process.stderr.write(
+      `Automatic merge failed. Run: gh pr merge ${pullRequestUrl} --squash --delete-branch --match-head-commit ${releaseCommit}\n`,
+    )
+    throw error
+  }
+
   process.stdout.write(
-    `Release PR created: ${pullRequestUrl}\nAfter it merges, run: git switch main && npm run release -- publish ${packageVersion}\n`,
+    `Release PR merged: ${pullRequestUrl}\nRun: git switch main && npm run release -- publish ${packageVersion}\n`,
   )
 }
 

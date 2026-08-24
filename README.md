@@ -99,14 +99,14 @@ For running the app against a local model router (bypassing attestation and encr
 Prepare a release from an up-to-date `main` branch:
 
 ```bash
-npm run release -- prepare 1.0.2
+npm run release -- prepare 1.0.3
 ```
 
-This updates `package.json` and `package-lock.json`, then opens a pull request. After the pull request merges, publish its matching tag:
+This updates `package.json` and `package-lock.json`, then opens and immediately squash-merges a pull request. Publish its matching tag:
 
 ```bash
 git switch main
-npm run release -- publish 1.0.2
+npm run release -- publish 1.0.3
 ```
 
 Pushing the tag starts the GitHub release workflow.
