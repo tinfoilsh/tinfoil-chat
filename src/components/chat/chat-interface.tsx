@@ -4072,6 +4072,7 @@ export function ChatInterface({
           setThemeMode={setThemeMode}
           isClient={isClient}
           defaultSystemPrompt={systemPrompt}
+          onOpenPromptLibrary={handleOpenPromptLibrary}
           onCloudSyncSetupClick={
             isSignedIn ? handleOpenCloudSyncSetup : undefined
           }
