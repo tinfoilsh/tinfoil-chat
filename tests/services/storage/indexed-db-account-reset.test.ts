@@ -29,29 +29,35 @@ describe('IndexedDBStorage account reset', () => {
     const clearSyncState = vi.fn(() => ({ onerror: null }))
     const clearRemoteState = vi.fn(() => ({ onerror: null }))
     const clearOutbox = vi.fn(() => ({ onerror: null }))
+    const clearMigrations = vi.fn(() => ({ onerror: null }))
+    const clearByStoreName = new Map([
+      ['chats', clear],
+      ['projects', clearProjects],
+      ['attachmentPayloads', clearPayloads],
+      ['chatSummaries', clearSummaries],
+      ['sync_state', clearSyncState],
+      ['remote_chat_state', clearRemoteState],
+      ['sync_outbox', clearOutbox],
+      ['migrations', clearMigrations],
+    ])
     const transaction: FakeResetTransaction = {
       oncomplete: null,
       onerror: null,
       onabort: null,
       abort: vi.fn(),
-      objectStore: (storeName) => ({
-        clear:
-          storeName === 'chats'
-            ? clear
-            : storeName === 'projects'
-              ? clearProjects
-              : storeName === 'attachmentPayloads'
-                ? clearPayloads
-                : storeName === 'chatSummaries'
-                  ? clearSummaries
-                  : storeName === 'sync_state'
-                    ? clearSyncState
-                    : storeName === 'remote_chat_state'
-                      ? clearRemoteState
-                      : clearOutbox,
-      }),
+      objectStore: (storeName) => ({ clear: clearByStoreName.get(storeName)! }),
     }
     const resetDb = {
+      objectStoreNames: [
+        'chats',
+        'projects',
+        'attachmentPayloads',
+        'chatSummaries',
+        'sync_state',
+        'remote_chat_state',
+        'sync_outbox',
+        'migrations',
+      ],
       transaction: vi.fn(() => transaction),
     }
     vi.spyOn(storage as any, 'ensureDB').mockResolvedValue(resetDb)
@@ -63,6 +69,7 @@ describe('IndexedDBStorage account reset', () => {
       clearSyncState,
       clearRemoteState,
       clearOutbox,
+      clearMigrations,
       transaction,
     }
   }
@@ -92,6 +99,7 @@ describe('IndexedDBStorage account reset', () => {
       clearSyncState,
       clearRemoteState,
       clearOutbox,
+      clearMigrations,
       transaction,
     } = prepareReset(storage)
     const close = vi.fn()
@@ -110,6 +118,7 @@ describe('IndexedDBStorage account reset', () => {
     expect(clearSyncState).toHaveBeenCalledTimes(1)
     expect(clearRemoteState).toHaveBeenCalledTimes(1)
     expect(clearOutbox).toHaveBeenCalledTimes(1)
+    expect(clearMigrations).not.toHaveBeenCalled()
     await completeReset(transaction)
     await reset
   })

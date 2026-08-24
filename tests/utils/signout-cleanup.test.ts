@@ -1,8 +1,10 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
+import { PINNED_CHAT_IDS_CHANGED_EVENT } from '@/constants/settings-events'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
   SETTINGS_HAS_SEEN_ONBOARDING,
+  USER_PREFS_PINNED_CHAT_IDS,
 } from '@/constants/storage-keys'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { resetEditClockCache } from '@/services/cloud/edit-clock'
@@ -78,6 +80,26 @@ vi.mock('@/utils/error-handling', () => ({
 }))
 
 describe('performSignoutCleanup', () => {
+  async function withPinnedChatChanges(
+    action: () => Promise<void>,
+    assertion: (handlePinnedChatsChanged: ReturnType<typeof vi.fn>) => void,
+  ): Promise<void> {
+    const handlePinnedChatsChanged = vi.fn()
+    window.addEventListener(
+      PINNED_CHAT_IDS_CHANGED_EVENT,
+      handlePinnedChatsChanged,
+    )
+    try {
+      await action()
+      assertion(handlePinnedChatsChanged)
+    } finally {
+      window.removeEventListener(
+        PINNED_CHAT_IDS_CHANGED_EVENT,
+        handlePinnedChatsChanged,
+      )
+    }
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
@@ -100,6 +122,22 @@ describe('performSignoutCleanup', () => {
     await performSignoutCleanup()
 
     expect(sessionStorage.getItem('session-data')).toBeNull()
+  })
+
+  it('clears pinned chats from storage and active UI state', async () => {
+    localStorage.setItem(USER_PREFS_PINNED_CHAT_IDS, '["chat-a"]')
+
+    await withPinnedChatChanges(performSignoutCleanup, (handle) => {
+      expect(localStorage.getItem(USER_PREFS_PINNED_CHAT_IDS)).toBeNull()
+      expect(handle).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('does not dispatch pinned-chat changes during an account switch', async () => {
+    await withPinnedChatChanges(
+      () => performUserSwitchCleanup('user_new'),
+      (handle) => expect(handle).not.toHaveBeenCalled(),
+    )
   })
 
   it('clears the encryption key and every user data cache', async () => {
@@ -154,7 +192,10 @@ describe('performSignoutCleanup', () => {
     )
     localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
 
-    await expect(performSignoutCleanup()).rejects.toThrow('reset failed')
+    await withPinnedChatChanges(
+      () => expect(performSignoutCleanup()).rejects.toThrow('reset failed'),
+      (handle) => expect(handle).toHaveBeenCalledTimes(1),
+    )
 
     expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_123')
   })
