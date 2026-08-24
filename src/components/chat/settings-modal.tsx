@@ -3004,7 +3004,6 @@ ${encryptionKey.replace('key_', '')}
               {/* Prompts Tab */}
               {activeTab === 'prompts' && (
                 <>
-                  {/* Default System Prompt */}
                   <div className="space-y-3">
                     <h3 className="font-aeonik text-sm font-medium text-content-secondary">
                       Default System Prompt
