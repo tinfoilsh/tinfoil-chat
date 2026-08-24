@@ -4,24 +4,54 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to release
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
-  release:
-    name: Create Release
+  validate:
+    name: Validate Release
     runs-on: ubuntu-latest
     steps:
+      - name: Check release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! "${RELEASE_TAG}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$ ]]; then
+            printf 'Invalid release tag: %s\n' "${RELEASE_TAG}" >&2
+            exit 1
+          fi
+
+          gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null
+
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
 
       - name: Check release settings
-        run: node scripts/check-release-settings.mjs "${GITHUB_REF_NAME}"
+        run: node scripts/check-release-settings.mjs "${RELEASE_TAG}"
 
+  release:
+    name: Create Release
+    needs: validate
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
       - name: Create Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
