@@ -1,7 +1,6 @@
 'use client'
 
 import type { AnimationItem } from 'lottie-web'
-import lottie from 'lottie-web'
 import { useEffect, useRef } from 'react'
 
 // Eagerly fetch the animation JSON so it's ready by the time the component mounts
@@ -33,8 +32,8 @@ function LogoAnimation({
 
     let unmounted = false
 
-    animationDataPromise
-      .then((animationData) => {
+    Promise.all([import('lottie-web'), animationDataPromise])
+      .then(([{ default: lottie }, animationData]) => {
         if (!animationData || unmounted) return
         const anim = lottie.loadAnimation({
           container,

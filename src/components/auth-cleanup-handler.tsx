@@ -2,11 +2,15 @@ import { SignoutConfirmationModal } from '@/components/modals/signout-confirmati
 import {
   ACCOUNT_RESET_FAILED_EVENT,
   AUTH_ACTIVE_USER_CHANGED_EVENT,
+  AUTH_SIGNOUT_CLEARED_EVENT,
+  AUTH_SIGNOUT_REQUESTED_EVENT,
 } from '@/constants/auth-events'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
+  AUTH_SIGNOUT_REQUESTED_AT,
 } from '@/constants/storage-keys'
+import { hasRecentExplicitSignoutIntent } from '@/utils/auth-signout-intent'
 import { logError, logInfo } from '@/utils/error-handling'
 import {
   deleteEncryptionKey,
@@ -37,6 +41,8 @@ export function AuthCleanupHandler() {
     retryStorage: boolean
   } | null>(null)
   const [cleanupRetrying, setCleanupRetrying] = useState(false)
+  const [hasExplicitSignoutIntent, setHasExplicitSignoutIntent] =
+    useState(false)
   const hasCheckedRef = useRef(false)
   const pendingSignoutCleanupRef = useRef<number | null>(null)
   const pendingUserSwitchCleanupRef = useRef<Promise<void> | null>(null)
@@ -53,6 +59,34 @@ export function AuthCleanupHandler() {
       userId: user?.id,
     }
   }, [isLoaded, isSignedIn, user?.id])
+
+  useEffect(() => {
+    const syncSignoutIntent = () => {
+      setHasExplicitSignoutIntent(hasRecentExplicitSignoutIntent())
+    }
+    const handleSignoutRequested = () => setHasExplicitSignoutIntent(true)
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === AUTH_SIGNOUT_REQUESTED_AT) {
+        syncSignoutIntent()
+      }
+    }
+
+    syncSignoutIntent()
+    window.addEventListener(
+      AUTH_SIGNOUT_REQUESTED_EVENT,
+      handleSignoutRequested,
+    )
+    window.addEventListener(AUTH_SIGNOUT_CLEARED_EVENT, syncSignoutIntent)
+    window.addEventListener('storage', handleStorage)
+    return () => {
+      window.removeEventListener(
+        AUTH_SIGNOUT_REQUESTED_EVENT,
+        handleSignoutRequested,
+      )
+      window.removeEventListener(AUTH_SIGNOUT_CLEARED_EVENT, syncSignoutIntent)
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [])
 
   useEffect(() => {
     const handleCrossTabResetFailure = () => {
@@ -180,9 +214,14 @@ export function AuthCleanupHandler() {
       window.dispatchEvent(new Event(AUTH_ACTIVE_USER_CHANGED_EVENT))
     }
 
-    // Check if user just signed out (stored user ID exists but no longer signed in)
+    // Confirm an explicit sign-out completed before clearing local account data.
     const storedUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
-    if (!isSignedIn && storedUserId && !hasCheckedRef.current) {
+    if (
+      !isSignedIn &&
+      storedUserId &&
+      hasExplicitSignoutIntent &&
+      !hasCheckedRef.current
+    ) {
       if (pendingSignoutCleanupRef.current === null) {
         pendingSignoutCleanupRef.current = window.setTimeout(() => {
           pendingSignoutCleanupRef.current = null
@@ -220,6 +259,7 @@ export function AuthCleanupHandler() {
     user?.id,
     clearPendingSignoutCleanup,
     cleanupError,
+    hasExplicitSignoutIntent,
     runSignoutCleanup,
   ])
 

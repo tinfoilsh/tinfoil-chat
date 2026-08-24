@@ -9,11 +9,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const { createMock } = vi.hoisted(() => ({ createMock: vi.fn() }))
 
 vi.mock('@/services/inference/tinfoil-client', () => ({
+  acquireRecoverableTinfoilTransport: vi.fn(),
   getTinfoilClient: vi.fn(async () => ({
     chat: { completions: { create: createMock } },
   })),
   createRecoverableTinfoilClient: vi.fn(),
-  createRecoverableTinfoilTransport: vi.fn(),
   discardRateLimitSnapshot: vi.fn(),
   getRateLimitInfo: vi.fn(),
   refreshRateLimit: vi.fn(),

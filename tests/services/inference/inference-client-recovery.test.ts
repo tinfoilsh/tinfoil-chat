@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const createCompletion = vi.fn()
 const createRecoverableTransport = vi.fn()
+const releaseRecoverableTransport = vi.fn()
 const createRecoverableClient = vi.fn()
 const resetTinfoilClient = vi.fn()
 
@@ -22,7 +23,10 @@ vi.mock('@/components/chat/constants', async () => {
 })
 
 vi.mock('@/services/inference/tinfoil-client', () => ({
-  createRecoverableTinfoilTransport: () => createRecoverableTransport(),
+  acquireRecoverableTinfoilTransport: async () => ({
+    transport: await createRecoverableTransport(),
+    release: releaseRecoverableTransport,
+  }),
   createRecoverableTinfoilClient: (...args: unknown[]) =>
     createRecoverableClient(...args),
   discardRateLimitSnapshot: vi.fn(),
@@ -108,8 +112,14 @@ describe('recoverable inference retries', () => {
     const stream = await send(recovery).promise
     expect(typeof stream[Symbol.asyncIterator]).toBe('function')
     await expect(stream.recoveryReady).resolves.toBeUndefined()
+    const chunks = []
+    for await (const chunk of stream) {
+      chunks.push(chunk)
+    }
+    expect(chunks).toHaveLength(1)
 
     expect(createRecoverableTransport).toHaveBeenCalledOnce()
+    expect(releaseRecoverableTransport).toHaveBeenCalledOnce()
     expect(createRecoverableClient).toHaveBeenCalledTimes(2)
     expect(createCompletion).toHaveBeenCalledTimes(2)
   })
@@ -128,9 +138,15 @@ describe('recoverable inference retries', () => {
 
     const stream = await send().promise
     expect(typeof stream[Symbol.asyncIterator]).toBe('function')
+    const chunks = []
+    for await (const chunk of stream) {
+      chunks.push(chunk)
+    }
+    expect(chunks).toHaveLength(1)
 
     expect(resetTinfoilClient).toHaveBeenCalledOnce()
     expect(createRecoverableTransport).toHaveBeenCalledOnce()
+    expect(releaseRecoverableTransport).toHaveBeenCalledOnce()
     expect(createRecoverableClient).toHaveBeenCalledTimes(2)
   })
 
@@ -189,5 +205,27 @@ describe('recoverable inference retries', () => {
 
     await expect(stream.recoveryReady).rejects.toBe(captureError)
     expect(recovery.onAttemptAbandoned).toHaveBeenCalledOnce()
+  })
+
+  it('releases the transport after an aborted request', async () => {
+    createCompletion.mockRejectedValueOnce(
+      new DOMException('Aborted', 'AbortError'),
+    )
+
+    await expect(send().promise).rejects.toMatchObject({ name: 'AbortError' })
+
+    expect(releaseRecoverableTransport).toHaveBeenCalledOnce()
+  })
+
+  it('releases the transport after a terminal request error', async () => {
+    createCompletion.mockRejectedValueOnce(
+      Object.assign(new Error('invalid request'), { status: 400 }),
+    )
+
+    await expect(send().promise).rejects.toMatchObject({
+      code: 'SERVER_ERROR',
+    })
+
+    expect(releaseRecoverableTransport).toHaveBeenCalledOnce()
   })
 })

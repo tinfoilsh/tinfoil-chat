@@ -3,6 +3,11 @@ import { API_BASE_URL, DEV_API_KEY, IS_DEV } from '@/config'
 import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
 import { logError } from '@/utils/error-handling'
 import {
+  PERFORMANCE_METRICS,
+  recordPerformanceDuration,
+  startPerformanceTimer,
+} from '@/utils/performance-metrics'
+import {
   TINFOIL_EVENTS_HEADER,
   TINFOIL_EVENTS_VALUE_CODE_EXECUTION,
   TINFOIL_EVENTS_VALUE_WEB_SEARCH,
@@ -44,6 +49,9 @@ let refreshInFlight: Promise<void> | null = null
 let sessionCacheGeneration = 0
 let initializationInFlight: InitializationTask | null = null
 let cachedVerificationDocument: VerificationDocument | null = null
+const MAX_IDLE_RECOVERABLE_TRANSPORTS = 1
+let idleRecoverableTransports: RecoverableTinfoilTransport[] = []
+let recoverableTransportPoolGeneration = 0
 
 class SessionCacheInvalidatedError extends Error {}
 
@@ -344,15 +352,23 @@ async function fetchSessionTokenForGeneration(
 }
 
 async function fetchSessionToken(signal?: AbortSignal): Promise<string> {
-  while (true) {
-    try {
-      return await fetchSessionTokenForGeneration(
-        sessionCacheGeneration,
-        signal,
-      )
-    } catch (error) {
-      if (!(error instanceof SessionCacheInvalidatedError)) throw error
+  const startedAt = startPerformanceTimer()
+  try {
+    while (true) {
+      try {
+        return await fetchSessionTokenForGeneration(
+          sessionCacheGeneration,
+          signal,
+        )
+      } catch (error) {
+        if (!(error instanceof SessionCacheInvalidatedError)) throw error
+      }
     }
+  } finally {
+    recordPerformanceDuration(
+      PERFORMANCE_METRICS.INFERENCE_SESSION_TOKEN,
+      startedAt,
+    )
   }
 }
 
@@ -453,6 +469,8 @@ export function resetTinfoilClient(): void {
   remainingBeforeRequest = null
   refreshInFlight = null
   cachedVerificationDocument = null
+  idleRecoverableTransports = []
+  recoverableTransportPoolGeneration++
 }
 
 export function invalidateSessionCache(): void {
@@ -490,7 +508,12 @@ async function initClient(
     }
 
     const candidateSecureClient = new SecureClient({})
+    const attestationStartedAt = startPerformanceTimer()
     await waitForSignal(candidateSecureClient.ready(), signal)
+    recordPerformanceDuration(
+      PERFORMANCE_METRICS.INFERENCE_ATTESTATION,
+      attestationStartedAt,
+    )
     return {
       secureClient: candidateSecureClient,
       client: new OpenAI({
@@ -544,6 +567,11 @@ export interface RecoverableTinfoilTransport {
   baseURL: string
 }
 
+export interface RecoverableTinfoilTransportLease {
+  transport: RecoverableTinfoilTransport
+  release: () => void
+}
+
 export function isChatRecoveryAvailable(): boolean {
   return !IS_DEV
 }
@@ -568,8 +596,35 @@ export async function createRecoverableTinfoilTransport(): Promise<RecoverableTi
   }
   const baseURL = new URL('/v1/', controlplaneBaseURL()).toString()
   const dedicatedSecureClient = new SecureClient({ baseURL })
+  const attestationStartedAt = startPerformanceTimer()
   await dedicatedSecureClient.ready()
+  recordPerformanceDuration(
+    PERFORMANCE_METRICS.INFERENCE_ATTESTATION,
+    attestationStartedAt,
+  )
   return { secureClient: dedicatedSecureClient, baseURL }
+}
+
+export async function acquireRecoverableTinfoilTransport(): Promise<RecoverableTinfoilTransportLease> {
+  const generation = recoverableTransportPoolGeneration
+  const transport =
+    idleRecoverableTransports.pop() ??
+    (await createRecoverableTinfoilTransport())
+  let released = false
+
+  return {
+    transport,
+    release: () => {
+      if (released) return
+      released = true
+      if (
+        generation === recoverableTransportPoolGeneration &&
+        idleRecoverableTransports.length < MAX_IDLE_RECOVERABLE_TRANSPORTS
+      ) {
+        idleRecoverableTransports.push(transport)
+      }
+    },
+  }
 }
 
 export async function createRecoverableTinfoilClient(

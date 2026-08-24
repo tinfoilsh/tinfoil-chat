@@ -21,7 +21,7 @@ vi.mock('@/components/chat/constants', async () => {
 })
 
 vi.mock('@/services/inference/tinfoil-client', () => ({
-  createRecoverableTinfoilTransport: vi.fn(),
+  acquireRecoverableTinfoilTransport: vi.fn(),
   createRecoverableTinfoilClient: vi.fn(),
   discardRateLimitSnapshot: () => discardRateLimitSnapshot(),
   getRateLimitInfo: () => getRateLimitInfo(),

@@ -34,10 +34,23 @@ const auth = vi.hoisted(() => {
     query: {} as Record<string, string | undefined>,
   }
 
-  return { clerkLoaded: true, signIn, signUp, router, routerPush: vi.fn() }
+  return {
+    clerkLoaded: true,
+    isAuthLoaded: true,
+    isSignedIn: false,
+    signIn,
+    signUp,
+    router,
+    routerPush: vi.fn(),
+    routerReplace: vi.fn(),
+  }
 })
 
 vi.mock('@clerk/nextjs', () => ({
+  useAuth: () => ({
+    isLoaded: auth.isAuthLoaded,
+    isSignedIn: auth.isSignedIn,
+  }),
   useClerk: () => ({ loaded: auth.clerkLoaded }),
   useSignIn: () => ({
     signIn: auth.signIn,
@@ -52,13 +65,19 @@ vi.mock('@clerk/nextjs', () => ({
 }))
 
 vi.mock('next/router', () => ({
-  useRouter: () => ({ push: auth.routerPush, ...auth.router }),
+  useRouter: () => ({
+    push: auth.routerPush,
+    replace: auth.routerReplace,
+    ...auth.router,
+  }),
 }))
 
 describe('SignInPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     auth.clerkLoaded = true
+    auth.isAuthLoaded = true
+    auth.isSignedIn = false
     auth.router.isReady = true
     auth.router.query = {}
     auth.signIn.id = undefined
@@ -107,6 +126,17 @@ describe('SignInPage', () => {
       'text-balance',
       'text-center',
     )
+  })
+
+  it('redirects an already signed-in user to the requested page', async () => {
+    auth.isSignedIn = true
+    auth.router.query = { redirect_url: '/project/example' }
+
+    render(<SignInPage />)
+
+    await waitFor(() => {
+      expect(auth.routerReplace).toHaveBeenCalledWith('/project/example')
+    })
   })
 
   it('clears an abandoned sign-in attempt on a fresh landing', async () => {
