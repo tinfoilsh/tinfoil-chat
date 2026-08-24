@@ -179,15 +179,18 @@ export async function performSignoutCleanup(opts?: {
       },
     )
 
-    await clearAllUserData({
-      context: 'signoutCleanup',
-      preserveEncryptionKey: preserveKey,
-    })
-    window.dispatchEvent(
-      new CustomEvent(PINNED_CHAT_IDS_CHANGED_EVENT, {
-        detail: { pinnedChatIds: [] },
-      }),
-    )
+    try {
+      await clearAllUserData({
+        context: 'signoutCleanup',
+        preserveEncryptionKey: preserveKey,
+      })
+    } finally {
+      window.dispatchEvent(
+        new CustomEvent(PINNED_CHAT_IDS_CHANGED_EVENT, {
+          detail: { pinnedChatIds: [] },
+        }),
+      )
+    }
 
     logInfo(
       `Signout cleanup completed${preserveKey ? ' (encryption key preserved)' : ''}`,

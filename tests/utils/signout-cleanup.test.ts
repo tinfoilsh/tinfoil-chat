@@ -80,6 +80,26 @@ vi.mock('@/utils/error-handling', () => ({
 }))
 
 describe('performSignoutCleanup', () => {
+  async function withPinnedChatChanges(
+    action: () => Promise<void>,
+    assertion: (handlePinnedChatsChanged: ReturnType<typeof vi.fn>) => void,
+  ): Promise<void> {
+    const handlePinnedChatsChanged = vi.fn()
+    window.addEventListener(
+      PINNED_CHAT_IDS_CHANGED_EVENT,
+      handlePinnedChatsChanged,
+    )
+    try {
+      await action()
+      assertion(handlePinnedChatsChanged)
+    } finally {
+      window.removeEventListener(
+        PINNED_CHAT_IDS_CHANGED_EVENT,
+        handlePinnedChatsChanged,
+      )
+    }
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
@@ -106,42 +126,18 @@ describe('performSignoutCleanup', () => {
 
   it('clears pinned chats from storage and active UI state', async () => {
     localStorage.setItem(USER_PREFS_PINNED_CHAT_IDS, '["chat-a"]')
-    const handlePinnedChatsChanged = vi.fn()
-    window.addEventListener(
-      PINNED_CHAT_IDS_CHANGED_EVENT,
-      handlePinnedChatsChanged,
-    )
 
-    try {
-      await performSignoutCleanup()
-
+    await withPinnedChatChanges(performSignoutCleanup, (handle) => {
       expect(localStorage.getItem(USER_PREFS_PINNED_CHAT_IDS)).toBeNull()
-      expect(handlePinnedChatsChanged).toHaveBeenCalledTimes(1)
-    } finally {
-      window.removeEventListener(
-        PINNED_CHAT_IDS_CHANGED_EVENT,
-        handlePinnedChatsChanged,
-      )
-    }
+      expect(handle).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('does not dispatch pinned-chat changes during an account switch', async () => {
-    const handlePinnedChatsChanged = vi.fn()
-    window.addEventListener(
-      PINNED_CHAT_IDS_CHANGED_EVENT,
-      handlePinnedChatsChanged,
+    await withPinnedChatChanges(
+      () => performUserSwitchCleanup('user_new'),
+      (handle) => expect(handle).not.toHaveBeenCalled(),
     )
-
-    try {
-      await performUserSwitchCleanup('user_new')
-
-      expect(handlePinnedChatsChanged).not.toHaveBeenCalled()
-    } finally {
-      window.removeEventListener(
-        PINNED_CHAT_IDS_CHANGED_EVENT,
-        handlePinnedChatsChanged,
-      )
-    }
   })
 
   it('clears the encryption key and every user data cache', async () => {
@@ -196,7 +192,10 @@ describe('performSignoutCleanup', () => {
     )
     localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
 
-    await expect(performSignoutCleanup()).rejects.toThrow('reset failed')
+    await withPinnedChatChanges(
+      () => expect(performSignoutCleanup()).rejects.toThrow('reset failed'),
+      (handle) => expect(handle).toHaveBeenCalledTimes(1),
+    )
 
     expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_123')
   })
