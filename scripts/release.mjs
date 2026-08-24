@@ -10,10 +10,12 @@ const VERSION_PATTERN =
   /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$/
 
 function run(command, args, captureOutput = false) {
-  return execFileSync(command, args, {
+  const output = execFileSync(command, args, {
     encoding: 'utf8',
     stdio: captureOutput ? ['ignore', 'pipe', 'pipe'] : 'inherit',
-  }).trim()
+  })
+
+  return captureOutput ? output.trim() : ''
 }
 
 function readPackageVersion() {
