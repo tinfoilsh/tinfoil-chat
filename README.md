@@ -96,20 +96,36 @@ For running the app against a local model router (bypassing attestation and encr
 
 ## Releases
 
-Prepare a release from an up-to-date `main` branch:
+Releases use a two-step local command so package versions are committed before the matching tag is created. Start with a clean `main` branch and an authenticated GitHub CLI (`gh auth status`).
 
-```bash
-npm run release -- prepare 1.0.2
-```
-
-This updates `package.json` and `package-lock.json`, then opens a pull request. After the pull request merges, publish its matching tag:
+### 1. Prepare the version
 
 ```bash
 git switch main
-npm run release -- publish 1.0.2
+npm run release -- prepare 1.0.3
 ```
 
-Pushing the tag starts the GitHub release workflow.
+The command:
+
+1. Updates `package.json` and `package-lock.json`.
+2. Creates and pushes a release branch.
+3. Opens a version pull request.
+4. Verifies the pull request head and immediately squash-merges it.
+
+The merge does not wait for CI checks. If it fails, the command prints the pull request URL and a manual recovery command.
+
+### 2. Publish the tag
+
+After preparation finishes, publish the same version:
+
+```bash
+git switch main
+npm run release -- publish 1.0.3
+```
+
+This updates local `main`, verifies the committed package version, creates one annotated tag, and pushes only that tag. The tag push starts the GitHub workflow that publishes the release and generated release notes.
+
+Do not use `git push --tags`; GitHub does not emit workflow events when more than three tags are pushed together. If a valid tag misses its release, run the **Create Release** workflow manually with that tag.
 
 ## Reporting Vulnerabilities
 
