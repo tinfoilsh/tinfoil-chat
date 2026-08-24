@@ -1,4 +1,5 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
+import { PINNED_CHAT_IDS_CHANGED_EVENT } from '@/constants/settings-events'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
@@ -118,6 +119,11 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
         localStorage.removeItem(key)
       }
     }
+    window.dispatchEvent(
+      new CustomEvent(PINNED_CHAT_IDS_CHANGED_EVENT, {
+        detail: { pinnedChatIds: [] },
+      }),
+    )
   } catch {
     // best-effort — don't let localStorage failures skip remaining cleanup
   }

@@ -29,6 +29,7 @@ describe('IndexedDBStorage account reset', () => {
     const clearSyncState = vi.fn(() => ({ onerror: null }))
     const clearRemoteState = vi.fn(() => ({ onerror: null }))
     const clearOutbox = vi.fn(() => ({ onerror: null }))
+    const clearMigrations = vi.fn(() => ({ onerror: null }))
     const transaction: FakeResetTransaction = {
       oncomplete: null,
       onerror: null,
@@ -48,10 +49,22 @@ describe('IndexedDBStorage account reset', () => {
                     ? clearSyncState
                     : storeName === 'remote_chat_state'
                       ? clearRemoteState
-                      : clearOutbox,
+                      : storeName === 'sync_outbox'
+                        ? clearOutbox
+                        : clearMigrations,
       }),
     }
     const resetDb = {
+      objectStoreNames: [
+        'chats',
+        'projects',
+        'attachmentPayloads',
+        'chatSummaries',
+        'sync_state',
+        'remote_chat_state',
+        'sync_outbox',
+        'migrations',
+      ],
       transaction: vi.fn(() => transaction),
     }
     vi.spyOn(storage as any, 'ensureDB').mockResolvedValue(resetDb)
@@ -63,6 +76,7 @@ describe('IndexedDBStorage account reset', () => {
       clearSyncState,
       clearRemoteState,
       clearOutbox,
+      clearMigrations,
       transaction,
     }
   }
@@ -92,6 +106,7 @@ describe('IndexedDBStorage account reset', () => {
       clearSyncState,
       clearRemoteState,
       clearOutbox,
+      clearMigrations,
       transaction,
     } = prepareReset(storage)
     const close = vi.fn()
@@ -110,6 +125,7 @@ describe('IndexedDBStorage account reset', () => {
     expect(clearSyncState).toHaveBeenCalledTimes(1)
     expect(clearRemoteState).toHaveBeenCalledTimes(1)
     expect(clearOutbox).toHaveBeenCalledTimes(1)
+    expect(clearMigrations).toHaveBeenCalledTimes(1)
     await completeReset(transaction)
     await reset
   })

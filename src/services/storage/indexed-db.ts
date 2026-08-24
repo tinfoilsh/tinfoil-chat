@@ -1150,81 +1150,46 @@ export class IndexedDBStorage {
     this.db = null
     db?.close()
 
-    const reset = this.ensureDB().then(
-      (resetDb) =>
-        new Promise<void>((resolve, reject) => {
-          const transaction = resetDb.transaction(
-            [
-              CHATS_STORE,
-              PROJECTS_STORE,
-              ATTACHMENT_PAYLOADS_STORE,
-              CHAT_SUMMARIES_STORE,
-              SYNC_STATE_STORE,
-              REMOTE_CHAT_STATE_STORE,
-              SYNC_OUTBOX_STORE,
-            ],
-            'readwrite',
-          )
-          const timeout = window.setTimeout(() => {
-            try {
-              transaction.abort()
-            } finally {
-              reject(
-                new Error('Timed out resetting IndexedDB for account change'),
-              )
-            }
-          }, ACCOUNT_CHANGE_RESET_TIMEOUT_MS)
+    const reset = this.ensureDB().then((resetDb) => {
+      const storeNames = Array.from(resetDb.objectStoreNames)
+      return new Promise<void>((resolve, reject) => {
+        const transaction = resetDb.transaction(storeNames, 'readwrite')
+        const timeout = window.setTimeout(() => {
+          try {
+            transaction.abort()
+          } finally {
+            reject(
+              new Error('Timed out resetting IndexedDB for account change'),
+            )
+          }
+        }, ACCOUNT_CHANGE_RESET_TIMEOUT_MS)
 
-          transaction.oncomplete = () => {
-            clearTimeout(timeout)
-            resolve()
-          }
-          transaction.onerror = () => {
-            clearTimeout(timeout)
-            reject(new Error('Failed to reset IndexedDB for account change'))
-          }
-          transaction.onabort = () => {
-            clearTimeout(timeout)
-            reject(new Error('IndexedDB account reset was aborted'))
-          }
+        transaction.oncomplete = () => {
+          clearTimeout(timeout)
+          resolve()
+        }
+        transaction.onerror = () => {
+          clearTimeout(timeout)
+          reject(new Error('Failed to reset IndexedDB for account change'))
+        }
+        transaction.onabort = () => {
+          clearTimeout(timeout)
+          reject(new Error('IndexedDB account reset was aborted'))
+        }
 
-          const chatsRequest = transaction.objectStore(CHATS_STORE).clear()
-          chatsRequest.onerror = () => {
-            clearTimeout(timeout)
-            reject(new Error('Failed to clear chats for account change'))
-          }
-          const projectsRequest = transaction
-            .objectStore(PROJECTS_STORE)
-            .clear()
-          projectsRequest.onerror = () => {
-            clearTimeout(timeout)
-            reject(new Error('Failed to clear projects for account change'))
-          }
-          const payloadsRequest = transaction
-            .objectStore(ATTACHMENT_PAYLOADS_STORE)
-            .clear()
-          payloadsRequest.onerror = () => {
+        for (const storeName of storeNames) {
+          const clearRequest = transaction.objectStore(storeName).clear()
+          clearRequest.onerror = () => {
             clearTimeout(timeout)
             reject(
               new Error(
-                'Failed to clear attachment payloads for account change',
+                `Failed to clear IndexedDB store ${storeName} for account change`,
               ),
             )
           }
-          const summariesRequest = transaction
-            .objectStore(CHAT_SUMMARIES_STORE)
-            .clear()
-          summariesRequest.onerror = () => {
-            clearTimeout(timeout)
-            reject(
-              new Error('Failed to clear chat summaries for account change'),
-            )
-          }
-          transaction.objectStore(SYNC_STATE_STORE).clear()
-          transaction.objectStore(REMOTE_CHAT_STATE_STORE).clear()
-          transaction.objectStore(SYNC_OUTBOX_STORE).clear()
-        }),
-    )
+        }
+      })
+    })
 
     const trackedReset = reset
     this.accountResetPromise = trackedReset

@@ -1,8 +1,10 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
+import { PINNED_CHAT_IDS_CHANGED_EVENT } from '@/constants/settings-events'
 import {
   AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
   SETTINGS_HAS_SEEN_ONBOARDING,
+  USER_PREFS_PINNED_CHAT_IDS,
 } from '@/constants/storage-keys'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { resetEditClockCache } from '@/services/cloud/edit-clock'
@@ -100,6 +102,24 @@ describe('performSignoutCleanup', () => {
     await performSignoutCleanup()
 
     expect(sessionStorage.getItem('session-data')).toBeNull()
+  })
+
+  it('clears pinned chats from storage and active UI state', async () => {
+    localStorage.setItem(USER_PREFS_PINNED_CHAT_IDS, '["chat-a"]')
+    const handlePinnedChatsChanged = vi.fn()
+    window.addEventListener(
+      PINNED_CHAT_IDS_CHANGED_EVENT,
+      handlePinnedChatsChanged,
+    )
+
+    await performSignoutCleanup()
+
+    expect(localStorage.getItem(USER_PREFS_PINNED_CHAT_IDS)).toBeNull()
+    expect(handlePinnedChatsChanged).toHaveBeenCalledTimes(1)
+    window.removeEventListener(
+      PINNED_CHAT_IDS_CHANGED_EVENT,
+      handlePinnedChatsChanged,
+    )
   })
 
   it('clears the encryption key and every user data cache', async () => {
