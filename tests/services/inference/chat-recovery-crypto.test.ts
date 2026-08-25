@@ -4,7 +4,6 @@ import {
   encryptRecoveryEnvelope,
   rewrapRecoveryEnvelope,
   validateRecoveryEnvelope,
-  type RecoveryTokenFields,
 } from '@/services/inference/chat-recovery-crypto'
 import { uint8ArrayToBase64 } from '@/utils/binary-codec'
 import { describe, expect, it } from 'vitest'
@@ -12,11 +11,10 @@ import { describe, expect, it } from 'vitest'
 const USER_ID = 'user_123'
 const CHAT_ID = 'chat_123'
 const TURN_ID = 'turn_123'
-const SESSION_ID = '0123456789abcdef0123456789abcdef'
 const NOW = Date.parse('2026-07-20T12:00:00.000Z')
-const TOKEN: RecoveryTokenFields = {
-  exportedSecret: 'a'.repeat(64),
-  requestEnc: 'b'.repeat(64),
+const STORAGE = {
+  storageId: '0123456789abcdef0123456789abcdef',
+  resumeSecret: 'fedcba9876543210fedcba9876543210',
 }
 
 function cek(fill: number): Uint8Array {
@@ -29,8 +27,7 @@ async function envelope() {
     userId: USER_ID,
     chatId: CHAT_ID,
     turnId: TURN_ID,
-    sessionId: SESSION_ID,
-    recoveryToken: TOKEN,
+    storage: STORAGE,
     now: NOW,
   })
 }
@@ -47,33 +44,7 @@ describe('chat recovery envelope crypto', () => {
         envelope: encrypted,
         now: NOW,
       }),
-    ).resolves.toEqual({
-      sessionId: SESSION_ID,
-      recoveryToken: TOKEN,
-    })
-  })
-
-  it('round-trips an SDK-serialized recovery token', async () => {
-    const recoveryToken = JSON.stringify(TOKEN)
-    const encrypted = await encryptRecoveryEnvelope({
-      cek: cek(1),
-      userId: USER_ID,
-      chatId: CHAT_ID,
-      turnId: TURN_ID,
-      sessionId: SESSION_ID,
-      recoveryToken,
-      now: NOW,
-    })
-
-    await expect(
-      decryptRecoveryEnvelope({
-        cek: cek(1),
-        userId: USER_ID,
-        chatId: CHAT_ID,
-        envelope: encrypted,
-        now: NOW,
-      }),
-    ).resolves.toEqual({ sessionId: SESSION_ID, recoveryToken })
+    ).resolves.toEqual(STORAGE)
   })
 
   it('rejects the wrong CEK and AAD', async () => {
@@ -151,22 +122,23 @@ describe('chat recovery envelope crypto', () => {
         userId: USER_ID,
         chatId: CHAT_ID,
         turnId: TURN_ID,
-        sessionId: SESSION_ID.toUpperCase(),
-        recoveryToken: TOKEN,
+        storage: {
+          ...STORAGE,
+          storageId: STORAGE.storageId.toUpperCase(),
+        },
         now: NOW,
       }),
-    ).rejects.toThrow('sessionId')
+    ).rejects.toThrow('storageId')
     await expect(
       encryptRecoveryEnvelope({
         cek: cek(1),
         userId: USER_ID,
         chatId: CHAT_ID,
         turnId: TURN_ID,
-        sessionId: SESSION_ID,
-        recoveryToken: { ...TOKEN, requestEnc: 'ab' },
+        storage: { ...STORAGE, resumeSecret: 'ab' },
         now: NOW,
       }),
-    ).rejects.toThrow('requestEnc')
+    ).rejects.toThrow('resumeSecret')
   })
 
   it('rewraps under a new CEK without changing recovery metadata', async () => {
@@ -191,10 +163,7 @@ describe('chat recovery envelope crypto', () => {
         envelope: rewrapped,
         now: NOW,
       }),
-    ).resolves.toEqual({
-      sessionId: SESSION_ID,
-      recoveryToken: TOKEN,
-    })
+    ).resolves.toEqual(STORAGE)
   })
 
   it('validates turn IDs and pending recoveries in remote chat plaintext', async () => {

@@ -3,9 +3,9 @@ import { parseRichStreamingResponse } from '@/components/chat/hooks/streaming/ri
 import type { StreamingContext } from '@/components/chat/hooks/streaming/types'
 import type { Message } from '@/components/chat/types'
 import type {
-  ChatChunk,
-  ChatChunkStream,
-} from '@/services/inference/chat-stream'
+  AguiEvent,
+  AguiEventStream,
+} from '@/services/inference/agui/protocol'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { endStreamingMock, startStreamingMock } = vi.hoisted(() => ({
@@ -20,20 +20,20 @@ vi.mock('@/services/cloud/streaming-tracker', () => ({
   },
 }))
 
-function createStream(): ChatChunkStream {
+function createStream(): AguiEventStream {
   return (async function* () {
-    const events: ChatChunk[] = [
-      { choices: [{ delta: { content: 'Hello' } }] },
-      { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+    const events: AguiEvent[] = [
+      { type: 'TEXT_MESSAGE_CHUNK', messageId: 'm', delta: 'Hello' },
+      { type: 'RUN_FINISHED' },
     ]
     yield* events
   })()
 }
 
-function createReasoningStream(): ChatChunkStream {
+function createReasoningStream(): AguiEventStream {
   return (async function* () {
-    yield { choices: [{ delta: { reasoning_content: 'Thinking' } }] }
-    yield { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }
+    yield { type: 'REASONING_MESSAGE_CHUNK', messageId: 'm', delta: 'Thinking' }
+    yield { type: 'RUN_FINISHED' }
   })()
 }
 
@@ -50,7 +50,7 @@ function createContext(overrides: Partial<StreamingContext> = {}) {
 }
 
 function createOpenStream() {
-  const chunks: ChatChunk[] = []
+  const chunks: AguiEvent[] = []
   let resume: (() => void) | undefined
   let closed = false
   const stream = (async function* () {
@@ -61,7 +61,7 @@ function createOpenStream() {
         })
         continue
       }
-      yield chunks.shift() as ChatChunk
+      yield chunks.shift() as AguiEvent
     }
   })()
   return {
@@ -70,7 +70,7 @@ function createOpenStream() {
       closed = true
       resume?.()
     },
-    send: (...events: ChatChunk[]) => {
+    send: (...events: AguiEvent[]) => {
       chunks.push(...events)
       resume?.()
       resume = undefined
@@ -105,12 +105,15 @@ describe('processStreamingResponse lifecycle', () => {
   })
 
   it('stores the routed model display name in the response', async () => {
-    const stream = (async function* (): ChatChunkStream {
+    const stream = (async function* (): AguiEventStream {
       yield {
-        model: 'kimi-k2-6',
-        choices: [{ delta: { content: 'Hello' } }],
+        type: 'RUN_STARTED',
+        threadId: 't',
+        runId: 'r',
+        metadata: { model: 'kimi-k2-6' },
       }
-      yield { choices: [{ delta: {}, finish_reason: 'stop' }] }
+      yield { type: 'TEXT_MESSAGE_CHUNK', messageId: 'm', delta: 'Hello' }
+      yield { type: 'RUN_FINISHED' }
     })()
 
     const message = await processStreamingResponse(
@@ -126,9 +129,14 @@ describe('processStreamingResponse lifecycle', () => {
   })
 
   it('does not publish a model-only assistant snapshot', async () => {
-    const stream = (async function* (): ChatChunkStream {
-      yield { model: 'kimi-k2-6', choices: [{ delta: { role: 'assistant' } }] }
-      yield { choices: [{ delta: {}, finish_reason: 'stop' }] }
+    const stream = (async function* (): AguiEventStream {
+      yield {
+        type: 'RUN_STARTED',
+        threadId: 't',
+        runId: 'r',
+        metadata: { model: 'kimi-k2-6' },
+      }
+      yield { type: 'RUN_FINISHED' }
     })()
     const context = createContext({
       modelDisplayName: 'Kimi K2.6',
@@ -168,8 +176,8 @@ describe('processStreamingResponse interruption', () => {
     const processing = processStreamingResponse(stream.stream, context)
 
     stream.send(
-      { choices: [{ delta: { content: 'Hello world' } }] },
-      { choices: [{ delta: { content: ' before stopping' } }] },
+      { type: 'TEXT_MESSAGE_CHUNK', messageId: 'm', delta: 'Hello world' },
+      { type: 'TEXT_MESSAGE_CHUNK', messageId: 'm', delta: ' before stopping' },
     )
     await vi.waitFor(() => expect(context.onUpdate).toHaveBeenCalled())
 
@@ -201,7 +209,9 @@ describe('processStreamingResponse interruption', () => {
     const processing = processStreamingResponse(stream.stream, context)
 
     stream.send({
-      choices: [{ delta: { reasoning_content: 'Keep this reasoning' } }],
+      type: 'REASONING_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: 'Keep this reasoning',
     })
     await vi.waitFor(() => expect(context.onUpdate).toHaveBeenCalled())
 
@@ -236,12 +246,14 @@ describe('processStreamingResponse interruption', () => {
     const processing = processStreamingResponse(stream.stream, context)
 
     stream.send(
-      { choices: [{ delta: { content: 'Hi' } }] },
+      { type: 'TEXT_MESSAGE_CHUNK', messageId: 'm', delta: 'Hi' },
+      { type: 'TOOL_CALL_START', toolCallId: 'c1', toolCallName: 'web_search' },
       {
-        type: 'web_search_call',
-        status: 'in_progress',
-        action: { query: 'test query' },
+        type: 'TOOL_CALL_ARGS',
+        toolCallId: 'c1',
+        delta: '{"query":"test query"}',
       },
+      { type: 'TOOL_CALL_END', toolCallId: 'c1' },
     )
     await vi.waitFor(() =>
       expect(context.setIsWaitingForResponse).toHaveBeenCalledWith(false),
@@ -324,10 +336,10 @@ describe('processStreamingResponse frame publication', () => {
       }),
     )
 
-    stream.send({ choices: [{ delta: { content: 'Hi' } }] })
+    stream.send({ type: 'TEXT_MESSAGE_CHUNK', messageId: 'm', delta: 'Hi' })
 
     await vi.waitFor(() => expect(updates).toEqual(['Hi']))
-    stream.send({ choices: [{ delta: {}, finish_reason: 'stop' }] })
+    stream.send({ type: 'RUN_FINISHED' })
     stream.close()
     await vi.waitFor(() => expect(frames.size).toBe(1))
     runFrames()
@@ -340,11 +352,11 @@ describe('processStreamingResponse frame publication', () => {
       onUpdate: (message) => updates.push(message.thoughts ?? ''),
     })
     const processing = processStreamingResponse(
-      (async function* (): AsyncGenerator<ChatChunk> {
-        yield { choices: [{ delta: { reasoning_content: 'A' } }] }
-        yield { choices: [{ delta: { reasoning_content: 'B' } }] }
-        yield { choices: [{ delta: { reasoning_content: 'C' } }] }
-        yield { choices: [{ delta: {}, finish_reason: 'stop' }] }
+      (async function* (): AsyncGenerator<AguiEvent> {
+        yield { type: 'REASONING_MESSAGE_CHUNK', messageId: 'm', delta: 'A' }
+        yield { type: 'REASONING_MESSAGE_CHUNK', messageId: 'm', delta: 'B' }
+        yield { type: 'REASONING_MESSAGE_CHUNK', messageId: 'm', delta: 'C' }
+        yield { type: 'RUN_FINISHED' }
       })(),
       context,
     )
@@ -428,8 +440,8 @@ describe('processStreamingResponse frame publication', () => {
     const processing = processStreamingResponse(stream.stream, context)
 
     stream.send(
-      { choices: [{ delta: { reasoning_content: 'A' } }] },
-      { choices: [{ delta: { reasoning_content: 'B' } }] },
+      { type: 'REASONING_MESSAGE_CHUNK', messageId: 'm', delta: 'A' },
+      { type: 'REASONING_MESSAGE_CHUNK', messageId: 'm', delta: 'B' },
     )
     await vi.waitFor(() => expect(frames.size).toBe(1))
     controller.abort()
@@ -476,8 +488,8 @@ describe('processStreamingResponse frame publication', () => {
     )
 
     stream.send(
-      { choices: [{ delta: { reasoning_content: 'A' } }] },
-      { choices: [{ delta: { reasoning_content: 'B' } }] },
+      { type: 'REASONING_MESSAGE_CHUNK', messageId: 'm', delta: 'A' },
+      { type: 'REASONING_MESSAGE_CHUNK', messageId: 'm', delta: 'B' },
     )
     await vi.waitFor(() => expect(frames.size).toBe(1))
     runFrames()
@@ -490,25 +502,23 @@ describe('processStreamingResponse frame publication', () => {
   })
 
   it('matches the rich parser for shared event assembly', async () => {
-    const events: ChatChunk[] = [
-      { choices: [{ delta: { reasoning_content: 'Reasoning' } }] },
+    const events: AguiEvent[] = [
+      { type: 'REASONING_MESSAGE_CHUNK', messageId: 'm', delta: 'Reasoning' },
+      { type: 'TOOL_CALL_START', toolCallId: 'c1', toolCallName: 'web_search' },
+      { type: 'TOOL_CALL_ARGS', toolCallId: 'c1', delta: '{"query":"query"}' },
+      { type: 'TOOL_CALL_END', toolCallId: 'c1' },
       {
-        type: 'web_search_call',
-        id: 'search-1',
-        status: 'in_progress',
-        action: { query: 'query' },
+        type: 'TOOL_CALL_RESULT',
+        toolCallId: 'c1',
+        content: JSON.stringify({
+          results: [{ title: 'Source', url: 'https://example.com' }],
+        }),
       },
-      {
-        type: 'web_search_call',
-        id: 'search-1',
-        status: 'completed',
-        sources: [{ title: 'Source', url: 'https://example.com' }],
-      },
-      { choices: [{ delta: { content: 'Answer' } }] },
-      { choices: [{ delta: {}, finish_reason: 'stop' }] },
+      { type: 'TEXT_MESSAGE_CHUNK', messageId: 'm', delta: 'Answer' },
+      { type: 'RUN_FINISHED' },
     ]
     const makeStream = () =>
-      (async function* (): AsyncGenerator<ChatChunk> {
+      (async function* (): AsyncGenerator<AguiEvent> {
         yield* events
       })()
     const processing = processStreamingResponse(makeStream(), createContext())

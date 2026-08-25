@@ -1499,9 +1499,9 @@ export function ChatInterface({
     let active = true
     const initTinfoil = async () => {
       try {
-        const { getVerificationDocument } =
-          await import('@/services/inference/tinfoil-client')
-        const doc = await getVerificationDocument()
+        const { getHarnessVerificationDocument } =
+          await import('@/services/inference/agui/client')
+        const doc = await getHarnessVerificationDocument()
         if (active && doc) {
           setVerificationDocument(doc)
           setVerificationStatus(

@@ -176,6 +176,7 @@ export function useSidebarChat({
         ? [hiddenContextMessage, visibleUserMessage]
         : [visibleUserMessage]
 
+      const askThreadId = crypto.randomUUID()
       const controller = new AbortController()
       abortControllerRef.current = controller
       setLoadingState('loading')
@@ -200,6 +201,8 @@ export function useSidebarChat({
             thinkingEnabled,
             webSearchEnabled,
             piiCheckEnabled,
+            threadId: askThreadId,
+            runId: crypto.randomUUID(),
           })
           if (abortControllerRef.current !== controller) {
             return

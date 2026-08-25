@@ -1,6 +1,6 @@
 import { IS_DEV } from '@/config'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
-import type { ChatChunkStream } from '@/services/inference/chat-stream'
+import type { AguiEventStream } from '@/services/inference/agui/protocol'
 import {
   createStreamLogger,
   type StreamLogger,
@@ -12,7 +12,7 @@ import { RichStreamSession } from './rich-stream-session'
 import type { StreamingContext } from './types'
 
 export async function processStreamingResponse(
-  stream: ChatChunkStream,
+  stream: AguiEventStream,
   ctx: StreamingContext,
 ): Promise<Message | null> {
   const streamLogger: StreamLogger | undefined = IS_DEV
@@ -45,10 +45,10 @@ export async function processStreamingResponse(
     if (ctx.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     if (streamingChatId) streamingTracker.startStreaming(streamingChatId)
 
-    for await (const chunk of stream) {
+    for await (const event of stream) {
       if (ctx.signal?.aborted) break
-      streamLogger?.logParsedEvent(chunk)
-      if (session.processChunk(chunk, streamLogger)) {
+      streamLogger?.logParsedEvent(event)
+      if (session.processEvent(event)) {
         publisher.publishLazy(() => session.snapshot(ctx.turnId))
       }
     }

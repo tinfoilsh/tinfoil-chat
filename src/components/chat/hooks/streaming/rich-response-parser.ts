@@ -1,4 +1,4 @@
-import type { ChatChunkStream } from '@/services/inference/chat-stream'
+import type { AguiEventStream } from '@/services/inference/agui/protocol'
 import type { Message } from '../../types'
 import { RichStreamSession } from './rich-stream-session'
 
@@ -12,14 +12,14 @@ export interface RichResponseParserOptions {
 }
 
 export async function parseRichStreamingResponse(
-  stream: ChatChunkStream,
+  stream: AguiEventStream,
   options: RichResponseParserOptions = {},
 ): Promise<Message> {
   const session = new RichStreamSession(options)
 
   try {
-    for await (const chunk of stream) {
-      if (session.processChunk(chunk)) options.onUpdate?.(session.snapshot())
+    for await (const event of stream) {
+      if (session.processEvent(event)) options.onUpdate?.(session.snapshot())
     }
     const message = session.complete()
     options.onUpdate?.(message)

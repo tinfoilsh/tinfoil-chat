@@ -13,12 +13,7 @@ import {
   TINFOIL_EVENTS_VALUE_WEB_SEARCH,
 } from '@/utils/tinfoil-events'
 import OpenAI from 'openai'
-import {
-  AuthenticationError,
-  SecureClient,
-  type SessionRecoveryToken,
-  type VerificationDocument,
-} from 'tinfoil'
+import { AuthenticationError, SecureClient } from 'tinfoil'
 import { authTokenManager } from '../auth'
 import { INFERENCE_CLIENT_INITIALIZATION_TIMEOUT_MS } from './constants'
 
@@ -48,10 +43,6 @@ let remainingBeforeRequest: number | null = null
 let refreshInFlight: Promise<void> | null = null
 let sessionCacheGeneration = 0
 let initializationInFlight: InitializationTask | null = null
-let cachedVerificationDocument: VerificationDocument | null = null
-const MAX_IDLE_RECOVERABLE_TRANSPORTS = 1
-let idleRecoverableTransports: RecoverableTinfoilTransport[] = []
-let recoverableTransportPoolGeneration = 0
 
 class SessionCacheInvalidatedError extends Error {}
 
@@ -468,9 +459,6 @@ export function resetTinfoilClient(): void {
   cachedRateLimit = null
   remainingBeforeRequest = null
   refreshInFlight = null
-  cachedVerificationDocument = null
-  idleRecoverableTransports = []
-  recoverableTransportPoolGeneration++
 }
 
 export function invalidateSessionCache(): void {
@@ -481,7 +469,6 @@ export function invalidateSessionCache(): void {
   cachedSessionTokenExpiresAt = null
   cachedSessionTokenWasAuthenticated = false
   remainingBeforeRequest = null
-  cachedVerificationDocument = null
   if (cachedRateLimit !== null) {
     cachedRateLimit = null
     dispatchRateLimitUpdate()
@@ -556,129 +543,8 @@ export async function getSecureFetch(): Promise<typeof fetch> {
   return secureClient.fetch
 }
 
-export interface RecoverableTinfoilClient {
-  client: OpenAI
-  baseURL: string
-  waitForTokenCapture: () => Promise<void>
-}
-
-export interface RecoverableTinfoilTransport {
-  secureClient: SecureClient
-  baseURL: string
-}
-
-export interface RecoverableTinfoilTransportLease {
-  transport: RecoverableTinfoilTransport
-  release: () => void
-}
-
 export function isChatRecoveryAvailable(): boolean {
   return !IS_DEV
-}
-
-function controlplaneBaseURL(): string {
-  const configured =
-    API_BASE_URL ||
-    (typeof window !== 'undefined' ? window.location.origin : null)
-  if (!configured) {
-    throw new Error('Controlplane base URL is unavailable')
-  }
-  const parsed = new URL(configured)
-  if (parsed.protocol !== 'https:' || !parsed.hostname) {
-    throw new Error('Controlplane base URL must use HTTPS')
-  }
-  return configured
-}
-
-export async function createRecoverableTinfoilTransport(): Promise<RecoverableTinfoilTransport> {
-  if (IS_DEV) {
-    throw new Error('Chat recovery is unavailable in local development')
-  }
-  const baseURL = new URL('/v1/', controlplaneBaseURL()).toString()
-  const dedicatedSecureClient = new SecureClient({ baseURL })
-  const attestationStartedAt = startPerformanceTimer()
-  await dedicatedSecureClient.ready()
-  recordPerformanceDuration(
-    PERFORMANCE_METRICS.INFERENCE_ATTESTATION,
-    attestationStartedAt,
-  )
-  return { secureClient: dedicatedSecureClient, baseURL }
-}
-
-export async function acquireRecoverableTinfoilTransport(): Promise<RecoverableTinfoilTransportLease> {
-  const generation = recoverableTransportPoolGeneration
-  const transport =
-    idleRecoverableTransports.pop() ??
-    (await createRecoverableTinfoilTransport())
-  let released = false
-
-  return {
-    transport,
-    release: () => {
-      if (released) return
-      released = true
-      if (
-        generation === recoverableTransportPoolGeneration &&
-        idleRecoverableTransports.length < MAX_IDLE_RECOVERABLE_TRANSPORTS
-      ) {
-        idleRecoverableTransports.push(transport)
-      }
-    },
-  }
-}
-
-export async function createRecoverableTinfoilClient(
-  transport: RecoverableTinfoilTransport,
-  sessionId: string,
-  onTokenCaptured: (token: SessionRecoveryToken) => Promise<void>,
-): Promise<RecoverableTinfoilClient> {
-  if (IS_DEV) {
-    throw new Error('Chat recovery is unavailable in local development')
-  }
-
-  const sessionToken = await fetchSessionToken()
-  let tokenCapturePromise: Promise<void> | null = null
-  const recoverableFetch: typeof fetch = async (input, init) => {
-    const response = await transport.secureClient.fetch(input, init)
-    const token = await transport.secureClient.getSessionRecoveryToken()
-    tokenCapturePromise = onTokenCaptured(token)
-    void tokenCapturePromise.catch(() => undefined)
-    return response
-  }
-
-  return {
-    baseURL: transport.baseURL,
-    waitForTokenCapture: () => {
-      if (!tokenCapturePromise) {
-        return Promise.reject(
-          new Error('Recovery token capture did not start with the request'),
-        )
-      }
-      return tokenCapturePromise
-    },
-    client: new OpenAI({
-      apiKey: sessionToken,
-      baseURL: transport.baseURL,
-      dangerouslyAllowBrowser: true,
-      // Suppressed at the factory level (unlike initClient's shared client,
-      // where callers scope it per-request): this client is single-use for
-      // one recovery attempt. recoverableFetch captures a recovery token
-      // bound to this client's X-Session-Id, so an SDK-internal silent
-      // retry would reuse the session id and fire onTokenCaptured twice
-      // for the same attempt. Retries happen in sendChatStream's loop,
-      // which builds a fresh client (and session id) per attempt.
-      maxRetries: 0,
-      defaultHeaders: {
-        [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,
-        'X-Session-Id': sessionId,
-      },
-      fetch: recoverableFetch,
-    }),
-  }
-}
-
-export function getRecoveryBaseURL(): string {
-  return controlplaneBaseURL()
 }
 
 /**
@@ -726,22 +592,6 @@ async function ensureInitialized(): Promise<void> {
       }
     }
   }
-}
-
-/**
- * Returns the enclave verification document, or `null` in dev mode
- */
-export async function getVerificationDocument(): Promise<VerificationDocument | null> {
-  await ensureInitialized()
-  const document = secureClient ? secureClient.getVerificationDocument() : null
-  if (document) {
-    cachedVerificationDocument = document
-  }
-  return document
-}
-
-export function getCachedVerificationDocument(): VerificationDocument | null {
-  return cachedVerificationDocument
 }
 
 async function getRawClient(): Promise<OpenAI> {

@@ -20,8 +20,8 @@ export type LocalRecoveryEnvelope = {
   turnId: string
   createdAt: string
   expiresAt: string
-  sessionId: string
-  recoveryToken: string
+  storageId: string
+  resumeSecret: string
 }
 
 export type PendingRecoveryEnvelope =
@@ -44,8 +44,8 @@ export function samePendingRecoveryEnvelope(
       isLocalRecoveryEnvelope(right) &&
       left.createdAt === right.createdAt &&
       left.expiresAt === right.expiresAt &&
-      left.sessionId === right.sessionId &&
-      left.recoveryToken === right.recoveryToken
+      left.storageId === right.storageId &&
+      left.resumeSecret === right.resumeSecret
     )
   }
   return (

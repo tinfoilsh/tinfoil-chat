@@ -1,8 +1,6 @@
-import type { ChatChunk } from '@/services/inference/chat-stream'
-import type { StreamLogger } from '@/utils/dev-stream-logger'
+import { createAguiNormalizer } from '@/services/inference/agui/normalizer'
+import type { AguiEvent } from '@/services/inference/agui/protocol'
 import type { Message, URLFetchState } from '../../types'
-import { createContentPreprocessor } from './content-preprocessor'
-import { createEventNormalizer } from './event-normalizer'
 import { finalizeInterruptedMessage } from './interrupted-message'
 import { MessageAssembler } from './message-assembler'
 import { TimelineBuilder } from './timeline-builder'
@@ -17,8 +15,7 @@ interface RichStreamSessionOptions {
 }
 
 export class RichStreamSession {
-  private readonly preprocessor = createContentPreprocessor()
-  private readonly normalizer = createEventNormalizer()
+  private readonly normalizer = createAguiNormalizer()
   private readonly timeline = new TimelineBuilder()
   private readonly assembler: MessageAssembler
   private readonly webSearchBlocks = new Map<string, string>()
@@ -30,23 +27,16 @@ export class RichStreamSession {
     this.assembler = new MessageAssembler(options.modelDisplayName)
   }
 
-  processChunk(chunk: ChatChunk, streamLogger?: StreamLogger): boolean {
-    const resolvedModelDisplayName =
-      typeof chunk.model === 'string'
-        ? this.options.resolveModelDisplayName
-          ? this.options.resolveModelDisplayName(chunk.model)
-          : chunk.model
-        : undefined
-    if (resolvedModelDisplayName !== undefined) {
-      this.assembler.setModelDisplayName(resolvedModelDisplayName)
+  processEvent(event: AguiEvent): boolean {
+    if (event.type === 'RUN_STARTED' && event.metadata?.model) {
+      const model = event.metadata.model
+      this.assembler.setModelDisplayName(
+        this.options.resolveModelDisplayName?.(model) ?? model,
+      )
     }
-    const events = this.normalizer.processChunk(
-      chunk,
-      this.preprocessor,
-      streamLogger,
-    )
-    for (const event of events) this.applyEvent(event)
-    return events.length > 0
+    const normalized = this.normalizer.processEvent(event)
+    for (const normalizedEvent of normalized) this.applyEvent(normalizedEvent)
+    return normalized.length > 0
   }
 
   snapshot(turnId?: string): Message {
@@ -100,8 +90,6 @@ export class RichStreamSession {
 
   private flushBufferedTail(): void {
     for (const event of this.normalizer.flush()) this.applyEvent(event)
-    const { text } = this.preprocessor.flush()
-    if (text) this.applyEvent({ type: 'content_delta', content: text })
   }
 
   private findWebSearchBlock(id?: string, query?: string) {
@@ -123,7 +111,7 @@ export class RichStreamSession {
     event: Extract<NormalizedEvent, { type: 'web_search' }>,
   ): void {
     const { id, status, query, sources, reason } = event
-    if (status === 'in_progress' && query) {
+    if (status === 'in_progress') {
       const blockId = this.timeline.pushWebSearch({
         query,
         status: 'searching',

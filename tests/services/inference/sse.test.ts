@@ -1,7 +1,4 @@
-import {
-  chatChunkStreamFromSSE,
-  type ChatChunk,
-} from '@/services/inference/chat-stream'
+import { sseJsonStream } from '@/services/inference/sse'
 import { describe, expect, it } from 'vitest'
 
 function mockResponse(chunks: string[]): Response {
@@ -20,15 +17,17 @@ function mockResponse(chunks: string[]): Response {
   return new Response(readable)
 }
 
-async function collectAll(response: Response): Promise<ChatChunk[]> {
-  const results: ChatChunk[] = []
-  for await (const chunk of chatChunkStreamFromSSE(response)) {
-    results.push(chunk)
+type Frame = Record<string, any>
+
+async function collectAll(response: Response): Promise<Frame[]> {
+  const results: Frame[] = []
+  for await (const frame of sseJsonStream<Frame>(response, 'test')) {
+    results.push(frame)
   }
   return results
 }
 
-describe('chatChunkStreamFromSSE', () => {
+describe('sseJsonStream', () => {
   it('parses basic SSE data lines', async () => {
     const results = await collectAll(
       mockResponse(['data: {"choices":[{"delta":{"content":"hi"}}]}\n\n']),
@@ -110,6 +109,53 @@ describe('chatChunkStreamFromSSE', () => {
       mockResponse(['data: {"id":"1"}\r\n\r\ndata: {"id":"2"}\r\n\r\n']),
     )
     expect(results).toEqual([{ id: '1' }, { id: '2' }])
+  })
+
+  it('reports the id of each frame it hands over', async () => {
+    const ids: number[] = []
+    const results: Frame[] = []
+    const response = mockResponse([
+      'id: 0\ndata: {"id":"first"}\n\nid: 1\ndata: {"id":"second"}\n\n',
+    ])
+    for await (const frame of sseJsonStream<Frame>(response, 'test', (id) =>
+      ids.push(id),
+    )) {
+      results.push(frame)
+    }
+
+    expect(results).toEqual([{ id: 'first' }, { id: 'second' }])
+    expect(ids).toEqual([0, 1])
+  })
+
+  it('reports no id for a frame that carries none', async () => {
+    const ids: number[] = []
+    const response = mockResponse([
+      'id: 4\ndata: {"id":"framed"}\n\ndata: {"id":"bare"}\n\n',
+    ])
+    for await (const _frame of sseJsonStream<Frame>(response, 'test', (id) =>
+      ids.push(id),
+    )) {
+      // drain
+    }
+
+    expect(ids).toEqual([4])
+  })
+
+  it('reports the id of a frame that carries it after the data', async () => {
+    const ids: number[] = []
+    const response = mockResponse(['data: {"id":"first"}\nid: 7\n\n'])
+    for await (const _frame of sseJsonStream<Frame>(response, 'test', (id) =>
+      ids.push(id),
+    )) {
+      // drain
+    }
+
+    expect(ids).toEqual([7])
+  })
+
+  it('closes out a frame the stream ends without terminating', async () => {
+    const results = await collectAll(mockResponse(['data: {"id":"last"}']))
+    expect(results).toEqual([{ id: 'last' }])
   })
 
   it('preserves response stream errors', async () => {

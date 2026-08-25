@@ -1,9 +1,9 @@
 import { useChatMessaging } from '@/components/chat/hooks/use-chat-messaging'
 import type { Chat } from '@/components/chat/types'
 import type {
-  ChatChunk,
-  ChatChunkStream,
-} from '@/services/inference/chat-stream'
+  AguiEvent,
+  AguiEventStream,
+} from '@/services/inference/agui/protocol'
 import { act, renderHook } from '@testing-library/react'
 import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -140,7 +140,7 @@ vi.mock('@/services/inference/chat-recovery', () => ({
     completeLiveChatRecoveryMock(...args),
   markChatRecoveryTurnCancelled: vi.fn(),
   markChatRecoveryTurnSettled: vi.fn(),
-  persistChatRecoveryToken: vi.fn(),
+  persistChatRecoveryEnvelope: vi.fn(),
   releaseActiveChatRecovery: vi.fn(),
   scanPendingChatRecoveries: vi.fn(),
   startChatRecoveryAttempt: vi.fn(),
@@ -203,7 +203,7 @@ vi.mock('@/utils/error-handling', () => ({
 }))
 
 function createOpenStream() {
-  const chunks: ChatChunk[] = []
+  const chunks: AguiEvent[] = []
   let resume: (() => void) | undefined
   let closed = false
   let failure: unknown = null
@@ -216,12 +216,13 @@ function createOpenStream() {
         })
         continue
       }
-      yield chunks.shift() as ChatChunk
+      yield chunks.shift() as AguiEvent
     }
   })()
+  ;(stream as AguiEventStream).recoveryReady = Promise.resolve()
   return {
     stream,
-    send: (event: ChatChunk) => {
+    send: (event: AguiEvent) => {
       chunks.push(event)
       resume?.()
       resume = undefined
@@ -293,7 +294,9 @@ describe('useChatMessaging stopped streams', () => {
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
 
     stream.send({
-      choices: [{ delta: { reasoning_content: 'Partial reasoning' } }],
+      type: 'REASONING_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: 'Partial reasoning',
     })
     await vi.waitFor(() =>
       expect(result.current.currentChat.messages.at(-1)?.thoughts).toBe(
@@ -369,7 +372,11 @@ describe('useChatMessaging stopped streams', () => {
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
 
-    stream.send({ choices: [{ delta: { content: 'Partial answer' } }] })
+    stream.send({
+      type: 'TEXT_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: 'Partial answer',
+    })
     await vi.waitFor(() =>
       expect(sessionSaveDraftMock).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -442,7 +449,11 @@ describe('useChatMessaging stopped streams', () => {
       ) as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({ choices: [{ delta: { content: 'Partial answer' } }] })
+    stream.send({
+      type: 'TEXT_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: 'Partial answer',
+    })
     await vi.waitFor(() =>
       expect(result.current.currentChat.messages.at(-1)?.content).toBe(
         'Partial answer',
@@ -513,7 +524,11 @@ describe('useChatMessaging stopped streams', () => {
       ) as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({ choices: [{ delta: { content: 'Partial answer' } }] })
+    stream.send({
+      type: 'TEXT_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: 'Partial answer',
+    })
     await vi.waitFor(() =>
       expect(result.current.currentChat.messages.at(-1)?.content).toBe(
         'Partial answer',
@@ -568,11 +583,11 @@ describe('useChatMessaging stopped streams', () => {
         { role: 'assistant', content: 'Earlier reply', timestamp: new Date() },
       ],
     }
-    let finishContainerAuth!: () => void
-    containerAuthTokenMock.mockImplementationOnce(
-      () =>
-        new Promise<null>((resolve) => {
-          finishContainerAuth = () => resolve(null)
+    let finishInitialSave!: () => void
+    initialSaveMock.mockImplementationOnce(
+      (chat: unknown) =>
+        new Promise<unknown>((resolve) => {
+          finishInitialSave = () => resolve(chat)
         }),
     )
 
@@ -581,14 +596,13 @@ describe('useChatMessaging stopped streams', () => {
       const [chats, setChats] = useState([initialChat])
       const messaging = useChatMessaging({
         systemPrompt: '',
-        storeHistory: false,
+        storeHistory: true,
         models: [{} as never],
         selectedModel: 'test-model',
         chats,
         currentChat,
         setChats,
         setCurrentChat,
-        codeExecutionEnabled: true,
       })
       return { messaging }
     })
@@ -599,12 +613,12 @@ describe('useChatMessaging stopped streams', () => {
         'New prompt',
       ) as Promise<unknown>
     })
-    await vi.waitFor(() => expect(containerAuthTokenMock).toHaveBeenCalled())
+    await vi.waitFor(() => expect(initialSaveMock).toHaveBeenCalled())
 
     await act(async () => {
       await result.current.messaging.cancelGeneration()
     })
-    finishContainerAuth()
+    finishInitialSave()
     await act(async () => {
       await query
     })
@@ -652,9 +666,16 @@ describe('useChatMessaging stopped streams', () => {
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
     expect(sendChatStreamMock).toHaveBeenCalledWith(
-      expect.objectContaining({ codeExecutionAccessToken: 'token' }),
+      expect.objectContaining({
+        threadId: expect.any(String),
+        runId: expect.any(String),
+      }),
     )
-    stream.send({ choices: [{ delta: { content: 'Partial' } }] })
+    stream.send({
+      type: 'TEXT_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: 'Partial',
+    })
     await vi.waitFor(() =>
       expect(result.current.currentChat.messages.at(-1)?.content).toBe(
         'Partial',
@@ -677,14 +698,18 @@ describe('useChatMessaging stopped streams', () => {
       ])
     })
 
-    stream.send({ choices: [{ delta: { content: ' response' } }] })
+    stream.send({
+      type: 'TEXT_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: ' response',
+    })
     await vi.waitFor(() => {
       expect(result.current.currentChat.messages.at(-1)?.content).toBe(
         'Partial response',
       )
       expect(result.current.currentChat.isTemporary).toBe(false)
     })
-    stream.send({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
+    stream.send({ type: 'RUN_FINISHED' })
     stream.close()
     await act(async () => {
       await query
@@ -776,10 +801,12 @@ describe('useChatMessaging stopped streams', () => {
       ) as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({ choices: [{ delta: { content: 'Complete answer' } }] })
     stream.send({
-      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      type: 'TEXT_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: 'Complete answer',
     })
+    stream.send({ type: 'RUN_FINISHED' })
     stream.close()
 
     await act(async () => {
@@ -862,10 +889,13 @@ describe('useChatMessaging stopped streams', () => {
     expect(saveChatMock).toHaveBeenCalledOnce()
     expect(saveChatMock.mock.calls.every((call) => call[1] === true)).toBe(true)
     expect(sendChatStreamMock).toHaveBeenCalledWith(
-      expect.objectContaining({ recovery: expect.any(Object) }),
+      expect.objectContaining({
+        threadId: expect.any(String),
+        runId: expect.any(String),
+      }),
     )
 
-    stream.send({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
+    stream.send({ type: 'RUN_FINISHED' })
     stream.close()
     await act(async () => {
       await query
@@ -941,7 +971,7 @@ describe('useChatMessaging stopped streams', () => {
       true,
     )
 
-    stream.send({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
+    stream.send({ type: 'RUN_FINISHED' })
     stream.close()
     await act(async () => {
       await query
@@ -993,10 +1023,13 @@ describe('useChatMessaging stopped streams', () => {
     expect(saveChatMock).toHaveBeenCalledOnce()
     expect(saveChatMock).toHaveBeenCalledWith(expect.any(Object), true)
     expect(sendChatStreamMock).toHaveBeenCalledWith(
-      expect.objectContaining({ recovery: undefined }),
+      expect.objectContaining({
+        threadId: expect.any(String),
+        runId: expect.any(String),
+      }),
     )
 
-    stream.send({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
+    stream.send({ type: 'RUN_FINISHED' })
     stream.close()
     await act(async () => {
       await query
@@ -1045,7 +1078,7 @@ describe('useChatMessaging stopped streams', () => {
     )
     expect(saveChatMock).not.toHaveBeenCalled()
 
-    stream.send({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
+    stream.send({ type: 'RUN_FINISHED' })
     stream.close()
     await act(async () => {
       await query
@@ -1091,10 +1124,13 @@ describe('useChatMessaging stopped streams', () => {
 
     expect(saveChatMock).toHaveBeenCalledWith(expect.any(Object), true)
     expect(sendChatStreamMock).toHaveBeenCalledWith(
-      expect.objectContaining({ recovery: undefined }),
+      expect.objectContaining({
+        threadId: expect.any(String),
+        runId: expect.any(String),
+      }),
     )
 
-    stream.send({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
+    stream.send({ type: 'RUN_FINISHED' })
     stream.close()
     await act(async () => {
       await query
@@ -1113,7 +1149,7 @@ describe('useChatMessaging stopped streams', () => {
     }
     const stream = createOpenStream()
     let finishTokenCapture!: () => void
-    ;(stream.stream as ChatChunkStream).recoveryReady = new Promise<void>(
+    ;(stream.stream as AguiEventStream).recoveryReady = new Promise<void>(
       (resolve) => {
         finishTokenCapture = resolve
       },
@@ -1141,7 +1177,11 @@ describe('useChatMessaging stopped streams', () => {
       query = result.current.messaging.handleQuery('Prompt') as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({ choices: [{ delta: { content: 'Visible immediately' } }] })
+    stream.send({
+      type: 'TEXT_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: 'Visible immediately',
+    })
 
     await vi.waitFor(() =>
       expect(result.current.currentChat.messages.at(-1)).toMatchObject({
@@ -1150,9 +1190,7 @@ describe('useChatMessaging stopped streams', () => {
       }),
     )
 
-    stream.send({
-      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
-    })
+    stream.send({ type: 'RUN_FINISHED' })
     stream.close()
     await vi.waitFor(() =>
       expect(completeLiveChatRecoveryMock).not.toHaveBeenCalled(),
@@ -1235,10 +1273,12 @@ describe('useChatMessaging stopped streams', () => {
       ) as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({ choices: [{ delta: { content: 'Complete answer' } }] })
     stream.send({
-      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      type: 'TEXT_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: 'Complete answer',
     })
+    stream.send({ type: 'RUN_FINISHED' })
     stream.close()
 
     await vi.waitFor(() =>
@@ -1301,10 +1341,12 @@ describe('useChatMessaging stopped streams', () => {
       query = result.current.messaging.handleQuery('Prompt') as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({ choices: [{ delta: { content: 'Partial response' } }] })
     stream.send({
-      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      type: 'TEXT_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: 'Partial response',
     })
+    stream.send({ type: 'RUN_FINISHED' })
     stream.close()
     await vi.waitFor(() => expect(recoveryWaitStarted).toBe(true))
 
@@ -1330,8 +1372,8 @@ describe('useChatMessaging stopped streams', () => {
     const recoveryError = new DOMException('Invalidated', 'AbortError')
     const recoveryReady = Promise.reject(recoveryError)
     void recoveryReady.catch(() => undefined)
-    ;(stream.stream as ChatChunkStream).recoveryReady = recoveryReady
-    ;(stream.stream as ChatChunkStream).abandonRecovery = vi.fn(
+    ;(stream.stream as AguiEventStream).recoveryReady = recoveryReady
+    ;(stream.stream as AguiEventStream).abandonRecovery = vi.fn(
       async () => undefined,
     )
     sendChatStreamMock.mockResolvedValue(stream.stream)
@@ -1357,10 +1399,12 @@ describe('useChatMessaging stopped streams', () => {
       query = result.current.messaging.handleQuery('Prompt') as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({ choices: [{ delta: { content: 'Complete response' } }] })
     stream.send({
-      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      type: 'TEXT_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: 'Complete response',
     })
+    stream.send({ type: 'RUN_FINISHED' })
     stream.close()
     await act(async () => {
       await query
@@ -1436,10 +1480,12 @@ describe('useChatMessaging stopped streams', () => {
       ) as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({ choices: [{ delta: { content: 'Complete answer' } }] })
     stream.send({
-      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      type: 'TEXT_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: 'Complete answer',
     })
+    stream.send({ type: 'RUN_FINISHED' })
     stream.close()
     await vi.waitFor(() =>
       expect(completeLiveChatRecoveryMock).toHaveBeenCalled(),
@@ -1523,10 +1569,12 @@ describe('useChatMessaging stopped streams', () => {
       ) as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({ choices: [{ delta: { content: 'Complete answer' } }] })
     stream.send({
-      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      type: 'TEXT_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: 'Complete answer',
     })
+    stream.send({ type: 'RUN_FINISHED' })
     stream.close()
     await vi.waitFor(() =>
       expect(completeLiveChatRecoveryMock).toHaveBeenCalled(),

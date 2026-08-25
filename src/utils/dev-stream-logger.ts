@@ -8,15 +8,11 @@ interface LogEntry {
 
 export interface StreamLogger {
   logParsedEvent(json: unknown): void
-  logTinfoilEvent(event: unknown): void
-  logWebSearchDispatch(event: unknown): void
   flush(chatId: string): void
 }
 
 const noopLogger: StreamLogger = {
   logParsedEvent() {},
-  logTinfoilEvent() {},
-  logWebSearchDispatch() {},
   flush() {},
 }
 
@@ -28,14 +24,6 @@ export function createStreamLogger(): StreamLogger {
   return {
     logParsedEvent(json: unknown) {
       entries.push({ t: Date.now(), type: 'parsed', data: json })
-    },
-
-    logTinfoilEvent(event: unknown) {
-      entries.push({ t: Date.now(), type: 'tinfoil_event', data: event })
-    },
-
-    logWebSearchDispatch(event: unknown) {
-      entries.push({ t: Date.now(), type: 'web_search_dispatch', data: event })
     },
 
     flush(chatId: string) {

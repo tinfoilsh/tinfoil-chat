@@ -1,7 +1,7 @@
 import {
-  getCachedVerificationDocument,
-  getVerificationDocument,
-} from '@/services/inference/tinfoil-client'
+  getCachedHarnessVerificationDocument,
+  getHarnessVerificationDocument,
+} from '@/services/inference/agui/client'
 import { logError, logInfo } from '@/utils/error-handling'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -67,7 +67,7 @@ export function VerifierSidebar({
       }
 
       try {
-        const doc = await getVerificationDocument()
+        const doc = await getHarnessVerificationDocument()
         if (doc) {
           setVerificationDocument(doc)
           if (onVerificationUpdateRef.current) {
@@ -91,7 +91,7 @@ export function VerifierSidebar({
 
     let success = false
     try {
-      const cachedDoc = getCachedVerificationDocument()
+      const cachedDoc = getCachedHarnessVerificationDocument()
       if (cachedDoc?.securityVerified === true) {
         setVerificationDocument(cachedDoc)
         onVerificationUpdateRef.current?.(cachedDoc)
@@ -128,7 +128,7 @@ export function VerifierSidebar({
       // Retries exhausted. A previously successful attestation may still be
       // cached (e.g. the panel was opened while offline after startup
       // verification succeeded), so don't downgrade that to a failure.
-      const terminalCachedDoc = getCachedVerificationDocument()
+      const terminalCachedDoc = getCachedHarnessVerificationDocument()
       if (terminalCachedDoc?.securityVerified === true) {
         setVerificationDocument(terminalCachedDoc)
         onVerificationUpdateRef.current?.(terminalCachedDoc)

@@ -25,27 +25,27 @@ describe('chat recovery drafts', () => {
     clearActiveChatRecoveries()
   })
 
-  it('replaces reconnect snapshots without letting an old session clear them', () => {
+  it('replaces reconnect snapshots without letting an old run clear them', () => {
     const listener = vi.fn()
     const unsubscribe = subscribeChatRecoveryDrafts(listener)
     setChatRecoveryDraft({
       chatId: 'chat-1',
       turnId: 'turn-1',
-      sessionId: 'session-1',
+      storageId: 'storage-1',
       message: message('First replay'),
     })
     setChatRecoveryDraft({
       chatId: 'chat-1',
       turnId: 'turn-1',
-      sessionId: 'session-2',
+      storageId: 'storage-2',
       message: message('Reconnected replay'),
     })
 
-    clearChatRecoveryDraft('session-1')
+    clearChatRecoveryDraft('storage-1')
 
     expect(getChatRecoveryDraftSnapshot()).toEqual([
       expect.objectContaining({
-        sessionId: 'session-2',
+        storageId: 'storage-2',
         message: expect.objectContaining({ content: 'Reconnected replay' }),
       }),
     ])
@@ -57,7 +57,7 @@ describe('chat recovery drafts', () => {
     setChatRecoveryDraft({
       chatId: 'chat-1',
       turnId: 'turn-1',
-      sessionId: 'session-1',
+      storageId: 'storage-1',
       message: message('Partial'),
     })
 

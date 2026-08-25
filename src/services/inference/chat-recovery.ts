@@ -1,7 +1,7 @@
 import {
   finalizeInterruptedMessage,
   hasVisibleAssistantMessage,
-  parseRichStreamingResponse,
+  RichStreamSession,
 } from '@/components/chat/hooks/streaming'
 import type { Chat, Message } from '@/components/chat/types'
 import { getKnownModelDisplayName } from '@/config/models'
@@ -10,25 +10,16 @@ import { retryDeferredAlternativesFinalization } from '@/services/cloud/legacy-b
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import {
-  RECOVERY_ENVELOPE_EXPIRY_MS,
   isLocalRecoveryEnvelope,
+  RECOVERY_ENVELOPE_EXPIRY_MS,
   samePendingRecoveryEnvelope,
   type PendingRecoveryEnvelope,
   type SyncedRecoveryEnvelope,
 } from '@/types/chat-recovery'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError } from '@/utils/error-handling'
-import {
-  deserializeSessionRecoveryToken,
-  serializeSessionRecoveryToken,
-  type SessionRecoveryToken,
-} from 'tinfoil'
-import {
-  ChatRecoveryError,
-  deleteChatRecovery,
-  fetchRecoveredChatResponse,
-  getChatRecoveryStatus,
-} from './chat-recovery-client'
+import { dropRun, resumeRun, RunGoneError } from './agui/client'
+import type { RunStorage } from './agui/protocol'
 import {
   decryptRecoveryEnvelope,
   encryptRecoveryEnvelope,
@@ -50,13 +41,12 @@ import {
   resetChatRecoverySyncState,
   sameRecoveredResponse,
 } from './chat-recovery-sync'
-import { chatChunkStreamFromSSE } from './chat-stream'
 import { generateTitle, getTitleContent } from './title'
 
 type ActiveRecovery = {
   chatId: string
   turnId: string
-  sessionId: string
+  storage: RunStorage
   generation: number
   envelope?: PendingRecoveryEnvelope
 }
@@ -64,7 +54,7 @@ type ActiveRecovery = {
 type ScannedRecovery = {
   chatId: string
   turnId: string
-  sessionId: string
+  storage: RunStorage
   generation: number
   envelope: PendingRecoveryEnvelope
   controller: AbortController
@@ -76,8 +66,6 @@ const cancelledTurns = new Set<string>()
 const settledTurns = new Set<string>()
 const MAX_SETTLED_TURNS = 200
 const RECOVERY_SCAN_CONCURRENCY = 4
-const RECOVERY_RETRY_BASE_DELAY_MS = 100
-const RECOVERY_RETRY_MAX_DELAY_MS = 10_000
 // Upper bound on how long a scan may make no progress while holding the
 // dedupe slot. A stream wedged on a dead socket (e.g. after laptop sleep)
 // would otherwise absorb every future scan and silently disable recovery
@@ -140,35 +128,6 @@ async function recoveredTitlePatch(
   }
 }
 
-function waitForRecoveryRetry(
-  attempt: number,
-  signal: AbortSignal,
-): Promise<void> {
-  const delay = Math.min(
-    RECOVERY_RETRY_BASE_DELAY_MS * 2 ** attempt,
-    RECOVERY_RETRY_MAX_DELAY_MS,
-  )
-  return new Promise((resolve, reject) => {
-    const onAbort = () => {
-      window.clearTimeout(timer)
-      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
-    }
-    const timer = window.setTimeout(() => {
-      signal.removeEventListener('abort', onAbort)
-      resolve()
-    }, delay)
-    signal.addEventListener('abort', onAbort, { once: true })
-  })
-}
-
-function recoveryTokenFromPayload(
-  payload: string | { exportedSecret: string; requestEnc: string },
-): SessionRecoveryToken {
-  return deserializeSessionRecoveryToken(
-    typeof payload === 'string' ? payload : JSON.stringify(payload),
-  )
-}
-
 function candidateCEKs(): Uint8Array[] {
   const candidates: Uint8Array[] = [encryptionService.getKeyBytesOrThrow()]
   for (const alternative of encryptionService.getStoredAlternatives()) {
@@ -188,8 +147,8 @@ async function openEnvelope(
     return {
       cek: null,
       payload: {
-        sessionId: envelope.sessionId,
-        recoveryToken: envelope.recoveryToken,
+        storageId: envelope.storageId,
+        resumeSecret: envelope.resumeSecret,
       },
       usesPrimary: true,
     }
@@ -220,13 +179,13 @@ function isSyncedRecoveryEnvelope(
   return !isLocalRecoveryEnvelope(envelope)
 }
 
-async function deleteRecoveryQuietly(sessionId: string): Promise<void> {
+async function dropRunQuietly(storage: RunStorage): Promise<void> {
   try {
-    await deleteChatRecovery(sessionId)
+    await dropRun(storage)
   } catch (error) {
-    logError('Failed to delete encrypted response recovery session', error, {
+    logError('Failed to drop the stored run log', error, {
       component: 'chat-recovery',
-      action: 'deleteRecovery',
+      action: 'dropRun',
     })
   }
 }
@@ -234,39 +193,37 @@ async function deleteRecoveryQuietly(sessionId: string): Promise<void> {
 export function startChatRecoveryAttempt(
   chatId: string,
   turnId: string,
-  sessionId: string,
+  storage: RunStorage,
 ): void {
-  activeRecoveries.set(sessionId, {
+  activeRecoveries.set(storage.storageId, {
     chatId,
     turnId,
-    sessionId,
+    storage,
     generation: recoveryGeneration,
   })
 }
 
-export async function persistChatRecoveryToken(args: {
+export async function persistChatRecoveryEnvelope(args: {
   userId: string
   chatId: string
   turnId: string
-  sessionId: string
-  token: SessionRecoveryToken
+  storage: RunStorage
 }): Promise<void> {
   const key = turnKey(args.chatId, args.turnId)
-  const active = activeRecoveries.get(args.sessionId)
+  const active = activeRecoveries.get(args.storage.storageId)
   const isCurrentAttempt = () =>
     active?.generation === recoveryGeneration &&
     active.chatId === args.chatId &&
     active.turnId === args.turnId &&
-    activeRecoveries.get(args.sessionId) === active
+    activeRecoveries.get(args.storage.storageId) === active
   if (!active || !isCurrentAttempt() || cancelledTurns.has(key)) {
-    await deleteRecoveryQuietly(args.sessionId)
+    await dropRunQuietly(args.storage)
     throw new DOMException('Aborted', 'AbortError')
   }
 
-  const recoveryToken = serializeSessionRecoveryToken(args.token)
   const chat = await indexedDBStorage.getChat(args.chatId)
   if (!chat) {
-    await deleteRecoveryQuietly(args.sessionId)
+    await dropRunQuietly(args.storage)
     throw new Error('Chat recovery could not find the target chat')
   }
   const localOnly = chat.isLocalOnly || !isCloudSyncEnabled()
@@ -280,23 +237,21 @@ export async function persistChatRecoveryToken(args: {
         expiresAt: new Date(
           now.getTime() + RECOVERY_ENVELOPE_EXPIRY_MS,
         ).toISOString(),
-        sessionId: args.sessionId,
-        recoveryToken,
+        ...args.storage,
       }
     : await encryptRecoveryEnvelope({
         cek: encryptionService.getKeyBytesOrThrow(),
         userId: args.userId,
         chatId: args.chatId,
         turnId: args.turnId,
-        sessionId: args.sessionId,
-        recoveryToken,
+        storage: args.storage,
       })
   // Re-check the cancelled set as well: a stop pressed while this token
   // capture was in flight marks the turn cancelled before the (later)
   // cancelChatRecovery call deregisters the attempt, so isCurrentAttempt
   // alone would still pass here and write an envelope for a stopped turn.
   if (!isCurrentAttempt() || cancelledTurns.has(key)) {
-    await deleteRecoveryQuietly(args.sessionId)
+    await dropRunQuietly(args.storage)
     throw new DOMException('Aborted', 'AbortError')
   }
   await addPendingRecovery(args.chatId, envelope)
@@ -305,7 +260,7 @@ export async function persistChatRecoveryToken(args: {
     try {
       await removePendingRecovery(args.chatId, envelope)
     } finally {
-      await deleteRecoveryQuietly(args.sessionId)
+      await dropRunQuietly(args.storage)
     }
     throw new DOMException('Aborted', 'AbortError')
   }
@@ -313,17 +268,17 @@ export async function persistChatRecoveryToken(args: {
   if (cancelledTurns.has(key)) {
     await Promise.all([
       removePendingRecovery(args.chatId, envelope, isCurrentAttempt),
-      deleteRecoveryQuietly(args.sessionId),
+      dropRunQuietly(args.storage),
     ])
     throw new DOMException('Aborted', 'AbortError')
   }
 }
 
 export async function abandonChatRecoveryAttempt(
-  sessionId: string,
+  storage: RunStorage,
 ): Promise<void> {
-  const active = activeRecoveries.get(sessionId)
-  activeRecoveries.delete(sessionId)
+  const active = activeRecoveries.get(storage.storageId)
+  activeRecoveries.delete(storage.storageId)
   try {
     if (active) {
       const isCurrent = () => active.generation === recoveryGeneration
@@ -332,7 +287,7 @@ export async function abandonChatRecoveryAttempt(
       }
     }
   } finally {
-    await deleteRecoveryQuietly(sessionId)
+    await dropRunQuietly(storage)
   }
 }
 
@@ -348,7 +303,7 @@ export async function completeLiveChatRecovery(args: {
   )
   const isCurrent = () =>
     active?.generation === recoveryGeneration &&
-    activeRecoveries.get(active.sessionId) === active
+    activeRecoveries.get(active.storage.storageId) === active
   if (!active?.envelope || !isCurrent()) {
     throw new DOMException('Aborted', 'AbortError')
   }
@@ -359,8 +314,8 @@ export async function completeLiveChatRecovery(args: {
     args.chatPatch,
     isCurrent,
   )
-  activeRecoveries.delete(active.sessionId)
-  await deleteRecoveryQuietly(active.sessionId)
+  activeRecoveries.delete(active.storage.storageId)
+  await dropRunQuietly(active.storage)
   return {
     ...completedChat,
     createdAt: new Date(completedChat.createdAt),
@@ -390,11 +345,11 @@ export async function cancelChatRecovery(
   )
   for (const recovery of active) {
     cancelledTurns.add(turnKey(recovery.chatId, recovery.turnId))
-    activeRecoveries.delete(recovery.sessionId)
+    activeRecoveries.delete(recovery.storage.storageId)
   }
   for (const recovery of scanned) {
     cancelledTurns.add(turnKey(recovery.chatId, recovery.turnId))
-    scannedRecoveries.delete(recovery.sessionId)
+    scannedRecoveries.delete(recovery.storage.storageId)
     recovery.controller.abort()
     setChatRecoveryActive(recovery.chatId, recovery.turnId, false)
   }
@@ -409,7 +364,7 @@ export async function cancelChatRecovery(
       const isCurrent = () => recovery.generation === recoveryGeneration
       if (!isCurrent()) return
       if (!recovery.envelope) {
-        await deleteRecoveryQuietly(recovery.sessionId)
+        await dropRunQuietly(recovery.storage)
         return
       }
 
@@ -418,7 +373,7 @@ export async function cancelChatRecovery(
         recovery.turnId,
       )
       const draftMessage =
-        recoveryDraft?.sessionId === recovery.sessionId
+        recoveryDraft?.storageId === recovery.storage.storageId
           ? recoveryDraft.message
           : undefined
       const stoppedMessage =
@@ -444,7 +399,7 @@ export async function cancelChatRecovery(
             message.turnId === recovery.turnId &&
             hasVisibleAssistantMessage(message),
         )
-        if (persisted) await deleteRecoveryQuietly(recovery.sessionId)
+        if (persisted) await dropRunQuietly(recovery.storage)
       } else {
         try {
           await removePendingRecovery(
@@ -453,7 +408,7 @@ export async function cancelChatRecovery(
             isCurrent,
           )
         } finally {
-          await deleteRecoveryQuietly(recovery.sessionId)
+          await dropRunQuietly(recovery.storage)
         }
       }
     }),
@@ -518,7 +473,7 @@ export function releaseActiveChatRecovery(
   // stream's just-registered recovery attempt.
   for (const recovery of activeRecoveries.values()) {
     if (recovery.chatId === chatId && recovery.turnId === turnId) {
-      activeRecoveries.delete(recovery.sessionId)
+      activeRecoveries.delete(recovery.storage.storageId)
     }
   }
 }
@@ -546,7 +501,7 @@ async function processEnvelope(
   }
 
   if (Date.now() >= Date.parse(envelope.expiresAt)) {
-    let sessionId: string | undefined
+    let storage: RunStorage | undefined
     try {
       const opened = await openEnvelope(
         userId,
@@ -555,7 +510,7 @@ async function processEnvelope(
         Date.parse(envelope.expiresAt) - 1,
       )
       if (!isCurrent()) return
-      sessionId = opened.payload.sessionId
+      storage = opened.payload
     } catch (error) {
       logError('Failed to clean up expired chat recovery session', error, {
         component: 'chat-recovery',
@@ -567,8 +522,8 @@ async function processEnvelope(
     try {
       await removePendingRecovery(chatId, envelope, isCurrent, signal)
     } finally {
-      if (sessionId) {
-        await deleteRecoveryQuietly(sessionId)
+      if (storage) {
+        await dropRunQuietly(storage)
       }
     }
     return
@@ -602,50 +557,24 @@ async function processEnvelope(
     }
     envelope = rewrapped
   }
-  const payload = opened.payload
-  const initialStatus = await getChatRecoveryStatus(payload.sessionId)
-  if (!isCurrent()) return
-  const replacedRecoveryDeletions: Promise<void>[] = []
-  for (const [sessionId, retained] of scannedRecoveries) {
+  const storage = opened.payload
+  const replacedRunDrops: Promise<void>[] = []
+  for (const [storageId, retained] of scannedRecoveries) {
     if (retained.chatId !== chatId || retained.turnId !== envelope.turnId) {
       continue
     }
     if (
-      sessionId === payload.sessionId &&
-      (initialStatus.state === 'processing' ||
-        initialStatus.state === 'complete')
+      storageId === storage.storageId &&
+      !retained.controller.signal.aborted
     ) {
-      if (!retained.controller.signal.aborted) {
-        return
-      }
-      scannedRecoveries.delete(sessionId)
-      continue
+      return
     }
-    scannedRecoveries.delete(sessionId)
+    scannedRecoveries.delete(storageId)
     retained.controller.abort()
     setChatRecoveryActive(retained.chatId, retained.turnId, false)
-    if (sessionId !== payload.sessionId) {
-      replacedRecoveryDeletions.push(deleteRecoveryQuietly(sessionId))
+    if (storageId !== storage.storageId) {
+      replacedRunDrops.push(dropRunQuietly(retained.storage))
     }
-  }
-  if (initialStatus.state === 'failed') {
-    try {
-      await removePendingRecovery(chatId, envelope, isCurrent, signal)
-    } finally {
-      await Promise.all([
-        deleteRecoveryQuietly(payload.sessionId),
-        ...replacedRecoveryDeletions,
-      ])
-    }
-    return
-  }
-  if (initialStatus.state === 'missing') {
-    try {
-      await removePendingRecovery(chatId, envelope, isCurrent, signal)
-    } finally {
-      await Promise.all(replacedRecoveryDeletions)
-    }
-    return
   }
 
   const recoveryController = new AbortController()
@@ -653,181 +582,88 @@ async function processEnvelope(
   const scannedRecovery: ScannedRecovery = {
     chatId,
     turnId: envelope.turnId,
-    sessionId: payload.sessionId,
+    storage,
     generation: recoveryGeneration,
     envelope,
     controller: recoveryController,
   }
   signal.addEventListener('abort', abortRecovery, { once: true })
-  scannedRecoveries.set(payload.sessionId, scannedRecovery)
+  scannedRecoveries.set(storage.storageId, scannedRecovery)
   setChatRecoveryActive(chatId, envelope.turnId, true)
   const recoverySignal = recoveryController.signal
   const isRecoveryCurrent = () =>
     isCurrent() &&
     !recoverySignal.aborted &&
-    scannedRecoveries.get(payload.sessionId) === scannedRecovery
-  let highestEncryptedBytes = 0
-  let highestPersistedBytes = initialStatus.persistedBytes
+    scannedRecoveries.get(storage.storageId) === scannedRecovery
   const markRecoveryProgress = () => {
     if (scanInFlight?.controller.signal === signal) {
       scanInFlight.lastProgressAt = Date.now()
     }
   }
-  const observePersistedBytes = (bytes: number) => {
-    if (bytes <= highestPersistedBytes) return
-    highestPersistedBytes = bytes
-    markRecoveryProgress()
-  }
-  const publishDraft = (message: Message): Message | undefined => {
-    if (!isRecoveryCurrent() || !hasVisibleRecoveryDraft(message)) {
-      return undefined
-    }
-    const draftMessage: Message = {
-      ...message,
-      role: 'assistant',
-      turnId: envelope.turnId,
-    }
+  const publishDraft = (message: Message): void => {
+    if (!isRecoveryCurrent() || !hasVisibleRecoveryDraft(message)) return
     setChatRecoveryDraft({
       chatId,
       turnId: envelope.turnId,
-      sessionId: payload.sessionId,
-      message: draftMessage,
+      storageId: storage.storageId,
+      message: { ...message, role: 'assistant', turnId: envelope.turnId },
     })
-    return draftMessage
+    markRecoveryProgress()
   }
   try {
     const storedChat = await indexedDBStorage.getChat(chatId)
     if (!isRecoveryCurrent()) return
-    const fallbackModelDisplayName = storedChat?.model
-      ? getKnownModelDisplayName(storedChat.model)
-      : undefined
     const recoveryDraft = getChatRecoveryDraft(chatId, envelope.turnId)
-    let presentationCheckpoint =
-      recoveryDraft?.sessionId === payload.sessionId
+    // What is already on screen for this turn. The replay starts at the run's
+    // first frame, so publishing from the beginning would visibly rewind the
+    // answer; nothing is published until the replay has caught up with it.
+    const checkpoint =
+      recoveryDraft?.storageId === storage.storageId
         ? recoveryDraft.message
-        : undefined
-    if (!presentationCheckpoint) {
-      presentationCheckpoint = (storedChat?.messages ?? []).find(
-        (message) =>
-          message.role === 'assistant' && message.turnId === envelope.turnId,
-      )
-    }
-    let streamAttempt = 0
-    while (isRecoveryCurrent()) {
-      const attempt = streamAttempt++
-      let consumedEncryptedBytes = 0
-      let measuredEncryptedBytes = false
-      let assistantMessage: Message
-      const attemptCheckpoint = presentationCheckpoint
-      let checkpointReached = !attemptCheckpoint
-      try {
-        const response = await fetchRecoveredChatResponse(
-          payload.sessionId,
-          recoveryTokenFromPayload(payload.recoveryToken),
-          recoverySignal,
-          (bytes) => {
-            measuredEncryptedBytes = true
-            consumedEncryptedBytes += bytes
-            if (consumedEncryptedBytes > highestEncryptedBytes) {
-              highestEncryptedBytes = consumedEncryptedBytes
-              markRecoveryProgress()
-            }
-          },
-        )
-        if (!isRecoveryCurrent()) return
-        if (!response.ok) {
-          await response.arrayBuffer()
-          if (!isRecoveryCurrent()) return
-          try {
-            await removePendingRecovery(
-              chatId,
-              envelope,
-              isRecoveryCurrent,
-              recoverySignal,
-            )
-          } finally {
-            await deleteRecoveryQuietly(payload.sessionId)
-          }
-          return
-        }
-        assistantMessage = await parseRichStreamingResponse(
-          chatChunkStreamFromSSE(response),
-          {
-            modelDisplayName: fallbackModelDisplayName,
-            resolveModelDisplayName: getKnownModelDisplayName,
-            onUpdate: (message) => {
-              if (!isRecoveryCurrent()) return
-              if (!checkpointReached && attemptCheckpoint) {
-                checkpointReached = sameRecoveredResponse(
-                  attemptCheckpoint,
-                  message,
-                )
-                return
-              }
-              const published = publishDraft(message)
-              if (
-                published &&
-                (!presentationCheckpoint ||
-                  !sameRecoveredResponse(presentationCheckpoint, published))
-              ) {
-                presentationCheckpoint = published
-                markRecoveryProgress()
-              }
-            },
-          },
-        )
-      } catch {
-        if (!isRecoveryCurrent()) return
-        const retryStatus = await getChatRecoveryStatus(payload.sessionId)
-        if (!isRecoveryCurrent()) return
-        observePersistedBytes(retryStatus.persistedBytes)
-        if (retryStatus.state === 'failed') {
-          try {
-            await removePendingRecovery(
-              chatId,
-              envelope,
-              isRecoveryCurrent,
-              recoverySignal,
-            )
-          } finally {
-            await deleteRecoveryQuietly(payload.sessionId)
-          }
-          return
-        }
-        if (retryStatus.state === 'missing') {
-          await removePendingRecovery(
-            chatId,
-            envelope,
-            isRecoveryCurrent,
-            recoverySignal,
+        : (storedChat?.messages ?? []).find(
+            (message) =>
+              message.role === 'assistant' &&
+              message.turnId === envelope.turnId,
           )
-          return
-        }
-        await waitForRecoveryRetry(attempt, recoverySignal)
-        continue
-      }
-      if (!isRecoveryCurrent()) return
-      const terminalStatus = await getChatRecoveryStatus(payload.sessionId)
-      if (!isRecoveryCurrent()) return
-      observePersistedBytes(terminalStatus.persistedBytes)
-      if (terminalStatus.state === 'processing') {
-        await waitForRecoveryRetry(attempt, recoverySignal)
-        continue
-      }
-      if (terminalStatus.state === 'failed') {
-        try {
-          await removePendingRecovery(
-            chatId,
-            envelope,
-            isRecoveryCurrent,
-            recoverySignal,
+    let checkpointReached = !checkpoint
+    const session = new RichStreamSession({
+      modelDisplayName: storedChat?.model
+        ? getKnownModelDisplayName(storedChat.model)
+        : undefined,
+      resolveModelDisplayName: getKnownModelDisplayName,
+    })
+    let assistantMessage: Message
+    // A run that ended in RUN_ERROR -- it failed, or it did not survive the
+    // harness that started it -- still said what it said, which is this
+    // turn's answer. Anything else that goes wrong here is this attempt's
+    // failure, not the run's.
+    let runFailed = false
+    try {
+      // One stream, however many connections it takes: a replay that breaks
+      // comes back at the frame it stopped on, so the run is rebuilt once.
+      for await (const event of resumeRun(storage, recoverySignal)) {
+        if (!isRecoveryCurrent()) return
+        // A replay still catching up to the checkpoint publishes nothing, but
+        // it is plainly getting somewhere: every frame counts as progress, or
+        // the scan's staleness watchdog aborts a recovery that is working.
+        markRecoveryProgress()
+        runFailed ||= event.type === 'RUN_ERROR'
+        if (!session.processEvent(event)) continue
+        const snapshot = session.snapshot()
+        if (!checkpointReached) {
+          checkpointReached = sameRecoveredResponse(
+            checkpoint as Message,
+            snapshot,
           )
-        } finally {
-          await deleteRecoveryQuietly(payload.sessionId)
+          continue
         }
-        return
+        publishDraft(snapshot)
       }
-      if (terminalStatus.state === 'missing') {
+      assistantMessage = session.complete(envelope.turnId)
+    } catch (error) {
+      if (error instanceof RunGoneError) {
+        // Nothing to come back to: the run ended with its caller attached and
+        // was never written down, or its log is already gone.
         await removePendingRecovery(
           chatId,
           envelope,
@@ -836,47 +672,57 @@ async function processEnvelope(
         )
         return
       }
-      if (
-        measuredEncryptedBytes &&
-        consumedEncryptedBytes < terminalStatus.persistedBytes
-      ) {
-        await waitForRecoveryRetry(attempt, recoverySignal)
-        continue
-      }
-      const titlePatch = await recoveredTitlePatch(
-        chatId,
-        envelope.turnId,
-        isRecoveryCurrent,
-      )
       if (!isRecoveryCurrent()) return
-      await completePendingRecovery(
-        chatId,
-        envelope,
-        {
-          ...assistantMessage,
-          turnId: envelope.turnId,
-        },
-        titlePatch,
-        isRecoveryCurrent,
-        recoverySignal,
-      )
-      if (scannedRecoveries.get(payload.sessionId) === scannedRecovery) {
-        scannedRecoveries.delete(payload.sessionId)
-        setChatRecoveryActive(chatId, envelope.turnId, false)
+      // A replay that could not be finished is retried by the next scan,
+      // envelope intact.
+      if (!runFailed) throw error
+      assistantMessage = session.interruptedSnapshot(envelope.turnId)
+      if (!hasVisibleAssistantMessage(assistantMessage)) {
+        try {
+          await removePendingRecovery(
+            chatId,
+            envelope,
+            isRecoveryCurrent,
+            recoverySignal,
+          )
+        } finally {
+          await dropRunQuietly(storage)
+        }
+        return
       }
-      await deleteRecoveryQuietly(payload.sessionId)
-      return
+    } finally {
+      session.close()
     }
+    if (!isRecoveryCurrent()) return
+    const titlePatch = await recoveredTitlePatch(
+      chatId,
+      envelope.turnId,
+      isRecoveryCurrent,
+    )
+    if (!isRecoveryCurrent()) return
+    await completePendingRecovery(
+      chatId,
+      envelope,
+      { ...assistantMessage, turnId: envelope.turnId },
+      titlePatch,
+      isRecoveryCurrent,
+      recoverySignal,
+    )
+    if (scannedRecoveries.get(storage.storageId) === scannedRecovery) {
+      scannedRecoveries.delete(storage.storageId)
+      setChatRecoveryActive(chatId, envelope.turnId, false)
+    }
+    await dropRunQuietly(storage)
   } finally {
     signal.removeEventListener('abort', abortRecovery)
     if (
-      scannedRecoveries.get(payload.sessionId) === scannedRecovery &&
+      scannedRecoveries.get(storage.storageId) === scannedRecovery &&
       isCurrent()
     ) {
-      scannedRecoveries.delete(payload.sessionId)
+      scannedRecoveries.delete(storage.storageId)
       setChatRecoveryActive(chatId, envelope.turnId, false)
     }
-    await Promise.all(replacedRecoveryDeletions)
+    await Promise.all(replacedRunDrops)
   }
 }
 
@@ -912,15 +758,15 @@ export function scanPendingChatRecoveries(
           turnKey(candidate.chatId, candidate.envelope.turnId),
         ),
       )
-      const orphanedRecoveryDeletions: Promise<void>[] = []
-      for (const [sessionId, retained] of scannedRecoveries) {
+      const orphanedRunDrops: Promise<void>[] = []
+      for (const [storageId, retained] of scannedRecoveries) {
         if (pendingTurnKeys.has(turnKey(retained.chatId, retained.turnId))) {
           continue
         }
-        scannedRecoveries.delete(sessionId)
+        scannedRecoveries.delete(storageId)
         retained.controller.abort()
         setChatRecoveryActive(retained.chatId, retained.turnId, false)
-        orphanedRecoveryDeletions.push(deleteRecoveryQuietly(sessionId))
+        orphanedRunDrops.push(dropRunQuietly(retained.storage))
       }
       pruneChatRecoveryDrafts(pendingTurnKeys)
       let nextIndex = 0
@@ -948,17 +794,6 @@ export function scanPendingChatRecoveries(
             ) {
               continue
             }
-            if (error instanceof ChatRecoveryError && !error.retryable) {
-              if (error.state === 'failed' || error.state === 'missing') {
-                await removePendingRecovery(
-                  candidate.chatId,
-                  candidate.envelope,
-                  () => generation === recoveryScanGeneration,
-                  controller.signal,
-                )
-              }
-              continue
-            }
             logError('Failed to recover encrypted chat response', error, {
               component: 'chat-recovery',
               action: 'scan',
@@ -972,7 +807,7 @@ export function scanPendingChatRecoveries(
           { length: Math.min(RECOVERY_SCAN_CONCURRENCY, pending.length) },
           worker,
         ),
-        ...orphanedRecoveryDeletions,
+        ...orphanedRunDrops,
       ])
     } finally {
       if (generation === recoveryScanGeneration) {

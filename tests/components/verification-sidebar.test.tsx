@@ -3,13 +3,14 @@ import { act, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  getCachedVerificationDocument: vi.fn(),
-  getVerificationDocument: vi.fn(),
+  getCachedHarnessVerificationDocument: vi.fn(),
+  getHarnessVerificationDocument: vi.fn(),
 }))
 
-vi.mock('@/services/inference/tinfoil-client', () => ({
-  getCachedVerificationDocument: mocks.getCachedVerificationDocument,
-  getVerificationDocument: mocks.getVerificationDocument,
+vi.mock('@/services/inference/agui/client', () => ({
+  getCachedHarnessVerificationDocument:
+    mocks.getCachedHarnessVerificationDocument,
+  getHarnessVerificationDocument: mocks.getHarnessVerificationDocument,
 }))
 
 vi.mock('@/utils/error-handling', () => ({
@@ -59,9 +60,9 @@ describe('VerifierSidebar', () => {
   let onLineSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
-    mocks.getCachedVerificationDocument.mockReset()
-    mocks.getCachedVerificationDocument.mockReturnValue(null)
-    mocks.getVerificationDocument.mockReset()
+    mocks.getCachedHarnessVerificationDocument.mockReset()
+    mocks.getCachedHarnessVerificationDocument.mockReturnValue(null)
+    mocks.getHarnessVerificationDocument.mockReset()
     onLineSpy = vi.spyOn(window.navigator, 'onLine', 'get')
   })
 
@@ -73,7 +74,7 @@ describe('VerifierSidebar', () => {
     // Offline: retry attempts short-circuit, but the cached attestation from
     // startup verification is still available without network work.
     onLineSpy.mockReturnValue(false)
-    mocks.getCachedVerificationDocument.mockReturnValue({
+    mocks.getCachedHarnessVerificationDocument.mockReturnValue({
       securityVerified: true,
     })
     const onVerificationComplete = vi.fn()
@@ -84,7 +85,7 @@ describe('VerifierSidebar', () => {
     expect(onVerificationComplete).toHaveBeenCalled()
     expect(onVerificationComplete).toHaveBeenCalledWith(true)
     expect(onVerificationComplete).not.toHaveBeenCalledWith(false)
-    expect(mocks.getVerificationDocument).not.toHaveBeenCalled()
+    expect(mocks.getHarnessVerificationDocument).not.toHaveBeenCalled()
   })
 
   it('reports offline exhaustion without starting initialization', async () => {
@@ -97,14 +98,14 @@ describe('VerifierSidebar', () => {
     await waitFor(() =>
       expect(onVerificationComplete).toHaveBeenCalledWith(false),
     )
-    expect(mocks.getVerificationDocument).not.toHaveBeenCalled()
-    expect(mocks.getCachedVerificationDocument).toHaveBeenCalledTimes(2)
+    expect(mocks.getHarnessVerificationDocument).not.toHaveBeenCalled()
+    expect(mocks.getCachedHarnessVerificationDocument).toHaveBeenCalledTimes(2)
   })
 
   it('keeps the retry lock through the cache fallback', async () => {
     onLineSpy.mockReturnValue(true)
-    mocks.getVerificationDocument.mockResolvedValue(null)
-    mocks.getCachedVerificationDocument.mockImplementation(() => {
+    mocks.getHarnessVerificationDocument.mockResolvedValue(null)
+    mocks.getCachedHarnessVerificationDocument.mockImplementation(() => {
       requestVerificationDocument()
       return null
     })
@@ -116,7 +117,7 @@ describe('VerifierSidebar', () => {
     await waitFor(() =>
       expect(onVerificationComplete).toHaveBeenCalledWith(false),
     )
-    expect(mocks.getVerificationDocument).toHaveBeenCalledOnce()
+    expect(mocks.getHarnessVerificationDocument).toHaveBeenCalledOnce()
     expect(onVerificationComplete).toHaveBeenCalledOnce()
   })
 })

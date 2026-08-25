@@ -65,8 +65,8 @@ describe('remote chat recovery schema', () => {
         chatWithEnvelope({
           ...envelope(17),
           storage: 'local',
-          sessionId: '0123456789abcdef0123456789abcdef',
-          recoveryToken: 'local-token',
+          storageId: '0123456789abcdef0123456789abcdef',
+          resumeSecret: 'fedcba9876543210fedcba9876543210',
         }),
       ).success,
     ).toBe(false)
