@@ -29,10 +29,11 @@ export class RichStreamSession {
 
   processEvent(event: AguiEvent): boolean {
     if (event.type === 'RUN_STARTED' && event.metadata?.model) {
-      const model = event.metadata.model
-      this.assembler.setModelDisplayName(
-        this.options.resolveModelDisplayName?.(model) ?? model,
+      // An unknown model keeps the caller's name; a raw id is not one.
+      const resolved = this.options.resolveModelDisplayName?.(
+        event.metadata.model,
       )
+      if (resolved) this.assembler.setModelDisplayName(resolved)
     }
     const normalized = this.normalizer.processEvent(event)
     for (const normalizedEvent of normalized) this.applyEvent(normalizedEvent)

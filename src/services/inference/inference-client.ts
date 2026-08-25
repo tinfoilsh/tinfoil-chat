@@ -333,12 +333,12 @@ export async function sendChatStream(
       }
     }
 
-    // A fresh pair per attempt: a storage id belongs to exactly one run, and
+    // A fresh pair per attempt: a session id belongs to exactly one run, and
     // an attempt that failed may still own the one it was given.
     const storage = recovery && !simulated ? newRunStorage() : null
     if (storage) {
-      input.storageId = storage.storageId
-      input.resumeSecret = storage.resumeSecret
+      input.sessionId = storage.sessionId
+      input.recoveryToken = storage.recoveryToken
       recovery?.onAttemptStarted(storage)
     }
 
@@ -374,7 +374,7 @@ export async function sendChatStream(
               {
                 component: 'inference-client',
                 action: 'sendChatStream.recoveryCleanup',
-                metadata: { storageId: attemptStorage.storageId },
+                metadata: { sessionId: attemptStorage.sessionId },
               },
             )
           }
@@ -390,7 +390,7 @@ export async function sendChatStream(
           logError('Failed to abandon chat recovery attempt', cleanupError, {
             component: 'inference-client',
             action: 'sendChatStream.recoveryCleanup',
-            metadata: { storageId: storage.storageId },
+            metadata: { sessionId: storage.sessionId },
           })
         }
       }

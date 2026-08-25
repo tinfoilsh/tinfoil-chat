@@ -220,13 +220,18 @@ function createOpenStream() {
     }
   })()
   ;(stream as AguiEventStream).recoveryReady = Promise.resolve()
+  const send = (event: AguiEvent) => {
+    chunks.push(event)
+    resume?.()
+    resume = undefined
+  }
   return {
     stream,
-    send: (event: AguiEvent) => {
-      chunks.push(event)
-      resume?.()
-      resume = undefined
-    },
+    sendText: (delta: string) =>
+      send({ type: 'TEXT_MESSAGE_CHUNK', messageId: 'm', delta }),
+    sendReasoning: (delta: string) =>
+      send({ type: 'REASONING_MESSAGE_CHUNK', messageId: 'm', delta }),
+    finish: () => send({ type: 'RUN_FINISHED' }),
     close: () => {
       closed = true
       resume?.()
@@ -293,11 +298,7 @@ describe('useChatMessaging stopped streams', () => {
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
 
-    stream.send({
-      type: 'REASONING_MESSAGE_CHUNK',
-      messageId: 'm',
-      delta: 'Partial reasoning',
-    })
+    stream.sendReasoning('Partial reasoning')
     await vi.waitFor(() =>
       expect(result.current.currentChat.messages.at(-1)?.thoughts).toBe(
         'Partial reasoning',
@@ -372,11 +373,7 @@ describe('useChatMessaging stopped streams', () => {
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
 
-    stream.send({
-      type: 'TEXT_MESSAGE_CHUNK',
-      messageId: 'm',
-      delta: 'Partial answer',
-    })
+    stream.sendText('Partial answer')
     await vi.waitFor(() =>
       expect(sessionSaveDraftMock).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -449,11 +446,7 @@ describe('useChatMessaging stopped streams', () => {
       ) as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({
-      type: 'TEXT_MESSAGE_CHUNK',
-      messageId: 'm',
-      delta: 'Partial answer',
-    })
+    stream.sendText('Partial answer')
     await vi.waitFor(() =>
       expect(result.current.currentChat.messages.at(-1)?.content).toBe(
         'Partial answer',
@@ -524,11 +517,7 @@ describe('useChatMessaging stopped streams', () => {
       ) as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({
-      type: 'TEXT_MESSAGE_CHUNK',
-      messageId: 'm',
-      delta: 'Partial answer',
-    })
+    stream.sendText('Partial answer')
     await vi.waitFor(() =>
       expect(result.current.currentChat.messages.at(-1)?.content).toBe(
         'Partial answer',
@@ -669,13 +658,10 @@ describe('useChatMessaging stopped streams', () => {
       expect.objectContaining({
         threadId: expect.any(String),
         runId: expect.any(String),
+        recovery: undefined,
       }),
     )
-    stream.send({
-      type: 'TEXT_MESSAGE_CHUNK',
-      messageId: 'm',
-      delta: 'Partial',
-    })
+    stream.sendText('Partial')
     await vi.waitFor(() =>
       expect(result.current.currentChat.messages.at(-1)?.content).toBe(
         'Partial',
@@ -698,18 +684,14 @@ describe('useChatMessaging stopped streams', () => {
       ])
     })
 
-    stream.send({
-      type: 'TEXT_MESSAGE_CHUNK',
-      messageId: 'm',
-      delta: ' response',
-    })
+    stream.sendText(' response')
     await vi.waitFor(() => {
       expect(result.current.currentChat.messages.at(-1)?.content).toBe(
         'Partial response',
       )
       expect(result.current.currentChat.isTemporary).toBe(false)
     })
-    stream.send({ type: 'RUN_FINISHED' })
+    stream.finish()
     stream.close()
     await act(async () => {
       await query
@@ -801,12 +783,8 @@ describe('useChatMessaging stopped streams', () => {
       ) as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({
-      type: 'TEXT_MESSAGE_CHUNK',
-      messageId: 'm',
-      delta: 'Complete answer',
-    })
-    stream.send({ type: 'RUN_FINISHED' })
+    stream.sendText('Complete answer')
+    stream.finish()
     stream.close()
 
     await act(async () => {
@@ -892,10 +870,11 @@ describe('useChatMessaging stopped streams', () => {
       expect.objectContaining({
         threadId: expect.any(String),
         runId: expect.any(String),
+        recovery: expect.any(Object),
       }),
     )
 
-    stream.send({ type: 'RUN_FINISHED' })
+    stream.finish()
     stream.close()
     await act(async () => {
       await query
@@ -971,7 +950,7 @@ describe('useChatMessaging stopped streams', () => {
       true,
     )
 
-    stream.send({ type: 'RUN_FINISHED' })
+    stream.finish()
     stream.close()
     await act(async () => {
       await query
@@ -1026,10 +1005,11 @@ describe('useChatMessaging stopped streams', () => {
       expect.objectContaining({
         threadId: expect.any(String),
         runId: expect.any(String),
+        recovery: undefined,
       }),
     )
 
-    stream.send({ type: 'RUN_FINISHED' })
+    stream.finish()
     stream.close()
     await act(async () => {
       await query
@@ -1078,7 +1058,7 @@ describe('useChatMessaging stopped streams', () => {
     )
     expect(saveChatMock).not.toHaveBeenCalled()
 
-    stream.send({ type: 'RUN_FINISHED' })
+    stream.finish()
     stream.close()
     await act(async () => {
       await query
@@ -1127,10 +1107,11 @@ describe('useChatMessaging stopped streams', () => {
       expect.objectContaining({
         threadId: expect.any(String),
         runId: expect.any(String),
+        recovery: undefined,
       }),
     )
 
-    stream.send({ type: 'RUN_FINISHED' })
+    stream.finish()
     stream.close()
     await act(async () => {
       await query
@@ -1177,11 +1158,7 @@ describe('useChatMessaging stopped streams', () => {
       query = result.current.messaging.handleQuery('Prompt') as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({
-      type: 'TEXT_MESSAGE_CHUNK',
-      messageId: 'm',
-      delta: 'Visible immediately',
-    })
+    stream.sendText('Visible immediately')
 
     await vi.waitFor(() =>
       expect(result.current.currentChat.messages.at(-1)).toMatchObject({
@@ -1190,7 +1167,7 @@ describe('useChatMessaging stopped streams', () => {
       }),
     )
 
-    stream.send({ type: 'RUN_FINISHED' })
+    stream.finish()
     stream.close()
     await vi.waitFor(() =>
       expect(completeLiveChatRecoveryMock).not.toHaveBeenCalled(),
@@ -1273,12 +1250,8 @@ describe('useChatMessaging stopped streams', () => {
       ) as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({
-      type: 'TEXT_MESSAGE_CHUNK',
-      messageId: 'm',
-      delta: 'Complete answer',
-    })
-    stream.send({ type: 'RUN_FINISHED' })
+    stream.sendText('Complete answer')
+    stream.finish()
     stream.close()
 
     await vi.waitFor(() =>
@@ -1341,12 +1314,8 @@ describe('useChatMessaging stopped streams', () => {
       query = result.current.messaging.handleQuery('Prompt') as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({
-      type: 'TEXT_MESSAGE_CHUNK',
-      messageId: 'm',
-      delta: 'Partial response',
-    })
-    stream.send({ type: 'RUN_FINISHED' })
+    stream.sendText('Partial response')
+    stream.finish()
     stream.close()
     await vi.waitFor(() => expect(recoveryWaitStarted).toBe(true))
 
@@ -1399,12 +1368,8 @@ describe('useChatMessaging stopped streams', () => {
       query = result.current.messaging.handleQuery('Prompt') as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({
-      type: 'TEXT_MESSAGE_CHUNK',
-      messageId: 'm',
-      delta: 'Complete response',
-    })
-    stream.send({ type: 'RUN_FINISHED' })
+    stream.sendText('Complete response')
+    stream.finish()
     stream.close()
     await act(async () => {
       await query
@@ -1480,12 +1445,8 @@ describe('useChatMessaging stopped streams', () => {
       ) as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({
-      type: 'TEXT_MESSAGE_CHUNK',
-      messageId: 'm',
-      delta: 'Complete answer',
-    })
-    stream.send({ type: 'RUN_FINISHED' })
+    stream.sendText('Complete answer')
+    stream.finish()
     stream.close()
     await vi.waitFor(() =>
       expect(completeLiveChatRecoveryMock).toHaveBeenCalled(),
@@ -1569,12 +1530,8 @@ describe('useChatMessaging stopped streams', () => {
       ) as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
-    stream.send({
-      type: 'TEXT_MESSAGE_CHUNK',
-      messageId: 'm',
-      delta: 'Complete answer',
-    })
-    stream.send({ type: 'RUN_FINISHED' })
+    stream.sendText('Complete answer')
+    stream.finish()
     stream.close()
     await vi.waitFor(() =>
       expect(completeLiveChatRecoveryMock).toHaveBeenCalled(),

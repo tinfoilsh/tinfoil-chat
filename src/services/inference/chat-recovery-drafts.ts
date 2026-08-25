@@ -3,7 +3,7 @@ import type { Message } from '@/components/chat/types'
 export type ChatRecoveryDraft = {
   chatId: string
   turnId: string
-  storageId: string
+  sessionId: string
   message: Message
 }
 
@@ -75,10 +75,10 @@ export function setChatRecoveryDraft(draft: ChatRecoveryDraft): void {
   publish()
 }
 
-export function clearChatRecoveryDraft(storageId: string): void {
+export function clearChatRecoveryDraft(sessionId: string): void {
   let changed = false
   for (const [key, draft] of drafts) {
-    if (draft.storageId === storageId) {
+    if (draft.sessionId === sessionId) {
       drafts.delete(key)
       changed = true
     }

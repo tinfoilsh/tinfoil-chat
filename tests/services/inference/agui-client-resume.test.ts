@@ -29,8 +29,8 @@ import {
 } from '@/services/inference/agui/client'
 
 const STORAGE: RunStorage = {
-  storageId: '0123456789abcdef0123456789abcdef',
-  resumeSecret: 'fedcba9876543210fedcba9876543210',
+  sessionId: '0123456789abcdef0123456789abcdef',
+  recoveryToken: 'fedcba9876543210fedcba9876543210',
 }
 
 /** An SSE body framed the way the harness frames one, ids and all. */
@@ -84,6 +84,7 @@ function requestOf(call: number) {
 
 describe('coming back to a run', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     vi.clearAllMocks()
     fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
@@ -93,10 +94,10 @@ describe('coming back to a run', () => {
     const first = newRunStorage()
     const second = newRunStorage()
 
-    expect(first.storageId).toMatch(/^[0-9a-f]{32}$/)
-    expect(first.resumeSecret).toMatch(/^[0-9a-f]{32}$/)
-    expect(first.storageId).not.toBe(first.resumeSecret)
-    expect(second.storageId).not.toBe(first.storageId)
+    expect(first.sessionId).toMatch(/^[0-9a-f]{32}$/)
+    expect(first.recoveryToken).toMatch(/^[0-9a-f]{32}$/)
+    expect(first.sessionId).not.toBe(first.recoveryToken)
+    expect(second.sessionId).not.toBe(first.sessionId)
   })
 
   it('asks for the run by its pair and takes the log from the top', async () => {
@@ -125,11 +126,18 @@ describe('coming back to a run', () => {
   })
 
   it('waits the interval it is given when the run has not framed anything yet', async () => {
+    vi.useFakeTimers()
     fetchMock
-      .mockResolvedValueOnce(refusal(503, { 'Retry-After': '0' }))
+      .mockResolvedValueOnce(refusal(503, { 'Retry-After': '2' }))
       .mockResolvedValueOnce(framed(0, [chunk('Recovered'), finished]))
 
-    await expect(collect()).resolves.toEqual([chunk('Recovered'), finished])
+    const events = collect()
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+    vi.useRealTimers()
+
+    await expect(events).resolves.toEqual([chunk('Recovered'), finished])
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
@@ -211,6 +219,16 @@ describe('dropping a stored run', () => {
     fetchMock.mockResolvedValueOnce(refusal(403))
 
     await expect(dropRun(STORAGE)).resolves.toBeUndefined()
+  })
+
+  it('retries an expired session key once', async () => {
+    fetchMock
+      .mockResolvedValueOnce(refusal(401))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+
+    await expect(dropRun(STORAGE)).resolves.toBeUndefined()
+    expect(invalidateSessionCache).toHaveBeenCalledTimes(1)
+    expect(requestOf(1).init.method).toBe('DELETE')
   })
 
   it('surfaces a store that would not drop the log', async () => {

@@ -2,6 +2,7 @@ import type { RunStorage } from '@/services/inference/agui/protocol'
 import { deriveTinfoilKeyIdHex } from '@/services/sync-enclave/tinfoil-key-id'
 import {
   RECOVERY_ENVELOPE_EXPIRY_MS,
+  RECOVERY_ENVELOPE_VERSION,
   type SyncedRecoveryEnvelope,
 } from '@/types/chat-recovery'
 import { uint8ArrayToBase64 } from '@/utils/binary-codec'
@@ -20,9 +21,8 @@ const SHA_256 = 'SHA-256'
 const CEK_BYTES = 32
 const NONCE_BYTES = 12
 const AES_GCM_TAG_BYTES = 16
-const RUN_STORAGE_HEX_LENGTH = 32
+const RUN_SESSION_HEX_LENGTH = 32
 const KEY_ID_HEX_LENGTH = 32
-const RECOVERY_ENVELOPE_VERSION = 1
 
 export const RECOVERY_ENVELOPE_HKDF_INFO = 'tinfoil-chat-recovery-envelope-v1'
 
@@ -78,22 +78,22 @@ function validatePayload(
   const keys = Object.keys(payload)
   if (
     keys.length !== 2 ||
-    !keys.includes('storageId') ||
-    !keys.includes('resumeSecret')
+    !keys.includes('sessionId') ||
+    !keys.includes('recoveryToken')
   ) {
     throw new Error(
-      'chat recovery: decrypted payload must contain exactly storageId and resumeSecret',
+      'chat recovery: decrypted payload must contain exactly sessionId and recoveryToken',
     )
   }
   requireRecoveryLowercaseHex(
-    payload.storageId as string,
-    RUN_STORAGE_HEX_LENGTH,
-    'storageId',
+    payload.sessionId as string,
+    RUN_SESSION_HEX_LENGTH,
+    'sessionId',
   )
   requireRecoveryLowercaseHex(
-    payload.resumeSecret as string,
-    RUN_STORAGE_HEX_LENGTH,
-    'resumeSecret',
+    payload.recoveryToken as string,
+    RUN_SESSION_HEX_LENGTH,
+    'recoveryToken',
   )
 }
 

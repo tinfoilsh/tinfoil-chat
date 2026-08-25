@@ -13,8 +13,8 @@ const CHAT_ID = 'chat_123'
 const TURN_ID = 'turn_123'
 const NOW = Date.parse('2026-07-20T12:00:00.000Z')
 const STORAGE = {
-  storageId: '0123456789abcdef0123456789abcdef',
-  resumeSecret: 'fedcba9876543210fedcba9876543210',
+  sessionId: '0123456789abcdef0123456789abcdef',
+  recoveryToken: 'fedcba9876543210fedcba9876543210',
 }
 
 function cek(fill: number): Uint8Array {
@@ -124,21 +124,21 @@ describe('chat recovery envelope crypto', () => {
         turnId: TURN_ID,
         storage: {
           ...STORAGE,
-          storageId: STORAGE.storageId.toUpperCase(),
+          sessionId: STORAGE.sessionId.toUpperCase(),
         },
         now: NOW,
       }),
-    ).rejects.toThrow('storageId')
+    ).rejects.toThrow('sessionId')
     await expect(
       encryptRecoveryEnvelope({
         cek: cek(1),
         userId: USER_ID,
         chatId: CHAT_ID,
         turnId: TURN_ID,
-        storage: { ...STORAGE, resumeSecret: 'ab' },
+        storage: { ...STORAGE, recoveryToken: 'ab' },
         now: NOW,
       }),
-    ).rejects.toThrow('resumeSecret')
+    ).rejects.toThrow('recoveryToken')
   })
 
   it('rewraps under a new CEK without changing recovery metadata', async () => {

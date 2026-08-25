@@ -429,13 +429,13 @@ describe('useChatMessaging cancelGeneration', () => {
         ...chat,
         pendingRecoveries: [
           {
-            v: 1,
+            v: 2,
             storage: 'local',
             turnId: 'turn-1',
             createdAt: new Date().toISOString(),
             expiresAt: new Date(Date.now() + 60_000).toISOString(),
-            storageId: '0123456789abcdef0123456789abcdef',
-            resumeSecret: 'fedcba9876543210fedcba9876543210',
+            sessionId: '0123456789abcdef0123456789abcdef',
+            recoveryToken: 'fedcba9876543210fedcba9876543210',
           },
         ],
       },

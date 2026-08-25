@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 function envelope(ciphertextBytes: number) {
   return {
-    v: 1,
+    v: 2,
     turnId: 'turn-1',
     keyId: '00'.repeat(16),
     createdAt: '2026-07-20T00:00:00.000Z',
@@ -59,14 +59,24 @@ describe('remote chat recovery schema', () => {
     ).toBe(false)
   })
 
+  it('drops an envelope from an older format without losing the chat', () => {
+    const parsed = RemoteChatPlaintextSchema.safeParse({
+      messages: [{ role: 'user', content: 'hi' }],
+      pendingRecoveries: [{ ...envelope(17), v: 1 }],
+    })
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.data?.pendingRecoveries).toEqual([])
+  })
+
   it('rejects the device-local recovery discriminator', () => {
     expect(
       RemoteChatPlaintextSchema.safeParse(
         chatWithEnvelope({
           ...envelope(17),
           storage: 'local',
-          storageId: '0123456789abcdef0123456789abcdef',
-          resumeSecret: 'fedcba9876543210fedcba9876543210',
+          sessionId: '0123456789abcdef0123456789abcdef',
+          recoveryToken: 'fedcba9876543210fedcba9876543210',
         }),
       ).success,
     ).toBe(false)

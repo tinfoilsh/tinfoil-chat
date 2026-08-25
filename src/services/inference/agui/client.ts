@@ -187,7 +187,7 @@ function hex128(): string {
 }
 
 export function newRunStorage(): RunStorage {
-  return { storageId: hex128(), resumeSecret: hex128() }
+  return { sessionId: hex128(), recoveryToken: hex128() }
 }
 
 /**
@@ -249,20 +249,27 @@ export async function* resumeRun(
   )
 }
 
-/** Drop a stored log once the caller has the answer. */
 export async function dropRun(storage: RunStorage): Promise<void> {
-  const apiKey = await getSessionToken()
-  const request: RequestInit = {
-    method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(storage),
+  const send = async (): Promise<Response> => {
+    const request: RequestInit = {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${await getSessionToken()}`,
+      },
+      body: JSON.stringify(storage),
+    }
+    return IS_DEV
+      ? fetch(DEV_AGUI_URL, request)
+      : (await harnessClient()).fetch(`${HARNESS_URL}/agui`, request)
   }
-  const response = IS_DEV
-    ? await fetch(DEV_AGUI_URL, request)
-    : await (await harnessClient()).fetch(`${HARNESS_URL}/agui`, request)
+
+  let response = await send()
+  if (response.status === 401) {
+    await discard(response)
+    invalidateSessionCache()
+    response = await send()
+  }
   // A log that cannot be opened is a log the caller asked to be gone.
   if (!response.ok && response.status !== 403) throw await refusal(response)
 }

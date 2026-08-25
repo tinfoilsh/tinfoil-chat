@@ -153,9 +153,11 @@ describe('sseJsonStream', () => {
     expect(ids).toEqual([7])
   })
 
-  it('closes out a frame the stream ends without terminating', async () => {
-    const results = await collectAll(mockResponse(['data: {"id":"last"}']))
-    expect(results).toEqual([{ id: 'last' }])
+  it('drops a frame the stream ends without terminating', async () => {
+    const results = await collectAll(
+      mockResponse(['data: {"id":"first"}\n\ndata: {"id":"cut"}']),
+    )
+    expect(results).toEqual([{ id: 'first' }])
   })
 
   it('preserves response stream errors', async () => {

@@ -137,6 +137,44 @@ describe('agui normalizer', () => {
     })
   })
 
+  it('completes a search whose result carries no usable entries', () => {
+    for (const results of [
+      'none',
+      [null, 42, { title: 'no url' }, { url: '' }],
+    ]) {
+      const events = normalize([
+        ...call('c1', 'web_search', '{"query":"amd"}'),
+        {
+          type: 'TOOL_CALL_RESULT',
+          toolCallId: 'c1',
+          content: JSON.stringify({ results }),
+        },
+      ])
+      expect(events.at(-1)).toEqual({
+        type: 'web_search',
+        id: 'c1',
+        status: 'completed',
+        sources: [],
+      })
+    }
+  })
+
+  it('keeps only the entries of a mixed result that name a source', () => {
+    const events = normalize([
+      ...call('c1', 'web_search', '{"query":"amd"}'),
+      {
+        type: 'TOOL_CALL_RESULT',
+        toolCallId: 'c1',
+        content: JSON.stringify({
+          results: [null, { url: 'https://amd.com/a', title: 7 }],
+        }),
+      },
+    ])
+    expect(events.at(-1)).toMatchObject({
+      sources: [{ url: 'https://amd.com/a', title: undefined }],
+    })
+  })
+
   it('fails a search whose result is the error the model read', () => {
     const events = normalize([
       ...call('c1', 'web_search', '{"query":"amd"}'),
@@ -270,7 +308,9 @@ describe('agui normalizer', () => {
   it('refuses a run that ended without finishing', () => {
     const normalizer = createAguiNormalizer()
     normalizer.processEvent(text('m', 'partial'))
-    expect(() => normalizer.assertComplete()).toThrow()
+    expect(() => normalizer.assertComplete()).toThrow(
+      expect.objectContaining({ name: 'ChatError', code: 'FETCH_ERROR' }),
+    )
     normalizer.processEvent({ type: 'RUN_FINISHED' })
     expect(() => normalizer.assertComplete()).not.toThrow()
   })

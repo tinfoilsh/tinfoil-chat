@@ -118,16 +118,16 @@ import {
 } from '@/services/inference/chat-recovery'
 
 const STORAGE: RunStorage = {
-  storageId: '0123456789abcdef0123456789abcdef',
-  resumeSecret: 'fedcba9876543210fedcba9876543210',
+  sessionId: '0123456789abcdef0123456789abcdef',
+  recoveryToken: 'fedcba9876543210fedcba9876543210',
 }
 const OTHER_STORAGE: RunStorage = {
-  storageId: 'abcdefabcdefabcdefabcdefabcdefab',
-  resumeSecret: '00112233445566778899aabbccddeeff',
+  sessionId: 'abcdefabcdefabcdefabcdefabcdefab',
+  recoveryToken: '00112233445566778899aabbccddeeff',
 }
 const RECOVERY_SCAN_MAX_AGE_MS = 120_000
 const envelope: PendingRecoveryEnvelope = {
-  v: 1,
+  v: 2,
   turnId: 'turn-1',
   keyId: '0123456789abcdef0123456789abcdef',
   createdAt: new Date().toISOString(),
@@ -381,7 +381,7 @@ describe('chat recovery lifecycle', () => {
     expect(setChatRecoveryDraft).toHaveBeenCalledWith({
       chatId: 'chat-1',
       turnId: 'turn-1',
-      storageId: STORAGE.storageId,
+      sessionId: STORAGE.sessionId,
       message: expect.objectContaining({
         role: 'assistant',
         content: 'Recover',
@@ -554,6 +554,39 @@ describe('chat recovery lifecycle', () => {
     expect(dropRun).toHaveBeenCalledWith(STORAGE)
   })
 
+  it('drops the envelope for a run that ended having said nothing', async () => {
+    pendingChat()
+    resumeRun.mockImplementation(replays(frames([])))
+
+    await scanPendingChatRecoveries('user-1')
+
+    expect(completePendingRecovery).not.toHaveBeenCalled()
+    expect(removePendingRecovery).toHaveBeenCalledWith(
+      'chat-1',
+      expect.objectContaining({ turnId: 'turn-1' }),
+      expect.any(Function),
+      expect.any(AbortSignal),
+    )
+    expect(dropRun).toHaveBeenCalledWith(STORAGE)
+  })
+
+  it('drops an envelope sealed before the current format', async () => {
+    // A v1 envelope names a pair the previous harness minted: nothing it
+    // points at can be resumed, so it goes without being opened.
+    pendingChat([{ ...envelope, v: 1 }])
+
+    await scanPendingChatRecoveries('user-1')
+
+    expect(decryptRecoveryEnvelope).not.toHaveBeenCalled()
+    expect(resumeRun).not.toHaveBeenCalled()
+    expect(removePendingRecovery).toHaveBeenCalledWith(
+      'chat-1',
+      expect.objectContaining({ v: 1, turnId: 'turn-1' }),
+      expect.any(Function),
+      expect.any(AbortSignal),
+    )
+  })
+
   it('drops the envelope when the harness will not open the log', async () => {
     // A run that finished with its caller attached was never written down, so
     // there is nothing to come back to and nothing to drop.
@@ -611,7 +644,7 @@ describe('chat recovery lifecycle', () => {
     getChatRecoveryDraft.mockReturnValue({
       chatId: 'chat-1',
       turnId: 'turn-1',
-      storageId: STORAGE.storageId,
+      sessionId: STORAGE.sessionId,
       message: {
         role: 'assistant',
         content: 'Already shown',
@@ -637,7 +670,7 @@ describe('chat recovery lifecycle', () => {
     getChatRecoveryDraft.mockReturnValue({
       chatId: 'chat-1',
       turnId: 'turn-1',
-      storageId: OTHER_STORAGE.storageId,
+      sessionId: OTHER_STORAGE.sessionId,
       message: {
         role: 'assistant',
         content: 'Output from a replaced run',
@@ -651,7 +684,7 @@ describe('chat recovery lifecycle', () => {
     expect(setChatRecoveryDraft).toHaveBeenCalledTimes(1)
     expect(setChatRecoveryDraft).toHaveBeenCalledWith(
       expect.objectContaining({
-        storageId: STORAGE.storageId,
+        sessionId: STORAGE.sessionId,
         message: expect.objectContaining({ content: 'New run output' }),
       }),
     )
@@ -742,7 +775,7 @@ describe('chat recovery lifecycle', () => {
     getChatRecoveryDraft.mockReturnValue({
       chatId: 'chat-1',
       turnId: 'turn-1',
-      storageId: STORAGE.storageId,
+      sessionId: STORAGE.sessionId,
       message: {
         role: 'assistant',
         content: '',
@@ -820,7 +853,7 @@ describe('chat recovery lifecycle', () => {
         isLocalOnly: true,
         pendingRecoveries: [
           {
-            v: 1,
+            v: 2,
             storage: 'local',
             turnId: 'turn-1',
             createdAt: new Date().toISOString(),

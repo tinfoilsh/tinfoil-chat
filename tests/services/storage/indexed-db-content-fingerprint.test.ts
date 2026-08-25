@@ -93,7 +93,7 @@ describe('chatContentFingerprint', () => {
 
   it('changes when only pending recovery envelopes change', () => {
     const recovery = {
-      v: 1,
+      v: 2,
       turnId: 'turn-1',
       keyId: 'a'.repeat(32),
       createdAt: '2026-07-20T00:00:00.000Z',

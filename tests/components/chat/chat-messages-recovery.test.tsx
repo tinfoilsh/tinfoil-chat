@@ -56,7 +56,7 @@ vi.mock('@/components/chat/PrintableChat', () => ({
 }))
 
 const recovery = {
-  v: 1 as const,
+  v: 2 as const,
   turnId: 'turn-1',
   keyId: '0'.repeat(32),
   createdAt: '2026-07-21T00:00:00.000Z',

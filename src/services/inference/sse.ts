@@ -26,10 +26,8 @@ export async function* sseJsonStream<T>(
       else buffer += decoder.decode(value, { stream: true })
 
       const lines = buffer.split(/\r?\n/)
-      // A stream that stops mid-frame has nothing more coming, so the last
-      // frame is closed out here rather than dropped.
-      buffer = done ? '' : (lines.pop() ?? '')
-      if (done) lines.push('')
+      // Only a blank line closes a frame; a cut tail is replayed on resume.
+      if (!done) buffer = lines.pop() ?? ''
 
       for (const rawLine of lines) {
         const line = rawLine.trim()

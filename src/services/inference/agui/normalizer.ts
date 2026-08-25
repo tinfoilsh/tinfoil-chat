@@ -176,7 +176,10 @@ export function createAguiNormalizer(): AguiNormalizer {
 
     assertComplete(): void {
       if (!finished) {
-        throw new Error('Chat response ended before its completion marker')
+        throw new ChatError(
+          'Chat response ended before its completion marker',
+          'FETCH_ERROR',
+        )
       }
     },
   }
@@ -188,19 +191,21 @@ function isRendered(name: string): boolean {
 
 interface SearchResult {
   error?: string
-  results?: Array<{ url?: string; title?: string }>
+  results?: unknown
 }
 
+// A parsed tool result is not a checked one; a bad shape must not kill the run.
 function sourcesOf(result: SearchResult | null): Array<{
   url: string
   title?: string
 }> {
-  if (!result?.results) return []
-  return result.results
-    .filter((entry): entry is { url: string; title?: string } =>
-      Boolean(entry.url),
-    )
-    .map((entry) => ({ url: entry.url, title: entry.title }))
+  if (!Array.isArray(result?.results)) return []
+  return result.results.flatMap((entry: unknown) => {
+    const { url, title } = (entry ?? {}) as { url?: unknown; title?: unknown }
+    return typeof url === 'string' && url
+      ? [{ url, title: typeof title === 'string' ? title : undefined }]
+      : []
+  })
 }
 
 function appended(patch: AguiJsonPatch[]): string[] {

@@ -31,13 +31,13 @@ describe('chat recovery drafts', () => {
     setChatRecoveryDraft({
       chatId: 'chat-1',
       turnId: 'turn-1',
-      storageId: 'storage-1',
+      sessionId: 'storage-1',
       message: message('First replay'),
     })
     setChatRecoveryDraft({
       chatId: 'chat-1',
       turnId: 'turn-1',
-      storageId: 'storage-2',
+      sessionId: 'storage-2',
       message: message('Reconnected replay'),
     })
 
@@ -45,7 +45,7 @@ describe('chat recovery drafts', () => {
 
     expect(getChatRecoveryDraftSnapshot()).toEqual([
       expect.objectContaining({
-        storageId: 'storage-2',
+        sessionId: 'storage-2',
         message: expect.objectContaining({ content: 'Reconnected replay' }),
       }),
     ])
@@ -57,7 +57,7 @@ describe('chat recovery drafts', () => {
     setChatRecoveryDraft({
       chatId: 'chat-1',
       turnId: 'turn-1',
-      storageId: 'storage-1',
+      sessionId: 'storage-1',
       message: message('Partial'),
     })
 

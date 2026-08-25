@@ -68,7 +68,7 @@ import {
 import { GridTexture } from '@/components/ui/grid-texture'
 import { LogoLoading } from '@/components/ui/logo-loading'
 import { cn } from '@/components/ui/utils'
-import { CLOUD_SYNC } from '@/config'
+import { CLOUD_SYNC, IS_DEV } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { usePasskeyBackup } from '@/hooks/use-passkey-backup'
 import { usePinnedChats } from '@/hooks/use-pinned-chats'
@@ -1511,7 +1511,8 @@ export function ChatInterface({
                 ? 'failed'
                 : 'pending',
           )
-        } else if (active) {
+        } else if (active && !IS_DEV) {
+          // Dev attests nothing, so an absent document is not a failure.
           setVerificationStatus('failed')
         }
       } catch (error) {

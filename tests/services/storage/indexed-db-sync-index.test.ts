@@ -467,7 +467,7 @@ describe('IndexedDB pending sync index', () => {
     const storage = new IndexedDBStorage()
     await storage.initialize()
     const pendingRecovery = {
-      v: 1 as const,
+      v: 2 as const,
       turnId: 'turn-1',
       keyId: '0123456789abcdef0123456789abcdef',
       createdAt: '2026-08-12T00:00:00.000Z',

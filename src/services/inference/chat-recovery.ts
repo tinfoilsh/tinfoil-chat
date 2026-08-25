@@ -12,6 +12,7 @@ import { indexedDBStorage } from '@/services/storage/indexed-db'
 import {
   isLocalRecoveryEnvelope,
   RECOVERY_ENVELOPE_EXPIRY_MS,
+  RECOVERY_ENVELOPE_VERSION,
   samePendingRecoveryEnvelope,
   type PendingRecoveryEnvelope,
   type SyncedRecoveryEnvelope,
@@ -147,8 +148,8 @@ async function openEnvelope(
     return {
       cek: null,
       payload: {
-        storageId: envelope.storageId,
-        resumeSecret: envelope.resumeSecret,
+        sessionId: envelope.sessionId,
+        recoveryToken: envelope.recoveryToken,
       },
       usesPrimary: true,
     }
@@ -195,7 +196,7 @@ export function startChatRecoveryAttempt(
   turnId: string,
   storage: RunStorage,
 ): void {
-  activeRecoveries.set(storage.storageId, {
+  activeRecoveries.set(storage.sessionId, {
     chatId,
     turnId,
     storage,
@@ -210,12 +211,12 @@ export async function persistChatRecoveryEnvelope(args: {
   storage: RunStorage
 }): Promise<void> {
   const key = turnKey(args.chatId, args.turnId)
-  const active = activeRecoveries.get(args.storage.storageId)
+  const active = activeRecoveries.get(args.storage.sessionId)
   const isCurrentAttempt = () =>
     active?.generation === recoveryGeneration &&
     active.chatId === args.chatId &&
     active.turnId === args.turnId &&
-    activeRecoveries.get(args.storage.storageId) === active
+    activeRecoveries.get(args.storage.sessionId) === active
   if (!active || !isCurrentAttempt() || cancelledTurns.has(key)) {
     await dropRunQuietly(args.storage)
     throw new DOMException('Aborted', 'AbortError')
@@ -230,7 +231,7 @@ export async function persistChatRecoveryEnvelope(args: {
   const now = new Date()
   const envelope: PendingRecoveryEnvelope = localOnly
     ? {
-        v: 1,
+        v: RECOVERY_ENVELOPE_VERSION,
         storage: 'local',
         turnId: args.turnId,
         createdAt: now.toISOString(),
@@ -277,8 +278,8 @@ export async function persistChatRecoveryEnvelope(args: {
 export async function abandonChatRecoveryAttempt(
   storage: RunStorage,
 ): Promise<void> {
-  const active = activeRecoveries.get(storage.storageId)
-  activeRecoveries.delete(storage.storageId)
+  const active = activeRecoveries.get(storage.sessionId)
+  activeRecoveries.delete(storage.sessionId)
   try {
     if (active) {
       const isCurrent = () => active.generation === recoveryGeneration
@@ -303,7 +304,7 @@ export async function completeLiveChatRecovery(args: {
   )
   const isCurrent = () =>
     active?.generation === recoveryGeneration &&
-    activeRecoveries.get(active.storage.storageId) === active
+    activeRecoveries.get(active.storage.sessionId) === active
   if (!active?.envelope || !isCurrent()) {
     throw new DOMException('Aborted', 'AbortError')
   }
@@ -314,7 +315,7 @@ export async function completeLiveChatRecovery(args: {
     args.chatPatch,
     isCurrent,
   )
-  activeRecoveries.delete(active.storage.storageId)
+  activeRecoveries.delete(active.storage.sessionId)
   await dropRunQuietly(active.storage)
   return {
     ...completedChat,
@@ -345,11 +346,11 @@ export async function cancelChatRecovery(
   )
   for (const recovery of active) {
     cancelledTurns.add(turnKey(recovery.chatId, recovery.turnId))
-    activeRecoveries.delete(recovery.storage.storageId)
+    activeRecoveries.delete(recovery.storage.sessionId)
   }
   for (const recovery of scanned) {
     cancelledTurns.add(turnKey(recovery.chatId, recovery.turnId))
-    scannedRecoveries.delete(recovery.storage.storageId)
+    scannedRecoveries.delete(recovery.storage.sessionId)
     recovery.controller.abort()
     setChatRecoveryActive(recovery.chatId, recovery.turnId, false)
   }
@@ -373,7 +374,7 @@ export async function cancelChatRecovery(
         recovery.turnId,
       )
       const draftMessage =
-        recoveryDraft?.storageId === recovery.storage.storageId
+        recoveryDraft?.sessionId === recovery.storage.sessionId
           ? recoveryDraft.message
           : undefined
       const stoppedMessage =
@@ -473,7 +474,7 @@ export function releaseActiveChatRecovery(
   // stream's just-registered recovery attempt.
   for (const recovery of activeRecoveries.values()) {
     if (recovery.chatId === chatId && recovery.turnId === turnId) {
-      activeRecoveries.delete(recovery.storage.storageId)
+      activeRecoveries.delete(recovery.storage.sessionId)
     }
   }
 }
@@ -497,6 +498,15 @@ async function processEnvelope(
       (active) => active.chatId === chatId && active.turnId === envelope.turnId,
     )
   ) {
+    return
+  }
+
+  // Sealed by a client that minted a different pair. What it names cannot be
+  // resumed here, so it goes now rather than failing to open on every scan
+  // until it expires. The version is read off persisted JSON, which the type
+  // describes but does not enforce.
+  if ((envelope.v as number) !== RECOVERY_ENVELOPE_VERSION) {
+    await removePendingRecovery(chatId, envelope, isCurrent, signal)
     return
   }
 
@@ -559,20 +569,20 @@ async function processEnvelope(
   }
   const storage = opened.payload
   const replacedRunDrops: Promise<void>[] = []
-  for (const [storageId, retained] of scannedRecoveries) {
+  for (const [sessionId, retained] of scannedRecoveries) {
     if (retained.chatId !== chatId || retained.turnId !== envelope.turnId) {
       continue
     }
     if (
-      storageId === storage.storageId &&
+      sessionId === storage.sessionId &&
       !retained.controller.signal.aborted
     ) {
       return
     }
-    scannedRecoveries.delete(storageId)
+    scannedRecoveries.delete(sessionId)
     retained.controller.abort()
     setChatRecoveryActive(retained.chatId, retained.turnId, false)
-    if (storageId !== storage.storageId) {
+    if (sessionId !== storage.sessionId) {
       replacedRunDrops.push(dropRunQuietly(retained.storage))
     }
   }
@@ -588,13 +598,13 @@ async function processEnvelope(
     controller: recoveryController,
   }
   signal.addEventListener('abort', abortRecovery, { once: true })
-  scannedRecoveries.set(storage.storageId, scannedRecovery)
+  scannedRecoveries.set(storage.sessionId, scannedRecovery)
   setChatRecoveryActive(chatId, envelope.turnId, true)
   const recoverySignal = recoveryController.signal
   const isRecoveryCurrent = () =>
     isCurrent() &&
     !recoverySignal.aborted &&
-    scannedRecoveries.get(storage.storageId) === scannedRecovery
+    scannedRecoveries.get(storage.sessionId) === scannedRecovery
   const markRecoveryProgress = () => {
     if (scanInFlight?.controller.signal === signal) {
       scanInFlight.lastProgressAt = Date.now()
@@ -605,10 +615,9 @@ async function processEnvelope(
     setChatRecoveryDraft({
       chatId,
       turnId: envelope.turnId,
-      storageId: storage.storageId,
+      sessionId: storage.sessionId,
       message: { ...message, role: 'assistant', turnId: envelope.turnId },
     })
-    markRecoveryProgress()
   }
   try {
     const storedChat = await indexedDBStorage.getChat(chatId)
@@ -618,7 +627,7 @@ async function processEnvelope(
     // first frame, so publishing from the beginning would visibly rewind the
     // answer; nothing is published until the replay has caught up with it.
     const checkpoint =
-      recoveryDraft?.storageId === storage.storageId
+      recoveryDraft?.sessionId === storage.sessionId
         ? recoveryDraft.message
         : (storedChat?.messages ?? []).find(
             (message) =>
@@ -677,21 +686,22 @@ async function processEnvelope(
       // envelope intact.
       if (!runFailed) throw error
       assistantMessage = session.interruptedSnapshot(envelope.turnId)
-      if (!hasVisibleAssistantMessage(assistantMessage)) {
-        try {
-          await removePendingRecovery(
-            chatId,
-            envelope,
-            isRecoveryCurrent,
-            recoverySignal,
-          )
-        } finally {
-          await dropRunQuietly(storage)
-        }
-        return
-      }
     } finally {
       session.close()
+    }
+    // A run with nothing to show would persist as an empty assistant message.
+    if (!hasVisibleAssistantMessage(assistantMessage)) {
+      try {
+        await removePendingRecovery(
+          chatId,
+          envelope,
+          isRecoveryCurrent,
+          recoverySignal,
+        )
+      } finally {
+        await dropRunQuietly(storage)
+      }
+      return
     }
     if (!isRecoveryCurrent()) return
     const titlePatch = await recoveredTitlePatch(
@@ -708,18 +718,18 @@ async function processEnvelope(
       isRecoveryCurrent,
       recoverySignal,
     )
-    if (scannedRecoveries.get(storage.storageId) === scannedRecovery) {
-      scannedRecoveries.delete(storage.storageId)
+    if (scannedRecoveries.get(storage.sessionId) === scannedRecovery) {
+      scannedRecoveries.delete(storage.sessionId)
       setChatRecoveryActive(chatId, envelope.turnId, false)
     }
     await dropRunQuietly(storage)
   } finally {
     signal.removeEventListener('abort', abortRecovery)
     if (
-      scannedRecoveries.get(storage.storageId) === scannedRecovery &&
+      scannedRecoveries.get(storage.sessionId) === scannedRecovery &&
       isCurrent()
     ) {
-      scannedRecoveries.delete(storage.storageId)
+      scannedRecoveries.delete(storage.sessionId)
       setChatRecoveryActive(chatId, envelope.turnId, false)
     }
     await Promise.all(replacedRunDrops)
@@ -759,11 +769,11 @@ export function scanPendingChatRecoveries(
         ),
       )
       const orphanedRunDrops: Promise<void>[] = []
-      for (const [storageId, retained] of scannedRecoveries) {
+      for (const [sessionId, retained] of scannedRecoveries) {
         if (pendingTurnKeys.has(turnKey(retained.chatId, retained.turnId))) {
           continue
         }
-        scannedRecoveries.delete(storageId)
+        scannedRecoveries.delete(sessionId)
         retained.controller.abort()
         setChatRecoveryActive(retained.chatId, retained.turnId, false)
         orphanedRunDrops.push(dropRunQuietly(retained.storage))

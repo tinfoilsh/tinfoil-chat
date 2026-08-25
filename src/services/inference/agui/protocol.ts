@@ -41,8 +41,8 @@ export interface AguiRenderedTool {
  * the secret, so opening the log is the whole of the authorization to read it.
  */
 export interface RunStorage {
-  storageId: string
-  resumeSecret: string
+  sessionId: string
+  recoveryToken: string
 }
 
 export interface RunAgentInput extends Partial<RunStorage> {

@@ -308,13 +308,13 @@ describe('CloudStorageService auth readiness', () => {
       messages: [{ role: 'user', content: 'hi' }],
       pendingRecoveries: [
         {
-          v: 1,
+          v: 2,
           storage: 'local',
           turnId: 'turn-1',
           createdAt: '2026-01-01T00:00:00.000Z',
           expiresAt: '2026-01-02T00:00:00.000Z',
-          storageId: '0123456789abcdef0123456789abcdef',
-          resumeSecret: 'fedcba9876543210fedcba9876543210',
+          sessionId: '0123456789abcdef0123456789abcdef',
+          recoveryToken: 'fedcba9876543210fedcba9876543210',
         },
       ],
       createdAt: '2026-01-01T00:00:00.000Z',
@@ -326,7 +326,9 @@ describe('CloudStorageService auth readiness', () => {
       new TextDecoder().decode(mockEnclavePush.mock.calls[0][0].plaintext),
     )
     expect(plaintext.pendingRecoveries).toBeUndefined()
-    expect(JSON.stringify(plaintext)).not.toContain('sensitive-local-token')
+    expect(JSON.stringify(plaintext)).not.toContain(
+      'fedcba9876543210fedcba9876543210',
+    )
   })
 
   it('reuses stable attachment idempotency keys across upload retries', async () => {
