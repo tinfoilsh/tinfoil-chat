@@ -676,7 +676,7 @@ export function ChatInterface({
 
   // Load projects for move to project functionality
   const { projects } = useProjects({
-    autoLoad: isSignedIn && isCloudSyncEnabled() && isPremium,
+    autoLoad: isSignedIn && isCloudSyncEnabled(),
   })
 
   // Reasoning controls — graded effort for models that support it, on/off

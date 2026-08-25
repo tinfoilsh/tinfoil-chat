@@ -44,7 +44,6 @@ import { FaLock } from 'react-icons/fa6'
 import { GoSidebarCollapse, GoSidebarExpand } from 'react-icons/go'
 import { IoChatbubblesOutline } from 'react-icons/io5'
 import {
-  PiFolder,
   PiMicrophone,
   PiNotePencilLight,
   PiPushPin,
@@ -351,7 +350,7 @@ export function ChatSidebar({
     projects,
     loading: projectsLoading,
     refresh: refreshProjects,
-  } = useProjects({ autoLoad: isSignedIn && cloudSyncEnabled && isPremium })
+  } = useProjects({ autoLoad: isSignedIn && cloudSyncEnabled })
 
   const { deleteProject, activeProject } = useProject()
 
@@ -592,11 +591,11 @@ export function ChatSidebar({
 
   // Drives both the Projects section's visibility and the Chats header's
   // sticky offset so the two can never drift apart.
-  const hasPinnedProjectsHeader = Boolean(isSignedIn && isPremium)
+  const hasPinnedProjectsHeader = Boolean(isSignedIn)
 
-  // Heal stale accordion state: a stored Projects=true flag (e.g. from a
-  // premium session) would otherwise leave a signed-out/non-premium user
-  // with no Projects section AND a collapsed chat list — an empty sidebar.
+  // Heal stale accordion state: a stored Projects=true flag would otherwise
+  // leave a signed-out user with no Projects section AND a collapsed chat
+  // list — an empty sidebar.
   useEffect(() => {
     if (isAuthLoaded && !hasPinnedProjectsHeader && isProjectsExpanded) {
       setIsProjectsExpanded(false)
@@ -994,8 +993,8 @@ export function ChatSidebar({
                 </div>
               )}
 
-              {/* Projects button - only for premium users */}
-              {isSignedIn && isPremium && (
+              {/* Projects button - only for signed-in users */}
+              {isSignedIn && (
                 <div className="group relative">
                   <button
                     onClick={() => {
@@ -1182,11 +1181,6 @@ export function ChatSidebar({
                   <div className="flex items-center gap-3 text-xs text-content-secondary">
                     <PiSparkle className="h-4 w-4 flex-shrink-0 text-content-muted" />
                     <span>No daily request limits</span>
-                  </div>
-
-                  <div className="flex items-center gap-3 text-xs text-content-secondary">
-                    <PiFolder className="h-4 w-4 flex-shrink-0 text-content-muted" />
-                    <span>Create projects to chat with files</span>
                   </div>
                 </div>
                 <div className="mt-4">
@@ -1435,7 +1429,7 @@ export function ChatSidebar({
             </section>
           )}
 
-          {/* Projects dropdown - show for premium users. The header and
+          {/* Projects dropdown - show for signed-in users. The header and
               list are direct children of the scroll container (no section
               wrapper) so the sticky header pins to the scroll area itself
               and stays visible for the rest of the scroll. */}
@@ -2374,7 +2368,6 @@ export function ChatSidebar({
                         showMoveToProject={
                           !isSearchActive &&
                           isSignedIn &&
-                          isPremium &&
                           cloudSyncEnabled &&
                           !!onMoveChatToProject
                         }

@@ -1606,10 +1606,10 @@ export function SettingsModal({
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (!isPremium) {
+    if (!isSignedIn) {
       toast({
-        title: 'Premium required',
-        description: 'Project import is only available for premium users',
+        title: 'Sign in required',
+        description: 'Sign in to import projects',
         variant: 'destructive',
       })
       e.target.value = ''
@@ -2771,8 +2771,8 @@ ${encryptionKey.replace('key_', '')}
                         </div>
                       </div>
 
-                      {/* Delete all projects (signed-in premium users only) */}
-                      {isSignedIn && isPremium && (
+                      {/* Delete all projects (signed-in users only) */}
+                      {isSignedIn && (
                         <div
                           className={cn(
                             'rounded-lg border border-border-subtle p-4',
@@ -4186,7 +4186,7 @@ ${encryptionKey.replace('key_', '')}
                         accept=".json"
                         onChange={handleImportClaudeProjects}
                         className="hidden"
-                        disabled={isImporting || !isPremium}
+                        disabled={isImporting || !isSignedIn}
                       />
                       <div className="mt-2 flex gap-2">
                         <button
@@ -4211,10 +4211,10 @@ ${encryptionKey.replace('key_', '')}
                           onClick={() =>
                             claudeProjectsFileInputRef.current?.click()
                           }
-                          disabled={isImporting || !isPremium}
+                          disabled={isImporting || !isSignedIn}
                           className={cn(
                             'flex flex-1 items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
-                            isImporting || !isPremium
+                            isImporting || !isSignedIn
                               ? 'cursor-not-allowed opacity-50'
                               : 'hover:bg-surface-chat',
                             isDarkMode
@@ -4224,11 +4224,6 @@ ${encryptionKey.replace('key_', '')}
                         >
                           <ArrowUpTrayIcon className="h-4 w-4" />
                           Projects
-                          {!isPremium && (
-                            <span className="ml-1 rounded-full bg-brand-accent-light/20 px-1.5 py-px text-[10px] font-medium text-brand-accent-light">
-                              Premium
-                            </span>
-                          )}
                         </button>
                       </div>
                     </div>
@@ -4319,8 +4314,8 @@ ${encryptionKey.replace('key_', '')}
                     </div>
                   </div>
 
-                  {/* Export Projects (premium only) */}
-                  {isPremium && (
+                  {/* Export Projects */}
+                  {isSignedIn && (
                     <div className="space-y-3">
                       <h3 className="font-aeonik text-sm font-medium text-content-secondary">
                         Export Projects for Claude
