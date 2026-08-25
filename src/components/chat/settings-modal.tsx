@@ -83,16 +83,14 @@ import {
   ChatBubbleLeftRightIcon,
   CheckCircleIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   ComputerDesktopIcon,
   CreditCardIcon,
   EyeIcon,
   EyeSlashIcon,
   MoonIcon,
-  PencilSquareIcon,
-  PlusIcon,
   Squares2X2Icon,
   SunIcon,
-  TrashIcon,
   UserCircleIcon,
   UserIcon,
   XMarkIcon,
@@ -109,18 +107,10 @@ import { PiSignIn, PiSpinner } from 'react-icons/pi'
 import { RiLightbulbFill, RiShieldKeyholeFill } from 'react-icons/ri'
 import QRCode from 'react-qr-code'
 import { CloudSyncHealthCard } from './cloud-sync-health-card'
-import { ConfirmDialog } from './components/confirm-dialog'
 import { normalizeChatFont, type ChatFont } from './hooks/use-chat-font'
-import { usePromptLibrary } from './hooks/use-prompt-library'
 import { MfaSettingsCard } from './mfa-settings-card'
 import { NativeBackupExport } from './native-backup-export'
 import { NativeBackupRestore } from './native-backup-restore'
-import {
-  EMPTY_PRESET_EDITOR_STATE,
-  PresetEditor,
-  type PresetEditorState,
-} from './prompts/preset-editor'
-import type { PromptPreset } from './prompts/types'
 import type { Attachment, Chat } from './types'
 
 const CHARS = '0123456789ABCDEF!@#$%^&*()_+<>?/'
@@ -337,6 +327,7 @@ type SettingsModalProps = {
   setThemeMode: (mode: ThemeMode) => void
   isClient: boolean
   defaultSystemPrompt?: string
+  onOpenPromptLibrary: () => void
   onCloudSyncSetupClick?: () => void
   onChatsUpdated?: () => void | Promise<void>
   isSignedIn?: boolean
@@ -374,6 +365,7 @@ export function SettingsModal({
   setThemeMode,
   isClient,
   defaultSystemPrompt = '',
+  onOpenPromptLibrary,
   onCloudSyncSetupClick,
   onChatsUpdated,
   isSignedIn,
@@ -455,21 +447,6 @@ export function SettingsModal({
   const [chatFont, setChatFont] = useState<ChatFont>('system')
 
   const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false)
-
-  // Prompt library management state
-  const {
-    builtInPresets,
-    userPresets,
-    createUserPreset,
-    updateUserPreset,
-    deleteUserPreset,
-    duplicatePreset,
-  } = usePromptLibrary()
-  const [promptEditor, setPromptEditor] = useState<PresetEditorState | null>(
-    null,
-  )
-  const [presetPendingDelete, setPresetPendingDelete] =
-    useState<PromptPreset | null>(null)
 
   // Active tab state
   const [activeTab, setActiveTab] = useState<SettingsTab>(
@@ -1035,68 +1012,6 @@ export function SettingsModal({
         )
       }
     }
-  }
-
-  const startCreatePreset = () => {
-    setPromptEditor({ ...EMPTY_PRESET_EDITOR_STATE })
-  }
-
-  const startEditPreset = (preset: PromptPreset) => {
-    setPromptEditor({
-      mode: 'edit',
-      presetId: preset.id,
-      name: preset.name,
-      description: preset.description,
-      systemPrompt: stripSystemTags(preset.systemPrompt),
-    })
-  }
-
-  const handleDuplicatePreset = (preset: PromptPreset) => {
-    const copy = duplicatePreset(preset.id)
-    if (!copy) return
-    setPromptEditor({
-      mode: 'edit',
-      presetId: copy.id,
-      name: copy.name,
-      description: copy.description,
-      systemPrompt: stripSystemTags(copy.systemPrompt),
-    })
-  }
-
-  const handleDeletePreset = (preset: PromptPreset) => {
-    if (preset.isBuiltIn) return
-    setPresetPendingDelete(preset)
-  }
-
-  const handleConfirmDeletePreset = () => {
-    const preset = presetPendingDelete
-    if (!preset) return
-    deleteUserPreset(preset.id)
-    setPresetPendingDelete(null)
-  }
-
-  const handleSavePromptEditor = () => {
-    if (!promptEditor) return
-    const name = promptEditor.name.trim()
-    if (!name) return
-    const trimmed = promptEditor.systemPrompt.trim()
-    if (!trimmed) return
-    const promptWithTags = ensureSystemTags(trimmed)
-
-    if (promptEditor.mode === 'create') {
-      createUserPreset({
-        name,
-        description: promptEditor.description.trim(),
-        systemPrompt: promptWithTags,
-      })
-    } else if (promptEditor.presetId) {
-      updateUserPreset(promptEditor.presetId, {
-        name,
-        description: promptEditor.description.trim(),
-        systemPrompt: promptWithTags,
-      })
-    }
-    setPromptEditor(null)
   }
 
   // Restore default system prompt and persist immediately
@@ -3089,175 +3004,126 @@ ${encryptionKey.replace('key_', '')}
               {/* Prompts Tab */}
               {activeTab === 'prompts' && (
                 <>
-                  {promptEditor ? (
+                  <div className="space-y-3">
+                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                      Default System Prompt
+                    </h3>
                     <div
                       className={cn(
-                        'overflow-hidden rounded-lg border border-border-subtle',
+                        'rounded-lg border border-border-subtle p-4',
                         isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
                       )}
                     >
-                      <PresetEditor
-                        editor={promptEditor}
-                        onChange={setPromptEditor}
-                        onCancel={() => setPromptEditor(null)}
-                        onSave={handleSavePromptEditor}
-                      />
-                    </div>
-                  ) : (
-                    <>
-                      {/* Default System Prompt */}
-                      <div className="space-y-3">
-                        <h3 className="font-aeonik text-sm font-medium text-content-secondary">
-                          Default System Prompt
-                        </h3>
-                        <div
-                          className={cn(
-                            'rounded-lg border border-border-subtle p-4',
-                            isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-                          )}
-                        >
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <div className="mr-3 flex-1">
-                                <div className="font-aeonik text-sm font-medium text-content-primary">
-                                  Custom default prompt
-                                </div>
-                                <div className="font-aeonik-fono text-xs text-content-muted">
-                                  Override the system prompt for chats that
-                                  don&apos;t have a preset selected.
-                                </div>
-                              </div>
-                              <label className="relative inline-flex cursor-pointer items-center">
-                                <input
-                                  type="checkbox"
-                                  checked={isUsingCustomPrompt}
-                                  onChange={(e) =>
-                                    handleToggleCustomPrompt(e.target.checked)
-                                  }
-                                  className="peer sr-only"
-                                />
-                                <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
-                              </label>
-                            </div>
-                            {isUsingCustomPrompt && (
-                              <>
-                                <textarea
-                                  value={stripSystemTags(customSystemPrompt)}
-                                  onChange={(e) =>
-                                    handleCustomPromptChange(e.target.value)
-                                  }
-                                  onBlur={handleCustomPromptBlur}
-                                  placeholder="Enter your custom system prompt..."
-                                  rows={6}
-                                  className={cn(
-                                    'w-full resize-none rounded-md border px-3 py-2 font-mono text-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-border-strong',
-                                    isDarkMode
-                                      ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                                      : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
-                                  )}
-                                />
-                                <div className="rounded-lg border border-border-subtle bg-surface-chat p-3">
-                                  <div className="font-aeonik-fono text-xs text-content-muted">
-                                    <span
-                                      className={cn(
-                                        'font-aeonik font-medium',
-                                        isDarkMode
-                                          ? 'text-brand-accent-light'
-                                          : 'text-brand-accent-dark',
-                                      )}
-                                    >
-                                      Tip:
-                                    </span>{' '}
-                                    Use placeholders like {'{USER_PREFERENCES}'}
-                                    , {'{LANGUAGE}'}, and {'{TIMEZONE}'} to tell
-                                    the model about your preferences and
-                                    timezone. The current time and date are
-                                    always provided to the model automatically.
-                                  </div>
-                                </div>
-                                <div className="flex justify-center">
-                                  <button
-                                    onClick={handleRestoreDefaultPrompt}
-                                    className={cn(
-                                      'rounded-md px-3 py-1.5 text-xs transition-all hover:underline',
-                                      isDarkMode
-                                        ? 'text-red-400 hover:text-red-300'
-                                        : 'text-red-600 hover:text-red-500',
-                                    )}
-                                  >
-                                    Restore default prompt
-                                  </button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Built-in Prompts */}
-                      <div className="space-y-3">
-                        <h3 className="font-aeonik text-sm font-medium text-content-secondary">
-                          Built-in Prompts
-                        </h3>
-                        <p className="font-aeonik-fono text-xs text-content-muted">
-                          Bundled with Tinfoil. Duplicate one to customize it.
-                        </p>
-                        <div className="space-y-2">
-                          {builtInPresets.map((preset) => (
-                            <PresetRow
-                              key={preset.id}
-                              preset={preset}
-                              isDarkMode={isDarkMode}
-                              onDuplicate={() => handleDuplicatePreset(preset)}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Your Prompts */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <h3 className="font-aeonik text-sm font-medium text-content-secondary">
-                            Your Prompts
-                          </h3>
-                          <button
-                            type="button"
-                            onClick={startCreatePreset}
-                            className="flex items-center gap-1 rounded-md bg-brand-accent-dark px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-brand-accent-dark/90"
-                          >
-                            <PlusIcon className="h-3.5 w-3.5" />
-                            New
-                          </button>
+                          <div className="mr-3 flex-1">
+                            <div className="font-aeonik text-sm font-medium text-content-primary">
+                              Custom default prompt
+                            </div>
+                            <div className="font-aeonik-fono text-xs text-content-muted">
+                              Override the system prompt for chats that
+                              don&apos;t have a preset selected.
+                            </div>
+                          </div>
+                          <label className="relative inline-flex cursor-pointer items-center">
+                            <input
+                              type="checkbox"
+                              checked={isUsingCustomPrompt}
+                              onChange={(e) =>
+                                handleToggleCustomPrompt(e.target.checked)
+                              }
+                              className="peer sr-only"
+                            />
+                            <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                          </label>
                         </div>
-                        {userPresets.length === 0 ? (
-                          <div
-                            className={cn(
-                              'rounded-lg border border-dashed border-border-subtle p-4 text-center text-xs text-content-muted',
-                              isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-                            )}
-                          >
-                            No custom prompts yet. Click &quot;New&quot; above
-                            or duplicate a built-in prompt to start.
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {userPresets.map((preset) => (
-                              <PresetRow
-                                key={preset.id}
-                                preset={preset}
-                                isDarkMode={isDarkMode}
-                                onEdit={() => startEditPreset(preset)}
-                                onDuplicate={() =>
-                                  handleDuplicatePreset(preset)
-                                }
-                                onDelete={() => handleDeletePreset(preset)}
-                              />
-                            ))}
-                          </div>
+                        {isUsingCustomPrompt && (
+                          <>
+                            <textarea
+                              value={stripSystemTags(customSystemPrompt)}
+                              onChange={(e) =>
+                                handleCustomPromptChange(e.target.value)
+                              }
+                              onBlur={handleCustomPromptBlur}
+                              placeholder="Enter your custom system prompt..."
+                              rows={6}
+                              className={cn(
+                                'w-full resize-none rounded-md border px-3 py-2 font-mono text-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-border-strong',
+                                isDarkMode
+                                  ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                                  : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
+                              )}
+                            />
+                            <div className="rounded-lg border border-border-subtle bg-surface-chat p-3">
+                              <div className="font-aeonik-fono text-xs text-content-muted">
+                                <span
+                                  className={cn(
+                                    'font-aeonik font-medium',
+                                    isDarkMode
+                                      ? 'text-brand-accent-light'
+                                      : 'text-brand-accent-dark',
+                                  )}
+                                >
+                                  Tip:
+                                </span>{' '}
+                                Use placeholders like {'{USER_PREFERENCES}'},{' '}
+                                {'{LANGUAGE}'}, and {'{TIMEZONE}'} to tell the
+                                model about your preferences and timezone. The
+                                current time and date are always provided to the
+                                model automatically.
+                              </div>
+                            </div>
+                            <div className="flex justify-center">
+                              <button
+                                onClick={handleRestoreDefaultPrompt}
+                                className={cn(
+                                  'rounded-md px-3 py-1.5 text-xs transition-all hover:underline',
+                                  isDarkMode
+                                    ? 'text-red-400 hover:text-red-300'
+                                    : 'text-red-600 hover:text-red-500',
+                                )}
+                              >
+                                Restore default prompt
+                              </button>
+                            </div>
+                          </>
                         )}
                       </div>
-                    </>
-                  )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                      Prompt Library
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOpen(false)
+                        onOpenPromptLibrary()
+                      }}
+                      className={cn(
+                        'flex w-full items-center gap-3 rounded-lg border border-border-subtle p-4 text-left transition-colors hover:bg-surface-chat',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
+                    >
+                      <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-surface-chat text-content-secondary">
+                        <Squares2X2Icon className="h-5 w-5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-aeonik text-sm font-medium text-content-primary">
+                          Open prompt library
+                        </span>
+                        <span className="mt-0.5 block font-aeonik-fono text-xs text-content-muted">
+                          Browse built-in prompts and create or manage your own.
+                        </span>
+                      </span>
+                      <ChevronRightIcon
+                        className="h-4 w-4 flex-none text-content-muted"
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </div>
                 </>
               )}
 
@@ -4654,90 +4520,6 @@ ${encryptionKey.replace('key_', '')}
           </div>
         </div>
       )}
-
-      <ConfirmDialog
-        isOpen={presetPendingDelete !== null}
-        title="Delete prompt?"
-        description={
-          presetPendingDelete
-            ? `"${presetPendingDelete.name}" will be permanently removed. This cannot be undone.`
-            : undefined
-        }
-        confirmLabel="Delete"
-        variant="destructive"
-        onConfirm={handleConfirmDeletePreset}
-        onCancel={() => setPresetPendingDelete(null)}
-      />
-    </div>
-  )
-}
-
-type PresetRowProps = {
-  preset: PromptPreset
-  isDarkMode: boolean
-  onEdit?: () => void
-  onDuplicate: () => void
-  onDelete?: () => void
-}
-
-function PresetRow({
-  preset,
-  isDarkMode,
-  onEdit,
-  onDuplicate,
-  onDelete,
-}: PresetRowProps) {
-  const Icon = preset.Icon
-  return (
-    <div
-      className={cn(
-        'flex items-start gap-3 rounded-lg border border-border-subtle p-3',
-        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-      )}
-    >
-      <span className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-md bg-surface-chat text-content-secondary">
-        <Icon className="h-4 w-4" />
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-medium text-content-primary">
-          {preset.name}
-        </span>
-        {preset.description && (
-          <span className="mt-0.5 line-clamp-2 text-xs text-content-secondary">
-            {preset.description}
-          </span>
-        )}
-      </div>
-      <div className="flex flex-none items-center gap-1">
-        {onEdit && (
-          <button
-            type="button"
-            onClick={onEdit}
-            aria-label={`Edit ${preset.name}`}
-            className="rounded-md p-1.5 text-content-secondary transition-colors hover:bg-surface-chat hover:text-content-primary"
-          >
-            <PencilSquareIcon className="h-4 w-4" />
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={onDuplicate}
-          aria-label={`Duplicate ${preset.name}`}
-          className="rounded-md p-1.5 text-content-secondary transition-colors hover:bg-surface-chat hover:text-content-primary"
-        >
-          <PlusIcon className="h-4 w-4" />
-        </button>
-        {onDelete && (
-          <button
-            type="button"
-            onClick={onDelete}
-            aria-label={`Delete ${preset.name}`}
-            className="rounded-md p-1.5 text-red-500 transition-colors hover:bg-red-500/10"
-          >
-            <TrashIcon className="h-4 w-4" />
-          </button>
-        )}
-      </div>
     </div>
   )
 }
