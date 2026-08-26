@@ -1,23 +1,13 @@
-import {
-  APIConnectionError,
-  APIConnectionTimeoutError,
-  APIError,
-  APIUserAbortError,
-} from 'openai'
+import { ChatError } from '@/components/chat/chat-utils'
+import { isRetryableError } from '@/services/inference/inference-client'
 import { describe, expect, it } from 'vitest'
 
-import { isRetryableError } from '@/services/inference/inference-client'
-
+/** What a failed request carries once classified: a status and nothing else. */
 function statusError(status: number) {
-  return APIError.generate(status, undefined, undefined, new Headers())
+  return new ChatError(`failed with ${status}`, 'SERVER_ERROR', { status })
 }
 
 describe('isRetryableError', () => {
-  it('retries SDK transport failures, including request timeouts', () => {
-    expect(isRetryableError(new APIConnectionError({}))).toBe(true)
-    expect(isRetryableError(new APIConnectionTimeoutError())).toBe(true)
-  })
-
   it('retries browser fetch network failures', () => {
     // fetch() rejects with a TypeError on network failure
     expect(isRetryableError(new TypeError('Failed to fetch'))).toBe(true)
@@ -28,13 +18,22 @@ describe('isRetryableError', () => {
     expect(isRetryableError(statusError(409))).toBe(true)
     expect(isRetryableError(statusError(429))).toBe(true)
     expect(isRetryableError(statusError(503))).toBe(true)
+    // A plain object carrying a status is classified the same way.
+    expect(isRetryableError({ status: 503 })).toBe(true)
   })
 
   it('does not retry user aborts', () => {
-    expect(isRetryableError(new APIUserAbortError())).toBe(false)
     expect(isRetryableError(new DOMException('Aborted', 'AbortError'))).toBe(
       false,
     )
+  })
+
+  it('does not retry an exhausted hourly quota', () => {
+    expect(
+      isRetryableError(
+        new ChatError('over cap', 'HOURLY_LIMIT', { status: 429 }),
+      ),
+    ).toBe(false)
   })
 
   it('does not retry client errors or unclassified errors', () => {

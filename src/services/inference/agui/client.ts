@@ -30,7 +30,6 @@ const MAX_NOT_READY_ATTEMPTS = 12
 const RESUME_RETRY_BASE_DELAY_MS = 100
 const RESUME_RETRY_MAX_DELAY_MS = 10_000
 
-let client: SecureClient | null = null
 let ready: Promise<SecureClient> | null = null
 let cachedVerificationDocument: VerificationDocument | null = null
 
@@ -48,7 +47,6 @@ function harnessClient(): Promise<SecureClient> {
           PERFORMANCE_METRICS.INFERENCE_ATTESTATION,
           attestationStartedAt,
         )
-        client = candidate
         return candidate
       })
       .catch((error) => {
@@ -61,11 +59,10 @@ function harnessClient(): Promise<SecureClient> {
 
 export async function getHarnessVerificationDocument(): Promise<VerificationDocument | null> {
   if (IS_DEV) return null
-  await harnessClient()
   // An attestation that succeeded once outlives a later read that comes back
   // empty: the sidebar falls back to this cache when its retries run out, and
   // overwriting it with null would report a verified enclave as a failure.
-  const document = client?.getVerificationDocument()
+  const document = (await harnessClient()).getVerificationDocument()
   if (document) cachedVerificationDocument = document
   return cachedVerificationDocument
 }
@@ -78,13 +75,7 @@ export async function runAgent(
   input: RunAgentInput,
   signal: AbortSignal,
 ): Promise<AguiEventStream> {
-  let response = await postRun(input, signal)
-
-  if (response.status === 401) {
-    await discard(response)
-    invalidateSessionCache()
-    response = await postRun(input, signal)
-  }
+  const response = await withFreshSession(() => postRun(input, signal))
 
   if (!response.ok) {
     throw await refusal(response)
@@ -98,7 +89,7 @@ async function postRun(
   signal: AbortSignal,
   lastEventId?: number | null,
 ): Promise<Response> {
-  const apiKey = await getSessionToken()
+  const apiKey = await getSessionToken(signal)
   const request: RequestInit = {
     method: 'POST',
     headers: {
@@ -138,6 +129,17 @@ export async function runSimulatedAgent(
     )
   }
   return sseJsonStream<AguiEvent>(response, 'agui-client')
+}
+
+/** A session key that expired in flight is worth exactly one retry. */
+async function withFreshSession(
+  send: () => Promise<Response>,
+): Promise<Response> {
+  const response = await send()
+  if (response.status !== 401) return response
+  await discard(response)
+  invalidateSessionCache()
+  return send()
 }
 
 /** A response nobody reads holds its connection open until it is collected. */
@@ -204,24 +206,24 @@ export async function* resumeRun(
   let from: number | null = null
   let stalled = 0
   let notReady = 0
-  while (stalled <= MAX_RESUME_ATTEMPTS) {
-    let response = await postRun(resumeInput(storage), signal, from)
-    if (response.status === 401) {
+  while (stalled < MAX_RESUME_ATTEMPTS) {
+    const response = await withFreshSession(() =>
+      postRun(resumeInput(storage), signal, from),
+    )
+    if (response.status === 403) {
       await discard(response)
-      invalidateSessionCache()
-      response = await postRun(resumeInput(storage), signal, from)
+      throw new RunGoneError()
     }
-    if (response.status === 403) throw new RunGoneError()
     if (response.status === 503) {
       // Nothing framed yet, so nothing can be decided about the run: the
       // harness says to come back rather than turning the caller away.
+      await discard(response)
       if (notReady >= MAX_NOT_READY_ATTEMPTS) {
         throw new ChatError(
           'Recovered run was still starting up and never began sending',
-          'FETCH_ERROR',
+          'SERVER_ERROR',
         )
       }
-      await discard(response)
       await waitBeforeRetry(notReady++, signal, retryAfterMs(response))
       continue
     }
@@ -264,14 +266,10 @@ export async function dropRun(storage: RunStorage): Promise<void> {
       : (await harnessClient()).fetch(`${HARNESS_URL}/agui`, request)
   }
 
-  let response = await send()
-  if (response.status === 401) {
-    await discard(response)
-    invalidateSessionCache()
-    response = await send()
-  }
+  const response = await withFreshSession(send)
   // A log that cannot be opened is a log the caller asked to be gone.
-  if (!response.ok && response.status !== 403) throw await refusal(response)
+  if (response.status === 403) return discard(response)
+  if (!response.ok) throw await refusal(response)
 }
 
 function resumeInput(storage: RunStorage): RunAgentInput {

@@ -29,11 +29,6 @@ vi.mock('@/utils/error-handling', () => ({
   logError: vi.fn(),
 }))
 
-vi.mock('openai', () => ({
-  default: class OpenAI {},
-  AuthenticationError: class AuthenticationError extends Error {},
-}))
-
 vi.mock('tinfoil', () => ({
   AuthenticationError: class AuthenticationError extends Error {},
   SecureClient: class SecureClient {

@@ -57,6 +57,19 @@ function refusal(
   })
 }
 
+/** A refusal whose body reports whether its connection was released. */
+function tracked(status: number): [Response, () => boolean] {
+  let cancelled = false
+  const body = new ReadableStream<Uint8Array>({
+    start: (controller) =>
+      controller.enqueue(new TextEncoder().encode('{"message":"gone"}')),
+    cancel: () => {
+      cancelled = true
+    },
+  })
+  return [new Response(body, { status }), () => cancelled]
+}
+
 const chunk = (delta: string): AguiEvent => ({
   type: 'TEXT_MESSAGE_CHUNK',
   messageId: 'msg-1',
@@ -65,6 +78,12 @@ const chunk = (delta: string): AguiEvent => ({
 const finished: AguiEvent = { type: 'RUN_FINISHED' }
 
 let fetchMock: ReturnType<typeof vi.fn>
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  fetchMock = vi.fn()
+  vi.stubGlobal('fetch', fetchMock)
+})
 
 async function collect(signal = new AbortController().signal) {
   const events: AguiEvent[] = []
@@ -85,9 +104,6 @@ function requestOf(call: number) {
 describe('coming back to a run', () => {
   beforeEach(() => {
     vi.useRealTimers()
-    vi.clearAllMocks()
-    fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
   })
 
   it('mints a distinct 128-bit pair', () => {
@@ -159,14 +175,21 @@ describe('coming back to a run', () => {
   it('gives up on a run that never starts framing', async () => {
     fetchMock.mockResolvedValue(refusal(503, { 'Retry-After': '0' }))
 
-    await expect(collect()).rejects.toThrow('still starting up')
+    // The harness answered, so this is a server failure and not the offline
+    // one that FETCH_ERROR tells the banner to report.
+    await expect(collect()).rejects.toMatchObject({
+      message: expect.stringContaining('still starting up'),
+      code: 'SERVER_ERROR',
+    })
   })
 
   it('reports a log it cannot open as gone', async () => {
-    fetchMock.mockResolvedValue(refusal(403))
+    const [gone, cancelled] = tracked(403)
+    fetchMock.mockResolvedValue(gone)
 
     await expect(collect()).rejects.toBeInstanceOf(RunGoneError)
     expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(cancelled()).toBe(true)
   })
 
   it('retries an expired session key once', async () => {
@@ -181,8 +204,9 @@ describe('coming back to a run', () => {
   it('gives up on a replay that never reaches the end of the run', async () => {
     fetchMock.mockResolvedValue(framed(0, []))
 
+    // Three no-progress resumes is the whole budget, not three plus one.
     await expect(collect()).rejects.toThrow('stopped arriving')
-    expect(fetchMock).toHaveBeenCalledTimes(4)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
   it('stops when the caller lets go', async () => {
@@ -199,12 +223,6 @@ describe('coming back to a run', () => {
 })
 
 describe('dropping a stored run', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
-  })
-
   it('deletes the log by the same pair that reads it', async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }))
 
@@ -216,9 +234,11 @@ describe('dropping a stored run', () => {
   })
 
   it('treats a log it cannot open as already gone', async () => {
-    fetchMock.mockResolvedValueOnce(refusal(403))
+    const [gone, cancelled] = tracked(403)
+    fetchMock.mockResolvedValueOnce(gone)
 
     await expect(dropRun(STORAGE)).resolves.toBeUndefined()
+    expect(cancelled()).toBe(true)
   })
 
   it('retries an expired session key once', async () => {

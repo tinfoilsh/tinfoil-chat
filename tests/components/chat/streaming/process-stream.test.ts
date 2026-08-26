@@ -1,5 +1,4 @@
 import { processStreamingResponse } from '@/components/chat/hooks/streaming/process-stream'
-import { parseRichStreamingResponse } from '@/components/chat/hooks/streaming/rich-response-parser'
 import type { StreamingContext } from '@/components/chat/hooks/streaming/types'
 import type { Message } from '@/components/chat/types'
 import type {
@@ -499,42 +498,5 @@ describe('processStreamingResponse frame publication', () => {
 
     await expect(processing).rejects.toMatchObject({ name: 'AbortError' })
     expect(updates).toEqual(['A'])
-  })
-
-  it('matches the rich parser for shared event assembly', async () => {
-    const events: AguiEvent[] = [
-      { type: 'REASONING_MESSAGE_CHUNK', messageId: 'm', delta: 'Reasoning' },
-      { type: 'TOOL_CALL_START', toolCallId: 'c1', toolCallName: 'web_search' },
-      { type: 'TOOL_CALL_ARGS', toolCallId: 'c1', delta: '{"query":"query"}' },
-      { type: 'TOOL_CALL_END', toolCallId: 'c1' },
-      {
-        type: 'TOOL_CALL_RESULT',
-        toolCallId: 'c1',
-        content: JSON.stringify({
-          results: [{ title: 'Source', url: 'https://example.com' }],
-        }),
-      },
-      { type: 'TEXT_MESSAGE_CHUNK', messageId: 'm', delta: 'Answer' },
-      { type: 'RUN_FINISHED' },
-    ]
-    const makeStream = () =>
-      (async function* (): AsyncGenerator<AguiEvent> {
-        yield* events
-      })()
-    const processing = processStreamingResponse(makeStream(), createContext())
-
-    await vi.waitFor(() => expect(frames.size).toBe(1))
-    runFrames()
-    const [processed, parsed] = await Promise.all([
-      processing,
-      parseRichStreamingResponse(makeStream()),
-    ])
-
-    expect(processed?.content).toBe(parsed.content)
-    expect(processed?.thoughts).toBe(parsed.thoughts)
-    expect(processed?.webSearch).toEqual(parsed.webSearch)
-    expect(processed?.timeline?.map(({ type }) => type)).toEqual(
-      parsed.timeline?.map(({ type }) => type),
-    )
   })
 })

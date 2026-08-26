@@ -1,10 +1,21 @@
-import { VerifierSidebar } from '@/components/verification-sidebar'
+import {
+  VerifierSidebar,
+  type VerificationStatus,
+} from '@/components/verification-sidebar'
 import { act, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   getCachedHarnessVerificationDocument: vi.fn(),
   getHarnessVerificationDocument: vi.fn(),
+  isDev: false,
+}))
+
+// Getter so individual tests can flip IS_DEV after the module graph is loaded.
+vi.mock('@/config', () => ({
+  get IS_DEV() {
+    return mocks.isDev
+  },
 }))
 
 vi.mock('@/services/inference/agui/client', () => ({
@@ -33,7 +44,9 @@ vi.mock('@/components/chat/constants', async (importOriginal) => {
 
 const VERIFICATION_CENTER_ORIGIN = 'https://verification-center.tinfoil.sh'
 
-function renderSidebar(onVerificationComplete: (success: boolean) => void) {
+function renderSidebar(
+  onVerificationComplete: (status: VerificationStatus) => void,
+) {
   return render(
     <VerifierSidebar
       isOpen={false}
@@ -63,6 +76,7 @@ describe('VerifierSidebar', () => {
     mocks.getCachedHarnessVerificationDocument.mockReset()
     mocks.getCachedHarnessVerificationDocument.mockReturnValue(null)
     mocks.getHarnessVerificationDocument.mockReset()
+    mocks.isDev = false
     onLineSpy = vi.spyOn(window.navigator, 'onLine', 'get')
   })
 
@@ -83,8 +97,8 @@ describe('VerifierSidebar', () => {
     requestVerificationDocument()
 
     expect(onVerificationComplete).toHaveBeenCalled()
-    expect(onVerificationComplete).toHaveBeenCalledWith(true)
-    expect(onVerificationComplete).not.toHaveBeenCalledWith(false)
+    expect(onVerificationComplete).toHaveBeenCalledWith('verified')
+    expect(onVerificationComplete).not.toHaveBeenCalledWith('failed')
     expect(mocks.getHarnessVerificationDocument).not.toHaveBeenCalled()
   })
 
@@ -96,10 +110,38 @@ describe('VerifierSidebar', () => {
     requestVerificationDocument()
 
     await waitFor(() =>
-      expect(onVerificationComplete).toHaveBeenCalledWith(false),
+      expect(onVerificationComplete).toHaveBeenCalledWith('failed'),
     )
     expect(mocks.getHarnessVerificationDocument).not.toHaveBeenCalled()
     expect(mocks.getCachedHarnessVerificationDocument).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports pending when attestation reaches no verdict', async () => {
+    onLineSpy.mockReturnValue(true)
+    mocks.getHarnessVerificationDocument.mockResolvedValue({
+      securityVerified: undefined,
+    })
+    const onVerificationComplete = vi.fn()
+
+    renderSidebar(onVerificationComplete)
+    requestVerificationDocument()
+
+    await waitFor(() =>
+      expect(onVerificationComplete).toHaveBeenCalledWith('pending'),
+    )
+    expect(onVerificationComplete).not.toHaveBeenCalledWith('failed')
+  })
+
+  it('short-circuits to unverified in dev without fetching', async () => {
+    mocks.isDev = true
+    const onVerificationComplete = vi.fn()
+
+    renderSidebar(onVerificationComplete)
+    requestVerificationDocument()
+
+    expect(onVerificationComplete).toHaveBeenCalledWith('unverified')
+    expect(mocks.getHarnessVerificationDocument).not.toHaveBeenCalled()
+    expect(mocks.getCachedHarnessVerificationDocument).not.toHaveBeenCalled()
   })
 
   it('keeps the retry lock through the cache fallback', async () => {
@@ -115,7 +157,7 @@ describe('VerifierSidebar', () => {
     requestVerificationDocument()
 
     await waitFor(() =>
-      expect(onVerificationComplete).toHaveBeenCalledWith(false),
+      expect(onVerificationComplete).toHaveBeenCalledWith('failed'),
     )
     expect(mocks.getHarnessVerificationDocument).toHaveBeenCalledOnce()
     expect(onVerificationComplete).toHaveBeenCalledOnce()

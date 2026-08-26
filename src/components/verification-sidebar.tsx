@@ -1,3 +1,4 @@
+import { IS_DEV } from '@/config'
 import {
   getCachedHarnessVerificationDocument,
   getHarnessVerificationDocument,
@@ -18,10 +19,15 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+// 'pending' also covers "attestation ran but reached no verdict yet"; dev
+// attests nothing at all, which is 'unverified' rather than a failure.
+export type VerificationStatus =
+  'pending' | 'verified' | 'failed' | 'unverified'
+
 type VerifierSidebarProps = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
-  onVerificationComplete: (success: boolean) => void
+  onVerificationComplete: (status: VerificationStatus) => void
   onVerificationUpdate?: (state: any) => void
   isDarkMode: boolean
   isClient: boolean
@@ -52,10 +58,17 @@ export function VerifierSidebar({
   onVerificationCompleteRef.current = onVerificationComplete
 
   const fetchVerificationDocument = useCallback(async () => {
+    // Dev routes chat through a local proxy and attests nothing, so the
+    // document is null by construction — resolve instead of retrying for it.
+    if (IS_DEV) {
+      onVerificationCompleteRef.current('unverified')
+      return
+    }
     if (isRetryingRef.current) return
     isRetryingRef.current = true
     retryCountRef.current = 0
 
+    let sawDocument = false
     const attemptFetch = async (): Promise<boolean> => {
       if (!isOnline()) {
         logInfo('No internet connection, waiting to retry verification', {
@@ -69,12 +82,15 @@ export function VerifierSidebar({
       try {
         const doc = await getHarnessVerificationDocument()
         if (doc) {
+          sawDocument = true
           setVerificationDocument(doc)
           if (onVerificationUpdateRef.current) {
             onVerificationUpdateRef.current(doc)
           }
           if (doc.securityVerified !== undefined) {
-            onVerificationCompleteRef.current(doc.securityVerified)
+            onVerificationCompleteRef.current(
+              doc.securityVerified ? 'verified' : 'failed',
+            )
             return true
           }
         }
@@ -95,7 +111,7 @@ export function VerifierSidebar({
       if (cachedDoc?.securityVerified === true) {
         setVerificationDocument(cachedDoc)
         onVerificationUpdateRef.current?.(cachedDoc)
-        onVerificationCompleteRef.current(true)
+        onVerificationCompleteRef.current('verified')
         return
       }
 
@@ -132,10 +148,11 @@ export function VerifierSidebar({
       if (terminalCachedDoc?.securityVerified === true) {
         setVerificationDocument(terminalCachedDoc)
         onVerificationUpdateRef.current?.(terminalCachedDoc)
-        onVerificationCompleteRef.current(true)
+        onVerificationCompleteRef.current('verified')
         return
       }
-      onVerificationCompleteRef.current(false)
+      // A document that never reached a verdict is still pending, not failed.
+      onVerificationCompleteRef.current(sawDocument ? 'pending' : 'failed')
     } finally {
       isRetryingRef.current = false
     }

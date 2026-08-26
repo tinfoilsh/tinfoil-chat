@@ -8,9 +8,11 @@
 
 import type {
   TimelineBlock,
+  TimelineCodeExecBlock,
   TimelineContentBlock,
   TimelineThinkingBlock,
   TimelineToolCallBlock,
+  TimelineURLFetchBlock,
   TimelineWebSearchBlock,
   ToolCallState,
   URLFetchState,
@@ -52,16 +54,10 @@ export class TimelineBuilder {
    * answer text keeps accumulating contiguously around it.
    */
   appendThinkingTail(text: string): void {
-    for (let i = this.blocks.length - 1; i >= 0; i--) {
-      const block = this.blocks[i]
-      if (block.type === 'thinking') {
-        this.blocks[i] = {
-          ...block,
-          content: block.content + text,
-        }
-        return
-      }
-    }
+    this.patchLast(
+      (block): block is TimelineThinkingBlock => block.type === 'thinking',
+      (block) => ({ ...block, content: block.content + text }),
+    )
   }
 
   endThinking(duration?: number): void {
@@ -114,18 +110,11 @@ export class TimelineBuilder {
   }
 
   updateWebSearch(state: WebSearchState, id?: string): void {
-    for (let i = this.blocks.length - 1; i >= 0; i--) {
-      if (
-        this.blocks[i].type === 'web_search' &&
-        (!id || this.blocks[i].id === id)
-      ) {
-        this.blocks[i] = {
-          ...this.blocks[i],
-          state: { ...state },
-        } as TimelineBlock
-        break
-      }
-    }
+    this.patchLast(
+      (block): block is TimelineWebSearchBlock =>
+        block.type === 'web_search' && (!id || block.id === id),
+      (block) => ({ ...block, state: { ...state } }),
+    )
   }
 
   getWebSearchState(id: string): WebSearchState | undefined {
@@ -178,21 +167,14 @@ export class TimelineBuilder {
   }
 
   updateURLFetch(id: string, status: URLFetchState['status']): void {
-    for (let i = this.blocks.length - 1; i >= 0; i--) {
-      const block = this.blocks[i]
-      if (
-        block.type === 'url_fetches' &&
-        block.fetches.some((f) => f.id === id)
-      ) {
-        this.blocks[i] = {
-          ...block,
-          fetches: block.fetches.map((f) =>
-            f.id === id ? { ...f, status } : f,
-          ),
-        }
-        break
-      }
-    }
+    this.patchLast(
+      (block): block is TimelineURLFetchBlock =>
+        block.type === 'url_fetches' && block.fetches.some((f) => f.id === id),
+      (block) => ({
+        ...block,
+        fetches: block.fetches.map((f) => (f.id === id ? { ...f, status } : f)),
+      }),
+    )
   }
 
   // -- GenUI Tool Calls ---------------------------------------------------
@@ -210,16 +192,11 @@ export class TimelineBuilder {
   }
 
   appendToolCallArguments(toolCallId: string, delta: string): void {
-    for (let i = this.blocks.length - 1; i >= 0; i--) {
-      const block = this.blocks[i]
-      if (block.type === 'tool_call' && block.toolCallId === toolCallId) {
-        this.blocks[i] = {
-          ...block,
-          arguments: block.arguments + delta,
-        }
-        return
-      }
-    }
+    this.patchLast(
+      (block): block is TimelineToolCallBlock =>
+        block.type === 'tool_call' && block.toolCallId === toolCallId,
+      (block) => ({ ...block, arguments: block.arguments + delta }),
+    )
   }
 
   // -- Code Execution Tool Calls ------------------------------------------
@@ -242,18 +219,14 @@ export class TimelineBuilder {
   }
 
   updateCodeExecCall(id: string, updates: Partial<ToolCallState>): void {
-    for (let i = this.blocks.length - 1; i >= 0; i--) {
-      const block = this.blocks[i]
-      if (block.type === 'code_exec' && block.calls.some((c) => c.id === id)) {
-        this.blocks[i] = {
-          ...block,
-          calls: block.calls.map((c) =>
-            c.id === id ? { ...c, ...updates } : c,
-          ),
-        }
-        break
-      }
-    }
+    this.patchLast(
+      (block): block is TimelineCodeExecBlock =>
+        block.type === 'code_exec' && block.calls.some((c) => c.id === id),
+      (block) => ({
+        ...block,
+        calls: block.calls.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+      }),
+    )
   }
 
   // -- Query --------------------------------------------------------------
@@ -274,6 +247,24 @@ export class TimelineBuilder {
   }
 
   // -- Internal -----------------------------------------------------------
+
+  /**
+   * Replace the most recent block the predicate accepts. Events that finish a
+   * block arrive after later blocks have opened, hence the backwards scan; the
+   * block is replaced rather than mutated so earlier snapshots stay as taken.
+   */
+  private patchLast<T extends TimelineBlock>(
+    matches: (block: TimelineBlock) => block is T,
+    update: (block: T) => TimelineBlock,
+  ): void {
+    for (let i = this.blocks.length - 1; i >= 0; i--) {
+      const block = this.blocks[i]
+      if (matches(block)) {
+        this.blocks[i] = update(block)
+        return
+      }
+    }
+  }
 
   /**
    * Close any active thinking block so tool blocks (web search, URL fetch)

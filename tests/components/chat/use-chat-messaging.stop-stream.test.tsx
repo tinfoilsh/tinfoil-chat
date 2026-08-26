@@ -243,6 +243,27 @@ function createOpenStream() {
   }
 }
 
+/** Holds the next initial save open; returns the release for it. */
+function deferInitialSave(): () => void {
+  let finish!: () => void
+  initialSaveMock.mockImplementationOnce(
+    (chat: unknown) =>
+      new Promise<unknown>((resolve) => {
+        finish = () => resolve(chat)
+      }),
+  )
+  return () => finish()
+}
+
+/** The Agui send options every turn carries, whatever else is added to them. */
+function sendOptionsWithRecovery(recovery: unknown) {
+  return expect.objectContaining({
+    threadId: expect.any(String),
+    runId: expect.any(String),
+    recovery,
+  })
+}
+
 describe('useChatMessaging stopped streams', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -413,13 +434,7 @@ describe('useChatMessaging stopped streams', () => {
       isBlankChat: true,
       isLocalOnly: true,
     }
-    let finishInitialSave!: () => void
-    initialSaveMock.mockImplementationOnce(
-      (chat: unknown) =>
-        new Promise((resolve) => {
-          finishInitialSave = () => resolve(chat)
-        }),
-    )
+    const finishInitialSave = deferInitialSave()
     const stream = createOpenStream()
     sendChatStreamMock.mockResolvedValue(stream.stream)
 
@@ -572,13 +587,7 @@ describe('useChatMessaging stopped streams', () => {
         { role: 'assistant', content: 'Earlier reply', timestamp: new Date() },
       ],
     }
-    let finishInitialSave!: () => void
-    initialSaveMock.mockImplementationOnce(
-      (chat: unknown) =>
-        new Promise<unknown>((resolve) => {
-          finishInitialSave = () => resolve(chat)
-        }),
-    )
+    const finishInitialSave = deferInitialSave()
 
     const { result } = renderHook(() => {
       const [currentChat, setCurrentChat] = useState(initialChat)
@@ -629,6 +638,7 @@ describe('useChatMessaging stopped streams', () => {
     }
     const stream = createOpenStream()
     sendChatStreamMock.mockResolvedValue(stream.stream)
+    containerAuthTokenMock.mockResolvedValue('container-auth')
 
     const { result } = renderHook(() => {
       const [currentChat, setCurrentChat] = useState(temporaryChat)
@@ -643,6 +653,7 @@ describe('useChatMessaging stopped streams', () => {
         setChats,
         setCurrentChat,
         codeExecutionEnabled: true,
+        codeExecutionEncryptionKey: 'encryption-key',
       })
       return { chats, currentChat, messaging, setChats, setCurrentChat }
     })
@@ -655,10 +666,16 @@ describe('useChatMessaging stopped streams', () => {
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
     expect(sendChatStreamMock).toHaveBeenCalledWith(
+      sendOptionsWithRecovery(undefined),
+    )
+    // The three code-exec secrets travel as one object or not at all.
+    expect(sendChatStreamMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        threadId: expect.any(String),
-        runId: expect.any(String),
-        recovery: undefined,
+        codeExecution: {
+          accessToken: 'token',
+          encryptionKey: 'encryption-key',
+          containerAuthToken: 'container-auth',
+        },
       }),
     )
     stream.sendText('Partial')
@@ -867,11 +884,7 @@ describe('useChatMessaging stopped streams', () => {
     expect(saveChatMock).toHaveBeenCalledOnce()
     expect(saveChatMock.mock.calls.every((call) => call[1] === true)).toBe(true)
     expect(sendChatStreamMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        threadId: expect.any(String),
-        runId: expect.any(String),
-        recovery: expect.any(Object),
-      }),
+      sendOptionsWithRecovery(expect.any(Object)),
     )
 
     stream.finish()
@@ -1002,11 +1015,7 @@ describe('useChatMessaging stopped streams', () => {
     expect(saveChatMock).toHaveBeenCalledOnce()
     expect(saveChatMock).toHaveBeenCalledWith(expect.any(Object), true)
     expect(sendChatStreamMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        threadId: expect.any(String),
-        runId: expect.any(String),
-        recovery: undefined,
-      }),
+      sendOptionsWithRecovery(undefined),
     )
 
     stream.finish()
@@ -1104,11 +1113,7 @@ describe('useChatMessaging stopped streams', () => {
 
     expect(saveChatMock).toHaveBeenCalledWith(expect.any(Object), true)
     expect(sendChatStreamMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        threadId: expect.any(String),
-        runId: expect.any(String),
-        recovery: undefined,
-      }),
+      sendOptionsWithRecovery(undefined),
     )
 
     stream.finish()

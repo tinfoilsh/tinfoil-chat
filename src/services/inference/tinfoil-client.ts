@@ -12,8 +12,7 @@ import {
   TINFOIL_EVENTS_VALUE_CODE_EXECUTION,
   TINFOIL_EVENTS_VALUE_WEB_SEARCH,
 } from '@/utils/tinfoil-events'
-import OpenAI from 'openai'
-import { AuthenticationError, SecureClient } from 'tinfoil'
+import { SecureClient } from 'tinfoil'
 import { authTokenManager } from '../auth'
 import { INFERENCE_CLIENT_INITIALIZATION_TIMEOUT_MS } from './constants'
 
@@ -32,9 +31,8 @@ export interface RateLimitInfo {
 const SESSION_TOKEN_EXPIRY_BUFFER_MS = 1 * 60 * 1000
 const AUTH_INIT_WAIT_MS = 3000
 
-let clientInstance: OpenAI | null = null
+let inferenceBaseURL: string | null = null
 let secureClient: SecureClient | null = null
-let lastSessionToken: string | null = null
 let cachedSessionToken: string | null = null
 let cachedSessionTokenExpiresAt: number | null = null
 let cachedSessionTokenWasAuthenticated = false
@@ -54,7 +52,7 @@ export class TinfoilClientInitializationTimeoutError extends Error {
 }
 
 interface InitializedClient {
-  client: OpenAI
+  baseURL: string
   secureClient: SecureClient | null
 }
 
@@ -450,9 +448,8 @@ export function resetTinfoilClient(): void {
   // generation instead of surfacing what downstream would classify as a
   // user abort.
   abortInitialization(new SessionCacheInvalidatedError())
-  clientInstance = null
+  inferenceBaseURL = null
   secureClient = null
-  lastSessionToken = null
   cachedSessionToken = null
   cachedSessionTokenExpiresAt = null
   cachedSessionTokenWasAuthenticated = false
@@ -475,22 +472,12 @@ export function invalidateSessionCache(): void {
   }
 }
 
-async function initClient(
-  sessionToken: string,
-  signal: AbortSignal,
-): Promise<InitializedClient> {
+async function initClient(signal: AbortSignal): Promise<InitializedClient> {
   try {
     if (IS_DEV) {
       return {
         secureClient: null,
-        client: new OpenAI({
-          apiKey: sessionToken,
-          baseURL: `${window.location.origin}/api/local-router/v1`,
-          dangerouslyAllowBrowser: true,
-          defaultHeaders: {
-            [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,
-          },
-        }),
+        baseURL: `${window.location.origin}/api/local-router/v1`,
       }
     }
 
@@ -501,19 +488,17 @@ async function initClient(
       PERFORMANCE_METRICS.INFERENCE_ATTESTATION,
       attestationStartedAt,
     )
-    return {
-      secureClient: candidateSecureClient,
-      client: new OpenAI({
-        apiKey: sessionToken,
-        baseURL: candidateSecureClient.getBaseURL(),
-        dangerouslyAllowBrowser: true,
-        // Opt into the router's inline progress-marker stream.
-        defaultHeaders: {
-          [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,
-        },
-        fetch: candidateSecureClient.fetch,
-      }),
+    // An attested client with no endpoint to report has nothing to talk to;
+    // the OpenAI SDK used to paper over this by falling back to its own
+    // default host, which is the last place these requests should go.
+    const baseURL = candidateSecureClient.getBaseURL()
+    if (!baseURL) {
+      throw new ChatError(
+        'Attested enclave did not report an inference endpoint',
+        'FETCH_ERROR',
+      )
     }
+    return { secureClient: candidateSecureClient, baseURL }
   } catch (error) {
     logError('Failed to initialize Tinfoil client', error, {
       component: 'tinfoil-client',
@@ -523,8 +508,8 @@ async function initClient(
   }
 }
 
-export async function getSessionToken(): Promise<string> {
-  return fetchSessionToken()
+export async function getSessionToken(signal?: AbortSignal): Promise<string> {
+  return fetchSessionToken(signal)
 }
 
 /**
@@ -548,8 +533,8 @@ export function isChatRecoveryAvailable(): boolean {
 }
 
 /**
- * Lazily build the OpenAI client (and SecureClient on prod) the first
- * time anything needs them, and rebuild on session-token rotation.
+ * Resolve the inference endpoint (attesting the enclave on prod) the first
+ * time anything needs it, and again on session-token rotation.
  */
 async function ensureInitialized(): Promise<void> {
   while (true) {
@@ -562,18 +547,17 @@ async function ensureInitialized(): Promise<void> {
         controller.abort(new TinfoilClientInitializationTimeoutError())
       }, INFERENCE_CLIENT_INITIALIZATION_TIMEOUT_MS)
       const promise = (async () => {
-        const sessionToken = await fetchSessionTokenForGeneration(
-          generation,
-          controller.signal,
-        )
+        // Fetched here, not carried: every request reads the current key, so
+        // the endpoint this resolves does not depend on which key is cached
+        // and a rotated key costs no second attestation.
+        await fetchSessionTokenForGeneration(generation, controller.signal)
         assertSessionCacheGeneration(generation)
-        if (clientInstance && lastSessionToken === sessionToken) return
+        if (inferenceBaseURL) return
 
-        const initialized = await initClient(sessionToken, controller.signal)
+        const initialized = await initClient(controller.signal)
         assertSessionCacheGeneration(generation)
-        clientInstance = initialized.client
+        inferenceBaseURL = initialized.baseURL
         secureClient = initialized.secureClient
-        lastSessionToken = sessionToken
       })()
       task = { generation, controller, timeoutId, promise }
       initializationInFlight = task
@@ -594,67 +578,37 @@ async function ensureInitialized(): Promise<void> {
   }
 }
 
-async function getRawClient(): Promise<OpenAI> {
-  await ensureInitialized()
-  return clientInstance!
-}
-
 /**
- * Returns a proxy that behaves like the underlying OpenAI client with
- * one extra behavior: on `AuthenticationError`, the proxy resets the
- * session token cache, rebuilds the client, and replays the call once
- * with the refreshed handle.
- *
+ * POST to the inference API over the attested channel, replaying once if the
+ * session key expired in flight. Callers hand over a ready body and read the
+ * raw Response: a JSON completion and a multipart upload share the transport
+ * and nothing else.
  */
-export async function getTinfoilClient(): Promise<OpenAI> {
-  await getRawClient()
-
-  function resolvePath(path: PropertyKey[]): { fn: any; thisArg: any } {
-    let thisArg: any = clientInstance
-    let fn: any = clientInstance
-    for (const p of path) {
-      thisArg = fn
-      fn = fn[p]
-    }
-    return { fn, thisArg }
-  }
-
-  function proxyWithRetry(pathFromRoot: PropertyKey[]): any {
-    // Target must be a function so the `apply` trap can fire
-    return new Proxy(function () {}, {
-      has(_, prop) {
-        if (!clientInstance) return false
-        return prop in clientInstance
+export async function inferenceRequest(
+  path: string,
+  body: BodyInit,
+  options: { headers?: Record<string, string>; signal?: AbortSignal } = {},
+): Promise<Response> {
+  const send = async (): Promise<Response> => {
+    await ensureInitialized()
+    const apiKey = await getSessionToken(options.signal)
+    return (secureClient?.fetch ?? fetch)(`${inferenceBaseURL}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        // Opt into the router's inline progress-marker stream.
+        [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,
+        ...options.headers,
       },
-      get(_, prop) {
-        if (
-          prop === 'then' ||
-          prop === Symbol.toPrimitive ||
-          prop === Symbol.toStringTag
-        ) {
-          return undefined
-        }
-        return proxyWithRetry([...pathFromRoot, prop])
-      },
-      apply(_, __, args) {
-        const { fn, thisArg } = resolvePath(pathFromRoot)
-        const result = fn.apply(thisArg, args)
-        if (result && typeof result.then === 'function') {
-          return result.catch(async (err: unknown) => {
-            if (err instanceof AuthenticationError) {
-              resetTinfoilClient()
-              await getRawClient()
-              const { fn: freshFn, thisArg: freshThis } =
-                resolvePath(pathFromRoot)
-              return freshFn.apply(freshThis, args)
-            }
-            throw err
-          })
-        }
-        return result
-      },
+      body,
+      signal: options.signal,
     })
   }
 
-  return proxyWithRetry([]) as OpenAI
+  const response = await send()
+  if (response.status !== 401) return response
+  // A response nobody reads holds its connection open until it is collected.
+  await response.body?.cancel().catch(() => undefined)
+  invalidateSessionCache()
+  return send()
 }

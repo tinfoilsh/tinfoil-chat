@@ -1,3 +1,4 @@
+import type { VerificationStatus } from '@/components/verification-sidebar'
 import {
   findSelectableModel,
   getAIModels,
@@ -666,9 +667,8 @@ export function ChatInterface({
 
   // State for tracking verification document
   const [verificationDocument, setVerificationDocument] = useState<any>(null)
-  const [verificationStatus, setVerificationStatus] = useState<
-    'pending' | 'verified' | 'failed'
-  >('pending')
+  const [verificationStatus, setVerificationStatus] =
+    useState<VerificationStatus>('pending')
 
   const userEmail = user?.primaryEmailAddress?.emailAddress || ''
 
@@ -1511,9 +1511,10 @@ export function ChatInterface({
                 ? 'failed'
                 : 'pending',
           )
-        } else if (active && !IS_DEV) {
-          // Dev attests nothing, so an absent document is not a failure.
-          setVerificationStatus('failed')
+        } else if (active) {
+          // Dev attests nothing: that is not a failure, but nothing was
+          // verified either — resolve it so the badge stops spinning.
+          setVerificationStatus(IS_DEV ? 'unverified' : 'failed')
         }
       } catch (error) {
         logError('Failed to initialize tinfoil client', error, {
@@ -3763,6 +3764,13 @@ export function ChatInterface({
                     Verified
                   </span>
                 </>
+              ) : verificationStatus === 'unverified' ? (
+                <>
+                  <BiSolidLockOpen className="h-4 w-4 text-content-muted" />
+                  <span className="text-sm leading-none text-content-muted">
+                    Unverified
+                  </span>
+                </>
               ) : (
                 <>
                   <BiSolidLockOpen className="h-4 w-4 text-red-500" />
@@ -3978,9 +3986,7 @@ export function ChatInterface({
         <VerifierSidebarLazy
           isOpen={isVerifierSidebarOpen}
           setIsOpen={handleSetVerifierSidebarOpen}
-          onVerificationComplete={(success) =>
-            setVerificationStatus(success ? 'verified' : 'failed')
-          }
+          onVerificationComplete={setVerificationStatus}
           onVerificationUpdate={setVerificationDocument}
           isDarkMode={isDarkMode}
           isClient={isClient}

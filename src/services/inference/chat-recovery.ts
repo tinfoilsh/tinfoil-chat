@@ -635,6 +635,19 @@ async function processEnvelope(
               message.turnId === envelope.turnId,
           )
     let checkpointReached = !checkpoint
+    // How far into the run a snapshot is. Everything counted here only grows
+    // as a run advances, so a replay that measures past the checkpoint has
+    // plainly passed it -- the fallback for a checkpoint the replay never
+    // reproduces exactly (a wall-clock thinking duration, tool arguments
+    // formatted as they arrived), which would otherwise freeze the answer on
+    // screen for the rest of the replay.
+    const progress = (message: Message): number =>
+      message.content.length +
+      (message.thoughts?.length ?? 0) +
+      (message.timeline?.length ?? 0) +
+      (message.urlFetches?.length ?? 0) +
+      (message.codeExecCalls?.length ?? 0)
+    const checkpointProgress = checkpoint ? progress(checkpoint) : 0
     const session = new RichStreamSession({
       modelDisplayName: storedChat?.model
         ? getKnownModelDisplayName(storedChat.model)
@@ -660,10 +673,9 @@ async function processEnvelope(
         if (!session.processEvent(event)) continue
         const snapshot = session.snapshot()
         if (!checkpointReached) {
-          checkpointReached = sameRecoveredResponse(
-            checkpoint as Message,
-            snapshot,
-          )
+          checkpointReached =
+            sameRecoveredResponse(checkpoint as Message, snapshot) ||
+            progress(snapshot) > checkpointProgress
           continue
         }
         publishDraft(snapshot)

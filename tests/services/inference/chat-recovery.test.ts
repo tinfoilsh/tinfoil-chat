@@ -3,85 +3,67 @@ import type { PendingRecoveryEnvelope } from '@/components/chat/types'
 import type { AguiEvent, RunStorage } from '@/services/inference/agui/protocol'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const decryptRecoveryEnvelope = vi.fn()
-const encryptRecoveryEnvelope = vi.fn()
-const rewrapRecoveryEnvelope = vi.fn()
-const dropRun = vi.fn()
-const resumeRun = vi.fn()
-const addPendingRecovery = vi.fn()
-const completePendingRecovery = vi.fn()
-const removePendingRecovery = vi.fn()
-const replacePendingRecovery = vi.fn()
-const resetChatRecoverySyncState = vi.fn()
-const clearChatRecoveryDrafts = vi.fn()
-const clearActiveChatRecoveries = vi.fn()
-const getChatRecoveryDraft = vi.fn()
-const pruneChatRecoveryDrafts = vi.fn()
-const setChatRecoveryActive = vi.fn()
-const setChatRecoveryDraft = vi.fn()
-const retryDeferredAlternativesFinalization = vi.fn()
-const generateTitle = vi.fn()
-const getPendingChatRecoveries = vi.fn()
-const getChat = vi.fn()
-let storedAlternatives: string[] = []
-let cloudSyncEnabled = true
-
-const { RunGoneError } = vi.hoisted(() => ({
-  RunGoneError: class RunGoneError extends Error {
-    constructor(message = 'not a recoverable run') {
-      super(message)
-      this.name = 'RunGoneError'
-    }
+// One bag per mocked module, hoisted above the imports so each `vi.mock`
+// factory can hand its module's exports over directly. Without the hoist the
+// factories would run before these bindings exist, which is what the
+// `(...args) => fn(...args)` indirection used to work around.
+const m = vi.hoisted(() => ({
+  crypto: {
+    decryptRecoveryEnvelope: vi.fn(),
+    encryptRecoveryEnvelope: vi.fn(),
+    rewrapRecoveryEnvelope: vi.fn(),
+  },
+  agui: {
+    dropRun: vi.fn(),
+    resumeRun: vi.fn(),
+    RunGoneError: class RunGoneError extends Error {
+      constructor(message = 'not a recoverable run') {
+        super(message)
+        this.name = 'RunGoneError'
+      }
+    },
+  },
+  sync: {
+    addPendingRecovery: vi.fn(),
+    completePendingRecovery: vi.fn(),
+    removePendingRecovery: vi.fn(),
+    replacePendingRecovery: vi.fn(),
+    resetChatRecoverySyncState: vi.fn(),
+    sameRecoveredResponse: (
+      existing: { content?: string },
+      recovered: { content?: string },
+    ) => existing.content === recovered.content,
+  },
+  drafts: {
+    clearActiveChatRecoveries: vi.fn(),
+    clearChatRecoveryDrafts: vi.fn(),
+    getChatRecoveryDraft: vi.fn(),
+    pruneChatRecoveryDrafts: vi.fn(),
+    setChatRecoveryActive: vi.fn(),
+    setChatRecoveryDraft: vi.fn(),
+  },
+  legacyBlob: { retryDeferredAlternativesFinalization: vi.fn() },
+  title: { generateTitle: vi.fn() },
+  indexedDBStorage: {
+    getPendingChatRecoveries: vi.fn(),
+    getChat: vi.fn(),
   },
 }))
 
-vi.mock('@/services/inference/chat-recovery-crypto', () => ({
-  decryptRecoveryEnvelope: (...args: unknown[]) =>
-    decryptRecoveryEnvelope(...args),
-  encryptRecoveryEnvelope: (...args: unknown[]) =>
-    encryptRecoveryEnvelope(...args),
-  rewrapRecoveryEnvelope: (...args: unknown[]) =>
-    rewrapRecoveryEnvelope(...args),
-}))
+let storedAlternatives: string[] = []
+let cloudSyncEnabled = true
 
-vi.mock('@/services/inference/agui/client', () => ({
-  RunGoneError,
-  dropRun: (...args: unknown[]) => dropRun(...args),
-  resumeRun: (...args: unknown[]) => resumeRun(...args),
-}))
-
-vi.mock('@/services/inference/chat-recovery-sync', () => ({
-  addPendingRecovery: (...args: unknown[]) => addPendingRecovery(...args),
-  completePendingRecovery: (...args: unknown[]) =>
-    completePendingRecovery(...args),
-  removePendingRecovery: (...args: unknown[]) => removePendingRecovery(...args),
-  replacePendingRecovery: (...args: unknown[]) =>
-    replacePendingRecovery(...args),
-  resetChatRecoverySyncState: () => resetChatRecoverySyncState(),
-  sameRecoveredResponse: (
-    existing: { content?: string },
-    recovered: { content?: string },
-  ) => existing.content === recovered.content,
-}))
-
-vi.mock('@/services/inference/chat-recovery-drafts', () => ({
-  clearActiveChatRecoveries: () => clearActiveChatRecoveries(),
-  clearChatRecoveryDrafts: () => clearChatRecoveryDrafts(),
-  getChatRecoveryDraft: (...args: unknown[]) => getChatRecoveryDraft(...args),
-  pruneChatRecoveryDrafts: (...args: unknown[]) =>
-    pruneChatRecoveryDrafts(...args),
-  setChatRecoveryActive: (...args: unknown[]) => setChatRecoveryActive(...args),
-  setChatRecoveryDraft: (...args: unknown[]) => setChatRecoveryDraft(...args),
-}))
-
-vi.mock('@/services/cloud/legacy-blob-migration', () => ({
-  retryDeferredAlternativesFinalization: () =>
-    retryDeferredAlternativesFinalization(),
-}))
-
+vi.mock('@/services/inference/chat-recovery-crypto', () => m.crypto)
+vi.mock('@/services/inference/agui/client', () => m.agui)
+vi.mock('@/services/inference/chat-recovery-sync', () => m.sync)
+vi.mock('@/services/inference/chat-recovery-drafts', () => m.drafts)
+vi.mock('@/services/cloud/legacy-blob-migration', () => m.legacyBlob)
 vi.mock('@/services/inference/title', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/inference/title')>()),
-  generateTitle: (...args: unknown[]) => generateTitle(...args),
+  ...m.title,
+}))
+vi.mock('@/services/storage/indexed-db', () => ({
+  indexedDBStorage: m.indexedDBStorage,
 }))
 
 vi.mock('@/services/encryption/encryption-service', () => ({
@@ -92,13 +74,6 @@ vi.mock('@/services/encryption/encryption-service', () => ({
   },
 }))
 
-vi.mock('@/services/storage/indexed-db', () => ({
-  indexedDBStorage: {
-    getPendingChatRecoveries: () => getPendingChatRecoveries(),
-    getChat: (...args: unknown[]) => getChat(...args),
-  },
-}))
-
 vi.mock('@/utils/cloud-sync-settings', () => ({
   isCloudSyncEnabled: () => cloudSyncEnabled,
 }))
@@ -106,6 +81,33 @@ vi.mock('@/utils/cloud-sync-settings', () => ({
 vi.mock('@/utils/error-handling', () => ({
   logError: vi.fn(),
 }))
+
+const {
+  crypto: {
+    decryptRecoveryEnvelope,
+    encryptRecoveryEnvelope,
+    rewrapRecoveryEnvelope,
+  },
+  agui: { dropRun, resumeRun, RunGoneError },
+  sync: {
+    addPendingRecovery,
+    completePendingRecovery,
+    removePendingRecovery,
+    replacePendingRecovery,
+    resetChatRecoverySyncState,
+  },
+  drafts: {
+    clearActiveChatRecoveries,
+    clearChatRecoveryDrafts,
+    getChatRecoveryDraft,
+    pruneChatRecoveryDrafts,
+    setChatRecoveryActive,
+    setChatRecoveryDraft,
+  },
+  legacyBlob: { retryDeferredAlternativesFinalization },
+  title: { generateTitle },
+  indexedDBStorage: { getPendingChatRecoveries, getChat },
+} = m
 
 import {
   abandonChatRecoveryAttempt,
@@ -661,6 +663,37 @@ describe('chat recovery lifecycle', () => {
     expect(setChatRecoveryDraft).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.objectContaining({ content: 'Already shown and more' }),
+      }),
+    )
+  })
+
+  it('resumes publishing past a checkpoint the replay never reproduces', async () => {
+    // A live draft rarely comes back byte-for-byte -- here the replay chunks
+    // the same answer differently -- so waiting for an exact match would leave
+    // the visible draft frozen for the rest of the run.
+    pendingChat()
+    getChatRecoveryDraft.mockReturnValue({
+      chatId: 'chat-1',
+      turnId: 'turn-1',
+      sessionId: STORAGE.sessionId,
+      message: {
+        role: 'assistant',
+        content: 'Already shown',
+        timestamp: new Date().toISOString(),
+      },
+    })
+    resumeRun.mockImplementation(
+      replays(frames(['Already ', 'shown and', ' more'])),
+    )
+
+    await scanPendingChatRecoveries('user-1')
+
+    expect(setChatRecoveryDraft).toHaveBeenCalledTimes(1)
+    expect(setChatRecoveryDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.objectContaining({
+          content: 'Already shown and more',
+        }),
       }),
     )
   })

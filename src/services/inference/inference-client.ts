@@ -17,12 +17,10 @@ import {
   recordPerformanceDuration,
   startPerformanceTimer,
 } from '@/utils/performance-metrics'
-import { APIConnectionError, APIUserAbortError } from 'openai'
-import type { ChatCompletionCreateParamsNonStreaming } from 'openai/resources/chat/completions'
 import { newRunStorage, runAgent, runSimulatedAgent } from './agui/client'
 import {
-  toAguiMessages,
   type AguiEventStream,
+  type CodeExecutionOptions,
   type RunAgentInput,
   type RunStorage,
 } from './agui/protocol'
@@ -30,10 +28,12 @@ import { ChatQueryBuilder } from './chat-query-builder'
 import {
   discardRateLimitSnapshot,
   getRateLimitInfo,
-  getTinfoilClient,
+  inferenceRequest,
   refreshRateLimit,
 } from './tinfoil-client'
 
+// The key a model's `reasoningConfig.params` is filed under, not a URL: the
+// inference base URL already ends at the version root.
 const CHAT_COMPLETIONS_ENDPOINT = '/v1/chat/completions'
 
 const EFFORT_PLACEHOLDER = '$EFFORT'
@@ -141,8 +141,7 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// Statuses the OpenAI SDK itself treats as retryable (client shouldRetry):
-// request timeout, lock timeout, and rate limit. 5xx is handled as a range.
+// Request timeout, lock timeout, and rate limit. 5xx is handled as a range.
 const RETRYABLE_HTTP_STATUSES = new Set([408, 409, 429])
 function getHttpStatus(error: unknown): number | undefined {
   const status = (error as { status?: unknown })?.status
@@ -182,12 +181,8 @@ async function classifyQuotaExhausted429(
 // Typed classification only — never inspect error message strings, which
 // vary across browsers, SDK versions, and locales.
 export function isRetryableError(error: unknown): boolean {
-  // Don't retry user-initiated aborts. APIUserAbortError is the SDK wrapper
-  // for our AbortSignal; "AbortError" is the spec-defined DOMException name
-  // for the same condition on raw fetch paths.
-  if (error instanceof APIUserAbortError) {
-    return false
-  }
+  // "AbortError" is the spec-defined DOMException name for a user-initiated
+  // abort, which is what our AbortSignal produces on every request path.
   if ((error as { name?: unknown })?.name === 'AbortError') {
     return false
   }
@@ -197,12 +192,6 @@ export function isRetryableError(error: unknown): boolean {
       return false
     }
     return error.status >= 500 || RETRYABLE_HTTP_STATUSES.has(error.status)
-  }
-
-  // Transport failures raised by the SDK, including its request timeout
-  // (APIConnectionTimeoutError extends APIConnectionError).
-  if (error instanceof APIConnectionError) {
-    return true
   }
 
   // fetch() signals a network failure by rejecting with a TypeError.
@@ -234,6 +223,7 @@ export interface SendChatStreamParams {
   genUIEnabled?: boolean
   webSearchEnabled?: boolean
   piiCheckEnabled?: boolean
+  codeExecution?: CodeExecutionOptions
   threadId: string
   runId: string
   recovery?: ChatRecoveryCallbacks
@@ -266,6 +256,7 @@ export async function sendChatStream(
     genUIEnabled,
     webSearchEnabled,
     piiCheckEnabled,
+    codeExecution,
     threadId,
     runId,
     recovery,
@@ -298,7 +289,7 @@ export async function sendChatStream(
   const input: RunAgentInput = {
     threadId,
     runId,
-    messages: toAguiMessages(messages),
+    messages,
     tools: genUIEnabled ? buildGenUIToolSchemas() : undefined,
     forwardedProps: {
       model: routed ? AUTO_REQUEST_MODEL : model.modelName,
@@ -306,6 +297,7 @@ export async function sendChatStream(
       thinking: thinkingEnabled,
       webSearch: webSearchEnabled,
       piiCheck: piiCheckEnabled,
+      codeExecution,
     },
   }
 
@@ -336,11 +328,10 @@ export async function sendChatStream(
     // A fresh pair per attempt: a session id belongs to exactly one run, and
     // an attempt that failed may still own the one it was given.
     const storage = recovery && !simulated ? newRunStorage() : null
-    if (storage) {
-      input.sessionId = storage.sessionId
-      input.recoveryToken = storage.recoveryToken
-      recovery?.onAttemptStarted(storage)
-    }
+    if (storage) recovery?.onAttemptStarted(storage)
+    const attemptInput: RunAgentInput = storage
+      ? { ...input, ...storage }
+      : input
 
     try {
       if (simulated && shouldRetryTestFail(lastUserText(updatedMessages))) {
@@ -348,8 +339,8 @@ export async function sendChatStream(
       }
       const streamStartedAt = startPerformanceTimer()
       const stream = simulated
-        ? await runSimulatedAgent(input, signal)
-        : await runAgent(input, signal)
+        ? await runSimulatedAgent(attemptInput, signal)
+        : await runAgent(attemptInput, signal)
       recordPerformanceDuration(
         PERFORMANCE_METRICS.INFERENCE_STREAM_READY,
         streamStartedAt,
@@ -544,8 +535,7 @@ export async function sendStructuredCompletion<T>(
       )
     : messages
 
-  const requestBody: ChatCompletionCreateParamsNonStreaming &
-    Record<string, unknown> = {
+  const requestBody: Record<string, unknown> = {
     model: model.modelName,
     messages: requestMessages,
     stream: false,
@@ -568,28 +558,45 @@ export async function sendStructuredCompletion<T>(
     },
   }
 
-  let response
+  let response: Response
   try {
-    const client = await getTinfoilClient()
-    response = await client.chat.completions.create(requestBody, { signal })
+    response = await inferenceRequest(
+      '/chat/completions',
+      JSON.stringify(requestBody),
+      { headers: { 'Content-Type': 'application/json' }, signal },
+    )
   } catch (error) {
     if (
-      error instanceof APIUserAbortError ||
-      (typeof DOMException !== 'undefined' &&
-        error instanceof DOMException &&
-        error.name === 'AbortError')
+      typeof DOMException !== 'undefined' &&
+      error instanceof DOMException &&
+      error.name === 'AbortError'
     ) {
       throw error
     }
-    const requestCode = (error as { code?: unknown })?.code
     throw new StructuredCompletionError('request_failed', {
       cause: error,
       status: getHttpStatus(error),
+    })
+  }
+
+  if (!response.ok) {
+    // Classify by status and the server's own code; never by message text,
+    // which varies with locale and deployment.
+    const body = await response.json().catch(() => null)
+    const requestCode = (body as { error?: { code?: unknown } })?.error?.code
+    throw new StructuredCompletionError('request_failed', {
+      status: response.status,
       requestCode: typeof requestCode === 'string' ? requestCode : undefined,
     })
   }
 
-  const choice = response.choices[0]
+  const payload = (await response.json()) as {
+    choices?: Array<{
+      finish_reason?: string | null
+      message?: { content?: string | null; refusal?: string | null }
+    }>
+  }
+  const choice = payload.choices?.[0]
   const finishReason =
     typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined
   if (choice?.message?.refusal) {

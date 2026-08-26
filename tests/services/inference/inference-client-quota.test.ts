@@ -28,7 +28,7 @@ vi.mock('@/services/inference/agui/client', () => ({
 vi.mock('@/services/inference/tinfoil-client', () => ({
   discardRateLimitSnapshot: () => discardRateLimitSnapshot(),
   getRateLimitInfo: () => getRateLimitInfo(),
-  getTinfoilClient: vi.fn(),
+  inferenceRequest: vi.fn(),
   refreshRateLimit: () => refreshRateLimit(),
 }))
 

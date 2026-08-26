@@ -1,4 +1,5 @@
 import { ChatError } from '@/components/chat/chat-utils'
+import { isGenUIToolName } from '@/components/chat/genui/registry'
 import type { NormalizedEvent } from '@/components/chat/hooks/streaming/types'
 import { logError } from '@/utils/error-handling'
 import {
@@ -64,7 +65,7 @@ export function createAguiNormalizer(): AguiNormalizer {
           endThinking(events)
           thinkingClosedByContent = false
           calls.set(event.toolCallId, { name: event.toolCallName, args: '' })
-          if (isRendered(event.toolCallName)) {
+          if (isGenUIToolName(event.toolCallName)) {
             events.push({
               type: 'genui_tool_call_start',
               id: event.toolCallId,
@@ -77,7 +78,7 @@ export function createAguiNormalizer(): AguiNormalizer {
           const call = calls.get(event.toolCallId)
           if (!call) break
           call.args += event.delta
-          if (isRendered(call.name)) {
+          if (isGenUIToolName(call.name)) {
             events.push({
               type: 'genui_tool_call_delta',
               id: event.toolCallId,
@@ -89,7 +90,7 @@ export function createAguiNormalizer(): AguiNormalizer {
 
         case 'TOOL_CALL_END': {
           const call = calls.get(event.toolCallId)
-          if (!call) break
+          if (!call || isGenUIToolName(call.name)) break
           const args = parseJson<Record<string, unknown>>(call.args)
           if (call.name === WEB_SEARCH_TOOL) {
             events.push({
@@ -105,13 +106,23 @@ export function createAguiNormalizer(): AguiNormalizer {
               url: typeof args?.url === 'string' ? args.url : '',
               status: 'in_progress',
             })
+          } else {
+            // The call is shown once its arguments are whole: the renderer
+            // takes them at the push and only status and output after that.
+            events.push({
+              type: 'code_exec_tool_call',
+              id: event.toolCallId,
+              toolName: call.name,
+              status: 'in_progress',
+              arguments: args ?? undefined,
+            })
           }
           break
         }
 
         case 'TOOL_CALL_RESULT': {
           const call = calls.get(event.toolCallId)
-          if (!call) break
+          if (!call || isGenUIToolName(call.name)) break
           const result = parseJson<SearchResult>(event.content)
           const failed = !result || typeof result.error === 'string'
           if (call.name === WEB_SEARCH_TOOL) {
@@ -128,29 +139,34 @@ export function createAguiNormalizer(): AguiNormalizer {
               url: '',
               status: failed ? 'failed' : 'completed',
             })
+          } else {
+            // Unlike a search result, this content is the tool's own output and
+            // need not be JSON: only a reported error means the call failed.
+            events.push({
+              type: 'code_exec_tool_call',
+              id: event.toolCallId,
+              toolName: call.name,
+              status:
+                typeof result?.error === 'string' ? 'failed' : 'completed',
+              output: event.content,
+            })
           }
           break
         }
 
-        case 'ACTIVITY_SNAPSHOT': {
-          const output = event.content.output ?? []
-          const taken = activityNotes.get(event.messageId) ?? 0
-          for (const note of output.slice(taken)) {
-            events.push({ type: 'search_reasoning', content: note })
-          }
-          activityNotes.set(event.messageId, Math.max(taken, output.length))
-          break
-        }
-
+        case 'ACTIVITY_SNAPSHOT':
         case 'ACTIVITY_DELTA': {
-          const notes = appended(event.patch)
+          const taken = activityNotes.get(event.messageId) ?? 0
+          // A snapshot restates the whole log, so only what lies past the notes
+          // already taken is new; a delta carries nothing else.
+          const notes =
+            event.type === 'ACTIVITY_SNAPSHOT'
+              ? (event.content.output ?? []).slice(taken)
+              : appended(event.patch)
           for (const note of notes) {
             events.push({ type: 'search_reasoning', content: note })
           }
-          activityNotes.set(
-            event.messageId,
-            (activityNotes.get(event.messageId) ?? 0) + notes.length,
-          )
+          activityNotes.set(event.messageId, taken + notes.length)
           break
         }
 
@@ -183,10 +199,6 @@ export function createAguiNormalizer(): AguiNormalizer {
       }
     },
   }
-}
-
-function isRendered(name: string): boolean {
-  return name !== WEB_SEARCH_TOOL && name !== WEB_FETCH_TOOL
 }
 
 interface SearchResult {

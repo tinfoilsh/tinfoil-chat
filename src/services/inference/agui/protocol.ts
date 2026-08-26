@@ -1,5 +1,4 @@
 import type { Annotation } from '@/components/chat/types'
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 
 export interface AguiToolCall {
   id: string
@@ -45,7 +44,17 @@ export interface RunStorage {
   recoveryToken: string
 }
 
-export interface RunAgentInput extends Partial<RunStorage> {
+/**
+ * Where the code-exec container keeps its state and who is allowed to talk to
+ * it. Every field is per-chat, so the three travel together or not at all.
+ */
+export interface CodeExecutionOptions {
+  accessToken: string
+  encryptionKey: string
+  containerAuthToken: string
+}
+
+interface RunAgentRequest {
   threadId: string
   runId: string
   messages: AguiMessage[]
@@ -56,54 +65,17 @@ export interface RunAgentInput extends Partial<RunStorage> {
     thinking?: boolean
     webSearch?: boolean
     piiCheck?: boolean
+    codeExecution?: CodeExecutionOptions
   }
   resume?: boolean
 }
 
-export function toAguiMessages(
-  messages: ChatCompletionMessageParam[],
-): AguiMessage[] {
-  return messages.map((message, index) => {
-    const source = message as ChatCompletionMessageParam & {
-      tool_calls?: AguiToolCall[]
-      tool_call_id?: string
-      annotations?: Annotation[]
-      search_reasoning?: string
-      reasoning_content?: string
-    }
-    return {
-      id: `m${index}`,
-      role: message.role,
-      content: toAguiContent(source.content),
-      toolCalls: source.tool_calls,
-      toolCallId: source.tool_call_id,
-      annotations: source.annotations,
-      searchReasoning: source.search_reasoning,
-      reasoningContent: source.reasoning_content,
-    }
-  })
-}
-
-function toAguiContent(
-  content: unknown,
-): string | AguiContentPart[] | undefined {
-  if (content == null) return undefined
-  if (typeof content === 'string') return content
-  if (!Array.isArray(content)) return undefined
-
-  const parts: AguiContentPart[] = []
-  for (const part of content) {
-    if (part?.type === 'image_url' && part.image_url?.url) {
-      parts.push({
-        type: 'image',
-        source: { type: 'url', value: part.image_url.url },
-      })
-    } else if (typeof part?.text === 'string') {
-      parts.push({ type: 'text', text: part.text })
-    }
-  }
-  return parts
-}
+/**
+ * The recovery pair is one credential in two halves: either half on its own
+ * authorizes nothing, so a request carries both or neither.
+ */
+export type RunAgentInput = RunAgentRequest &
+  (RunStorage | { sessionId?: never; recoveryToken?: never })
 
 export interface AguiUsage {
   prompt_tokens: number
@@ -157,5 +129,8 @@ export interface AguiEventStream extends AsyncIterable<AguiEvent> {
   abandonRecovery?: () => Promise<void>
 }
 
+// The two the harness reports through their own timeline blocks. Every other
+// name it sends is either a widget this client offered -- which only the GenUI
+// registry can say -- or a tool it ran and the renderer names generically.
 export const WEB_SEARCH_TOOL = 'web_search'
 export const WEB_FETCH_TOOL = 'web_fetch'

@@ -12,13 +12,10 @@ import {
 import { shouldIncludeReasoning } from '@/utils/reasoning-history'
 import { formatCurrentTimeReminder } from '@/utils/time-reminder'
 import { selectMessagesWithinBudget } from '@/utils/token-estimation'
-import type {
-  ChatCompletionAssistantMessageParam,
-  ChatCompletionMessageParam,
-  ChatCompletionSystemMessageParam,
-  ChatCompletionToolMessageParam,
-  ChatCompletionUserMessageParam,
-} from 'openai/resources/chat/completions'
+import type { AguiContentPart, AguiMessage } from './agui/protocol'
+
+/** A message before it is given the id that orders it in the request. */
+type DraftMessage = Omit<AguiMessage, 'id'>
 
 /**
  * Helper for building chat completion queries with model-specific system prompt injection
@@ -64,9 +61,7 @@ export class ChatQueryBuilder {
   /**
    * Build chat completion messages with model-appropriate system prompt and rules injection
    */
-  static buildMessages(
-    params: ChatQueryBuilderParams,
-  ): ChatCompletionMessageParam[] {
+  static buildMessages(params: ChatQueryBuilderParams): AguiMessage[] {
     const {
       model,
       systemPrompt,
@@ -97,7 +92,7 @@ export class ChatQueryBuilder {
       ? rules.replaceAll('{MODEL_NAME}', model.name)
       : ''
 
-    const result: ChatCompletionMessageParam[] = []
+    const result: DraftMessage[] = []
 
     // Determine if we should use system role or prepend to user message
     const useSystemRole =
@@ -112,10 +107,7 @@ export class ChatQueryBuilder {
         genUIHint,
       )
       if (systemContent) {
-        result.push({
-          role: 'system',
-          content: systemContent,
-        } as ChatCompletionSystemMessageParam)
+        result.push({ role: 'system', content: systemContent })
       }
     }
 
@@ -149,40 +141,33 @@ export class ChatQueryBuilder {
             result.push({
               role: 'user',
               content: `<system>\n${withHint}\n</system>`,
-            } as ChatCompletionUserMessageParam)
+            })
           }
           addedSystemInstructions = true
         }
 
-        result.push({
-          role: 'user',
-          content: userContent,
-        } as ChatCompletionUserMessageParam)
+        result.push({ role: 'user', content: userContent })
       } else if (
         msg.content ||
         (msg.toolCalls && msg.toolCalls.length > 0) ||
         (includeReasoning && msg.thoughts !== undefined)
       ) {
         // Assistant messages - include annotations and searchReasoning for multi-turn context
-        const assistantParam: ChatCompletionAssistantMessageParam & {
-          annotations?: Message['annotations']
-          search_reasoning?: string
-          reasoning_content?: string
-        } = {
+        const assistantMessage: DraftMessage = {
           role: 'assistant',
           content: msg.content || '',
         }
         if (msg.annotations && msg.annotations.length > 0) {
-          assistantParam.annotations = msg.annotations
+          assistantMessage.annotations = msg.annotations
         }
         if (msg.searchReasoning) {
-          assistantParam.search_reasoning = msg.searchReasoning
+          assistantMessage.searchReasoning = msg.searchReasoning
         }
         if (includeReasoning && msg.thoughts !== undefined) {
-          assistantParam.reasoning_content = msg.thoughts
+          assistantMessage.reasoningContent = msg.thoughts
         }
         if (msg.toolCalls && msg.toolCalls.length > 0) {
-          assistantParam.tool_calls = msg.toolCalls.map((tc) => ({
+          assistantMessage.toolCalls = msg.toolCalls.map((tc) => ({
             id: tc.id,
             type: 'function' as const,
             function: {
@@ -191,7 +176,7 @@ export class ChatQueryBuilder {
             },
           }))
         }
-        result.push(assistantParam)
+        result.push(assistantMessage)
 
         // Emit synthetic tool results so the model's next turn sees a
         // consistent history. GenUI tools auto-continue: the UI rendered
@@ -200,22 +185,20 @@ export class ChatQueryBuilder {
           for (const tc of msg.toolCalls) {
             result.push({
               role: 'tool',
-              tool_call_id: tc.id,
+              toolCallId: tc.id,
               content: 'executed',
-            } as ChatCompletionToolMessageParam)
+            })
           }
         }
       }
     }
 
     if (includeTimeReminder) {
-      result.push({
-        role: 'user',
-        content: formatCurrentTimeReminder(),
-      } as ChatCompletionUserMessageParam)
+      result.push({ role: 'user', content: formatCurrentTimeReminder() })
     }
 
-    return result
+    // Ids number the messages in the order the harness will read them.
+    return result.map((message, index) => ({ id: `m${index}`, ...message }))
   }
 
   /**
@@ -247,9 +230,7 @@ export class ChatQueryBuilder {
   private static buildUserContent(
     msg: Message,
     multimodal?: boolean,
-  ):
-    | string
-    | Array<{ type: string; text?: string; image_url?: { url: string } }> {
+  ): string | AguiContentPart[] {
     let textContent = msg.content
 
     // Prepend the quoted reference so the model knows what the user is replying to.
@@ -287,11 +268,7 @@ export class ChatQueryBuilder {
     const imageAttachments = getMessageImages(msg)
 
     if (multimodal && (imageAttachments.length > 0 || pagedDocs.length > 0)) {
-      const content: Array<{
-        type: string
-        text?: string
-        image_url?: { url: string }
-      }> = []
+      const content: AguiContentPart[] = []
 
       for (const doc of pagedDocs) {
         content.push({
@@ -308,8 +285,11 @@ export class ChatQueryBuilder {
           })
           if (p.image) {
             content.push({
-              type: 'image_url',
-              image_url: { url: `data:image/png;base64,${p.image}` },
+              type: 'image',
+              source: {
+                type: 'url',
+                value: `data:image/png;base64,${p.image}`,
+              },
             })
           }
         }
@@ -320,9 +300,10 @@ export class ChatQueryBuilder {
       for (const img of imageAttachments) {
         if (img.base64 && img.mimeType) {
           content.push({
-            type: 'image_url',
-            image_url: {
-              url: `data:${img.mimeType};base64,${img.base64}`,
+            type: 'image',
+            source: {
+              type: 'url',
+              value: `data:${img.mimeType};base64,${img.base64}`,
             },
           })
         }

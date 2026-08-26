@@ -2,7 +2,7 @@ import { getAIModels, type AutoTier, type BaseModel } from '@/config/models'
 import {
   getSecureFetch,
   getSessionToken,
-  getTinfoilClient,
+  inferenceRequest,
 } from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
 import {
@@ -105,36 +105,42 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
       throw new Error('No multimodal model available')
     }
 
-    const client = await getTinfoilClient()
-    const response = await client.chat.completions.create({
-      model: multimodalModel.modelName,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Describe this image in detail. Include:
+    const response = await inferenceRequest(
+      '/chat/completions',
+      JSON.stringify({
+        model: multimodalModel.modelName,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Describe this image in detail. Include:
 - What is happening in the image
 - Colors (provide hex codes where relevant)
 - Any text visible in the image
 - Layout and composition
 - Other notable details`,
-            },
-            {
-              type: 'image_url',
-              image_url: { url: `data:${mimeType};base64,${base64}` },
-            },
-          ],
-        },
-      ],
-      stream: false,
-    })
-
-    return (
-      (response.choices[0]?.message?.content as string) ||
-      'Unable to describe image'
+              },
+              {
+                type: 'image_url',
+                image_url: { url: `data:${mimeType};base64,${base64}` },
+              },
+            ],
+          },
+        ],
+        stream: false,
+      }),
+      { headers: { 'Content-Type': 'application/json' } },
     )
+    if (!response.ok) {
+      throw new Error(`Image description failed: ${response.status}`)
+    }
+
+    const payload = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string | null } }>
+    }
+    return payload.choices?.[0]?.message?.content || 'Unable to describe image'
   }
 
   // Main upload function
@@ -268,24 +274,30 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
           return
         }
 
-        const client = await getTinfoilClient()
-        const transcription = await client.audio.transcriptions.create({
-          file,
-          model: audioModel,
-          response_format: 'text',
-        })
+        const transcription = new FormData()
+        transcription.append('file', file)
+        transcription.append('model', audioModel)
+        transcription.append('response_format', 'text')
+        const response = await inferenceRequest(
+          '/audio/transcriptions',
+          transcription,
+        )
+        if (!response.ok) {
+          onError(
+            new Error(`Transcription failed: ${response.status}`),
+            documentId,
+          )
+          return
+        }
 
-        const text =
-          typeof transcription === 'string'
-            ? transcription
-            : (transcription as any).text
-
+        // `response_format: 'text'` means the body is the transcript itself.
+        const text = (await response.text()).trim()
         if (!text) {
           onError(new Error('No transcription text received'), documentId)
           return
         }
 
-        await onSuccess(text.trim(), documentId)
+        await onSuccess(text, documentId)
         return
       }
 

@@ -28,8 +28,12 @@ import { REQUEST_UPGRADE_EVENT } from '@/constants/chat-events'
 import { useChatRecoveryActive } from '@/hooks/use-chat-recovery-drafts'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { ENCRYPTION_KEY_CHANGED_EVENT } from '@/services/encryption/encryption-service'
+import { getCodeExecutionContainerAuthTokenForChat } from '@/services/exec-snapshot'
 import { generateCodeExecutionAccessToken } from '@/services/exec-snapshot/access-token'
-import type { AguiEventStream } from '@/services/inference/agui/protocol'
+import type {
+  AguiEventStream,
+  CodeExecutionOptions,
+} from '@/services/inference/agui/protocol'
 import {
   abandonChatRecoveryAttempt,
   cancelChatRecovery,
@@ -1176,6 +1180,31 @@ export function useChatMessaging({
 
         const baseSystemPrompt = systemPromptOverride || systemPrompt
 
+        // The container the code runs in is addressed by these three per-chat
+        // secrets, so they travel together or not at all: without all of them
+        // the harness has nothing to authorize against, and the turn is better
+        // refused than answered with the tool quietly absent.
+        let codeExecution: CodeExecutionOptions | undefined
+        if (codeExecutionEnabled) {
+          const containerAuthToken =
+            await getCodeExecutionContainerAuthTokenForChat(updatedChat.id)
+          if (
+            !updatedChat.codeExecutionAccessToken ||
+            !codeExecutionEncryptionKey ||
+            !containerAuthToken
+          ) {
+            throw new ChatError(
+              'Code execution requested without an accessToken, encryption key, or container auth token',
+              'FETCH_ERROR',
+            )
+          }
+          codeExecution = {
+            accessToken: updatedChat.codeExecutionAccessToken,
+            encryptionKey: codeExecutionEncryptionKey,
+            containerAuthToken,
+          }
+        }
+
         // Recovery is best-effort: the user turn must be durable locally
         // before the recoverable inference request starts. This required wait
         // has no cloud network work; ordinary backup remains non-blocking, and
@@ -1231,6 +1260,7 @@ export function useChatMessaging({
           genUIEnabled: genUIEnabled ?? true,
           webSearchEnabled: chatWebSearchEnabled,
           piiCheckEnabled,
+          codeExecution,
           threadId: streamChatIdRef.current,
           runId: turnId ?? crypto.randomUUID(),
           recovery:
@@ -1670,6 +1700,7 @@ export function useChatMessaging({
       codeExecutionEnabled,
       piiCheckEnabled,
       genUIEnabled,
+      codeExecutionEncryptionKey,
       isRecoveryActive,
       patchStatus,
       resetStatus,

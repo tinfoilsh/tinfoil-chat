@@ -2,8 +2,19 @@ import { ChatError } from '@/components/chat/chat-utils'
 import { RichStreamSession } from '@/components/chat/hooks/streaming/rich-stream-session'
 import { createAguiNormalizer } from '@/services/inference/agui/normalizer'
 import type { AguiEvent } from '@/services/inference/agui/protocol'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import liveRun from '../../../fixtures/agui-live-run.json'
+
+// One recorded run, one event per line: a diff shows which frames changed
+// rather than reindenting the whole file.
+const liveRun: AguiEvent[] = readFileSync(
+  resolve(process.cwd(), 'tests/fixtures/agui-live-run.jsonl'),
+  'utf8',
+)
+  .trim()
+  .split('\n')
+  .map((line) => JSON.parse(line) as AguiEvent)
 
 function text(messageId: string, delta: string): AguiEvent {
   return { type: 'TEXT_MESSAGE_CHUNK', messageId, delta }
@@ -224,6 +235,46 @@ describe('agui normalizer', () => {
     ])
   })
 
+  it('sends a tool the container ran to the code-exec renderer', () => {
+    expect(normalize(call('c1', 'bash', '{"command":"ls -la"}'))).toEqual([
+      {
+        type: 'code_exec_tool_call',
+        id: 'c1',
+        toolName: 'bash',
+        status: 'in_progress',
+        arguments: { command: 'ls -la' },
+      },
+    ])
+  })
+
+  it('completes a container tool with the output it printed', () => {
+    expect(
+      normalize([
+        ...call('c1', 'bash', '{"command":"ls"}'),
+        { type: 'TOOL_CALL_RESULT', toolCallId: 'c1', content: 'total 0\n' },
+      ]).at(-1),
+    ).toEqual({
+      type: 'code_exec_tool_call',
+      id: 'c1',
+      toolName: 'bash',
+      status: 'completed',
+      output: 'total 0\n',
+    })
+  })
+
+  it('fails a container tool whose result reported an error', () => {
+    expect(
+      normalize([
+        ...call('c1', 'bash', '{"command":"nope"}'),
+        {
+          type: 'TOOL_CALL_RESULT',
+          toolCallId: 'c1',
+          content: '{"error":"command not found"}',
+        },
+      ]).at(-1),
+    ).toMatchObject({ type: 'code_exec_tool_call', status: 'failed' })
+  })
+
   it('surfaces the progress a running tool reports', () => {
     expect(
       normalize([
@@ -324,7 +375,7 @@ describe('agui normalizer', () => {
 
   it('assembles a recorded run into a message', () => {
     const session = new RichStreamSession()
-    for (const event of liveRun as AguiEvent[]) session.processEvent(event)
+    for (const event of liveRun) session.processEvent(event)
     const message = session.complete()
 
     expect(message.content).toContain('AMD root CA')

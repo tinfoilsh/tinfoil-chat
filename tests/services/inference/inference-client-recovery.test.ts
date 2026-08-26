@@ -16,10 +16,24 @@ vi.mock('@/services/inference/agui/client', () => ({
   },
 }))
 
+vi.mock('@/components/chat/constants', async () => {
+  const actual = await vi.importActual<
+    typeof import('@/components/chat/constants')
+  >('@/components/chat/constants')
+  return {
+    ...actual,
+    CONSTANTS: {
+      ...actual.CONSTANTS,
+      MESSAGE_SEND_MAX_RETRIES: 2,
+      MESSAGE_SEND_RETRY_DELAY_MS: 0,
+    },
+  }
+})
+
 vi.mock('@/services/inference/tinfoil-client', () => ({
   discardRateLimitSnapshot: vi.fn(),
   getRateLimitInfo: vi.fn(),
-  getTinfoilClient: vi.fn(),
+  inferenceRequest: vi.fn(),
   refreshRateLimit: vi.fn(async () => undefined),
 }))
 
@@ -40,6 +54,22 @@ function stream() {
       yield { type: 'TEXT_MESSAGE_CHUNK', messageId: 'm', delta: 'answer' }
     },
   }
+}
+
+function recoveryCallbacks() {
+  return {
+    onAttemptStarted: vi.fn((_storage: RunStorage) => undefined),
+    onRunRecoverable: vi.fn(async (_storage: RunStorage) => undefined),
+    onAttemptAbandoned: vi.fn(async (_storage: RunStorage) => undefined),
+  }
+}
+
+/** The pair the Nth attempt was handed. */
+function attemptPair(
+  recovery: ReturnType<typeof recoveryCallbacks>,
+  attempt = 0,
+): RunStorage {
+  return recovery.onAttemptStarted.mock.calls[attempt][0]
 }
 
 function send(recovery?: Parameters<typeof sendChatStream>[0]['recovery']) {
@@ -88,5 +118,95 @@ describe('sendChatStream recovery pair', () => {
     const input = runAgent.mock.calls[0][0] as Record<string, unknown>
     expect(input).not.toHaveProperty('sessionId')
     expect(input).not.toHaveProperty('recoveryToken')
+  })
+
+  it('registers the run as recoverable once the harness has answered', async () => {
+    const recovery = recoveryCallbacks()
+    let answer!: (value: unknown) => void
+    runAgent.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve
+      }),
+    )
+
+    const pending = send(recovery)
+    await vi.waitFor(() => expect(recovery.onAttemptStarted).toHaveBeenCalled())
+    // Nothing to come back to until the run actually exists.
+    expect(recovery.onRunRecoverable).not.toHaveBeenCalled()
+
+    answer(stream())
+    const started = await pending
+
+    expect(recovery.onRunRecoverable).toHaveBeenCalledWith(
+      attemptPair(recovery),
+    )
+    await expect(started.recoveryReady).resolves.toBeUndefined()
+    expect(recovery.onAttemptAbandoned).not.toHaveBeenCalled()
+  })
+
+  it('abandons the pair when the run never starts', async () => {
+    const recovery = recoveryCallbacks()
+    runAgent.mockRejectedValue(
+      Object.assign(new Error('invalid request'), { status: 400 }),
+    )
+
+    await expect(send(recovery)).rejects.toMatchObject({
+      code: 'SERVER_ERROR',
+    })
+
+    expect(recovery.onAttemptAbandoned).toHaveBeenCalledWith(
+      attemptPair(recovery),
+    )
+    expect(recovery.onRunRecoverable).not.toHaveBeenCalled()
+  })
+
+  it('abandons the pair when the request is aborted', async () => {
+    const recovery = recoveryCallbacks()
+    runAgent.mockRejectedValue(new DOMException('Aborted', 'AbortError'))
+
+    await expect(send(recovery)).rejects.toMatchObject({ name: 'AbortError' })
+
+    expect(recovery.onAttemptStarted).toHaveBeenCalledOnce()
+    expect(recovery.onAttemptAbandoned).toHaveBeenCalledWith(
+      attemptPair(recovery),
+    )
+  })
+
+  it('abandons the pair when registering the run fails', async () => {
+    const recovery = recoveryCallbacks()
+    const registrationError = new Error('registration unavailable')
+    recovery.onRunRecoverable.mockRejectedValueOnce(registrationError)
+
+    const started = await send(recovery)
+
+    await expect(started.recoveryReady).rejects.toBe(registrationError)
+    expect(recovery.onAttemptAbandoned).toHaveBeenCalledWith(
+      attemptPair(recovery),
+    )
+  })
+
+  it('mints a fresh pair for every attempt', async () => {
+    const recovery = recoveryCallbacks()
+    runAgent.mockRejectedValueOnce(new TypeError('network unavailable'))
+
+    const started = await send(recovery)
+
+    expect(recovery.onAttemptStarted).toHaveBeenCalledTimes(2)
+    const first = attemptPair(recovery, 0)
+    const second = attemptPair(recovery, 1)
+    // A session id belongs to exactly one run.
+    expect(second.sessionId).not.toBe(first.sessionId)
+    expect(second.recoveryToken).not.toBe(first.recoveryToken)
+
+    expect(recovery.onAttemptAbandoned).toHaveBeenCalledExactlyOnceWith(first)
+    expect(recovery.onRunRecoverable).toHaveBeenCalledExactlyOnceWith(second)
+    expect(runAgent).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sessionId: second.sessionId,
+        recoveryToken: second.recoveryToken,
+      }),
+      expect.any(AbortSignal),
+    )
+    await expect(started.recoveryReady).resolves.toBeUndefined()
   })
 })
