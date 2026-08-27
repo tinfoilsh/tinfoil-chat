@@ -500,12 +500,14 @@ export class ChatStorageService {
 
       await indexedDBStorage.updateChatProject(chatId, projectId)
       await cloudSync.updateChatProject(chatId, projectId)
-      await cloudSync.backupChat(chatId)
+      await cloudSync.backupChatAndWait(chatId)
+      chatEvents.emit({ reason: 'save', ids: [chatId] })
     } catch (error) {
       if (convertedToCloud) {
         try {
           await this.convertChatToLocal(chatId)
           await indexedDBStorage.saveChat(originalChat)
+          chatEvents.emit({ reason: 'save', ids: [chatId] })
         } catch (rollbackError) {
           logError(
             'Failed to restore local chat after project move',

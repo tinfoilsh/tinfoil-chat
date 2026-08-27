@@ -13,6 +13,7 @@ const {
   deleteAllChatsSpy,
   backupChatSpy,
   backupChatNowSpy,
+  backupChatAndWaitSpy,
   updateCloudChatProjectSpy,
   deleteChatsByProjectSpy,
   acknowledgePendingDeletesSpy,
@@ -30,6 +31,7 @@ const {
   deleteFromCloudSpy,
   deleteAllCloudChatsSpy,
   isCloudAuthenticatedSpy,
+  chatEventsEmitSpy,
   hasPendingUploadSpy,
   isDeletedSpy,
   markAsDeletedSpy,
@@ -44,6 +46,7 @@ const {
   deleteAllChatsSpy: vi.fn(async () => 0),
   backupChatSpy: vi.fn(async () => {}),
   backupChatNowSpy: vi.fn(async () => {}),
+  backupChatAndWaitSpy: vi.fn(async () => {}),
   updateCloudChatProjectSpy: vi.fn(async () => {}),
   deleteChatsByProjectSpy: vi.fn(async () => [] as string[]),
   acknowledgePendingDeletesSpy: vi.fn(async () => {}),
@@ -64,6 +67,7 @@ const {
   deleteFromCloudSpy: vi.fn(async () => {}),
   deleteAllCloudChatsSpy: vi.fn(async () => ({ deleted: 0 })),
   isCloudAuthenticatedSpy: vi.fn(async () => false),
+  chatEventsEmitSpy: vi.fn(),
   hasPendingUploadSpy: vi.fn(() => false),
   isDeletedSpy: vi.fn((_id: unknown) => false),
   markAsDeletedSpy: vi.fn(),
@@ -91,6 +95,7 @@ vi.mock('@/services/cloud/cloud-sync', () => ({
   cloudSync: {
     backupChat: backupChatSpy,
     backupChatNow: backupChatNowSpy,
+    backupChatAndWait: backupChatAndWaitSpy,
     updateChatProject: updateCloudChatProjectSpy,
     deleteFromCloud: deleteFromCloudSpy,
     hasPendingUpload: hasPendingUploadSpy,
@@ -113,7 +118,7 @@ vi.mock('@/services/cloud/streaming-tracker', () => ({
   streamingTracker: { isStreaming: vi.fn(() => false) },
 }))
 vi.mock('@/services/storage/chat-events', () => ({
-  chatEvents: { emit: vi.fn() },
+  chatEvents: { emit: chatEventsEmitSpy },
 }))
 vi.mock('@/services/storage/deleted-chats-tracker', () => ({
   deletedChatsTracker: {
@@ -488,6 +493,48 @@ describe('chatStorage project move rollback', () => {
     })
     expect(deleteFromCloudSpy).toHaveBeenCalledWith('rev_123_abc', 'delete-key')
     expect(saveChatSpy).toHaveBeenLastCalledWith(originalChat)
-    expect(backupChatSpy).not.toHaveBeenCalled()
+    expect(chatEventsEmitSpy).toHaveBeenLastCalledWith({
+      reason: 'save',
+      ids: ['rev_123_abc'],
+    })
+  })
+
+  it('rolls back when the project chat upload fails', async () => {
+    const originalChat = makeChat({
+      messages: [{ role: 'user', content: 'Keep this message' }],
+      isLocalOnly: true,
+      projectId: 'original-project',
+    })
+    const convertedChat = { ...originalChat, isLocalOnly: false }
+    getChatSpy
+      .mockResolvedValueOnce(originalChat as unknown)
+      .mockResolvedValueOnce(originalChat as unknown)
+      .mockResolvedValueOnce(convertedChat as unknown)
+    backupChatAndWaitSpy.mockRejectedValueOnce(new Error('upload failed'))
+
+    await expect(
+      chatStorage.moveChatToProject('rev_123_abc', 'target-project'),
+    ).rejects.toThrow('upload failed')
+
+    expect(backupChatAndWaitSpy).toHaveBeenCalledWith('rev_123_abc')
+    expect(deleteFromCloudSpy).toHaveBeenCalledWith('rev_123_abc', 'delete-key')
+    expect(saveChatSpy).toHaveBeenLastCalledWith(originalChat)
+    expect(chatEventsEmitSpy).toHaveBeenLastCalledWith({
+      reason: 'save',
+      ids: ['rev_123_abc'],
+    })
+  })
+
+  it('emits a save event after a successful project move', async () => {
+    getChatSpy.mockResolvedValueOnce(makeChat() as unknown)
+
+    await chatStorage.moveChatToProject('rev_123_abc', 'target-project')
+
+    expect(backupChatAndWaitSpy).toHaveBeenCalledWith('rev_123_abc')
+    expect(chatEventsEmitSpy).toHaveBeenCalledOnce()
+    expect(chatEventsEmitSpy).toHaveBeenCalledWith({
+      reason: 'save',
+      ids: ['rev_123_abc'],
+    })
   })
 })
