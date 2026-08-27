@@ -41,6 +41,10 @@ const PRESERVE_LOCAL_WHEN_REMOTE_OMITS = new Set<
   (typeof PROFILE_MERGE_FIELDS)[number]
 >(['pixelateSidebarChatTitlesEnabled', 'pinnedChatIds'])
 
+const TREAT_LOCAL_OMISSION_AS_UNEDITED = new Set<
+  (typeof PROFILE_MERGE_FIELDS)[number]
+>(['language', 'isUsingPersonalization'])
+
 // A blob's field clocks are trustworthy only when they were maintained
 // at the row's current server version. If a clock-unaware client wrote
 // since, clockVersion lags the etag and we must not trust the clocks.
@@ -245,7 +249,11 @@ export function mergeProfilesThreeWay(args: {
 
   for (const field of PROFILE_MERGE_FIELDS) {
     const baselineValue = (baseline as Record<string, unknown>)[field]
-    const localValue = (local as Record<string, unknown>)[field]
+    const localHasField = Object.prototype.hasOwnProperty.call(local, field)
+    const localValue =
+      !localHasField && TREAT_LOCAL_OMISSION_AS_UNEDITED.has(field)
+        ? baselineValue
+        : (local as Record<string, unknown>)[field]
     const remoteValue = (remote as Record<string, unknown>)[field]
     const lc = fieldClock(local, field, localTrusted)
     const rc = fieldClock(remote, field, remoteTrusted)
