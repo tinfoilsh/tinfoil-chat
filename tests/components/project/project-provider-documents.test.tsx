@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   deleteDocument: vi.fn(),
   loadMemory: vi.fn(),
   processMessages: vi.fn(),
+  subscriptionActive: true,
   projectEventHandlers: new Map<string, (event: unknown) => void>(),
 }))
 
@@ -25,6 +26,13 @@ vi.mock('@/hooks/use-memory', () => ({
   useMemory: () => ({
     loadMemory: mocks.loadMemory,
     processMessages: mocks.processMessages,
+  }),
+}))
+
+vi.mock('@/hooks/use-subscription-status', () => ({
+  useSubscriptionStatus: () => ({
+    isLoading: false,
+    chat_subscription_active: mocks.subscriptionActive,
   }),
 }))
 
@@ -99,12 +107,52 @@ async function renderInProject() {
 describe('ProjectProvider documents', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.subscriptionActive = true
     mocks.projectEventHandlers.clear()
     mocks.getProject.mockResolvedValue(project)
     mocks.listDocuments.mockResolvedValue({ documents: [listedDocument] })
     mocks.getDocuments.mockResolvedValue(
       new Map([['doc-1', persistedDocument]]),
     )
+  })
+
+  it('blocks project loads and mutations without Premium access', async () => {
+    mocks.subscriptionActive = false
+    const { result } = renderHook(() => useProject(), { wrapper })
+
+    await expect(result.current.enterProjectMode(project.id)).resolves.toBe(
+      false,
+    )
+    await expect(
+      result.current.createProject({ name: 'Blocked', description: '' }),
+    ).rejects.toThrow('Premium project access is required')
+    await expect(
+      result.current.updateProject(project.id, { name: 'Blocked' }),
+    ).rejects.toThrow('Premium project access is required')
+    await expect(
+      result.current.uploadDocument(testFile, 'Blocked'),
+    ).rejects.toThrow('Premium project access is required')
+    expect(mocks.getProject).not.toHaveBeenCalled()
+    expect(mocks.uploadDocument).not.toHaveBeenCalled()
+  })
+
+  it('clears the active project when Premium access ends', async () => {
+    const rendered = await renderInProject()
+    expect(rendered.result.current.activeProject?.id).toBe(project.id)
+
+    mocks.subscriptionActive = false
+    rendered.rerender()
+
+    expect(rendered.result.current.activeProject).toBeNull()
+    expect(rendered.result.current.projectDocuments).toEqual([])
+    expect(rendered.result.current.getProjectSystemPrompt()).toBe('')
+
+    mocks.subscriptionActive = true
+    rendered.rerender()
+    await act(async () => {
+      await rendered.result.current.enterProjectMode(project.id)
+    })
+    expect(rendered.result.current.activeProject?.id).toBe(project.id)
   })
 
   it('keeps decoded document sizes after a refresh', async () => {

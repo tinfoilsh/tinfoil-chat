@@ -261,4 +261,25 @@ describe('chat-search', () => {
     expect(chats).toHaveLength(1)
     expect(mockPull).not.toHaveBeenCalled()
   })
+
+  it('omits project chats from free-user search results', async () => {
+    mockGetChat.mockImplementation(async (id: string) => ({
+      id,
+      title: id,
+      messages: [{}],
+      projectId: id === 'project-chat' ? 'project-1' : undefined,
+    }))
+    const search = await importChatSearch()
+
+    const chats = await search.resolveSearchResultChats(
+      [
+        { id: 'project-chat', score: 2 },
+        { id: 'regular-chat', score: 1 },
+      ],
+      false,
+    )
+
+    expect(chats.map((chat) => chat.id)).toEqual(['regular-chat'])
+    expect(mockGetChat).toHaveBeenCalledWith('project-chat')
+  })
 })

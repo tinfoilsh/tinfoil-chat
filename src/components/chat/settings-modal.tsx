@@ -120,6 +120,11 @@ import { normalizeChatFont, type ChatFont } from './hooks/use-chat-font'
 import { MfaSettingsCard } from './mfa-settings-card'
 import { NativeBackupExport } from './native-backup-export'
 import { NativeBackupRestore } from './native-backup-restore'
+import {
+  canDeleteAllProjects,
+  canTransferProjectData,
+  filterExportableChats,
+} from './settings-project-policy'
 import type { Attachment, Chat } from './types'
 
 const CHARS = '0123456789ABCDEF!@#$%^&*()_+<>?/'
@@ -1397,6 +1402,16 @@ export function SettingsModal({
     const file = e.target.files?.[0]
     if (!file) return
 
+    if (!isPremium && file.name.toLowerCase().endsWith('.zip')) {
+      toast({
+        title: 'Premium required',
+        description: 'Backups containing projects require Premium',
+        variant: 'destructive',
+      })
+      e.target.value = ''
+      return
+    }
+
     if (shouldImportOffDevice()) {
       await importOffDevice('tinfoil', file, 'Tinfoil')
       e.target.value = ''
@@ -1460,6 +1475,16 @@ export function SettingsModal({
   ) => {
     const file = e.target.files?.[0]
     if (!file) return
+
+    if (!isPremium && file.name.toLowerCase().endsWith('.zip')) {
+      toast({
+        title: 'Premium required',
+        description: 'Claude archives containing projects require Premium',
+        variant: 'destructive',
+      })
+      e.target.value = ''
+      return
+    }
 
     if (shouldImportOffDevice()) {
       await importOffDevice('claude', file, 'Claude')
@@ -1757,10 +1782,9 @@ export function SettingsModal({
       }
 
       // Filter out blank chats and chats that failed decryption
-      const exportableChats = Array.from(chatsById.values()).filter(
-        (chat) =>
-          !chat.isBlankChat &&
-          (chat.messageCount ?? chat.messages?.length ?? 0) > 0,
+      const exportableChats = filterExportableChats(
+        Array.from(chatsById.values()),
+        Boolean(isPremium),
       )
 
       setIsPreparingExport(false)
@@ -1883,6 +1907,14 @@ export function SettingsModal({
   }
 
   const downloadProjectsForClaude = async () => {
+    if (!isPremium) {
+      toast({
+        title: 'Premium required',
+        description: 'Project export is only available for premium users',
+        variant: 'destructive',
+      })
+      return
+    }
     setIsExporting(true)
     setExportType('projects')
     setProjectExportResult(null)
@@ -2694,8 +2726,8 @@ ${encryptionKey.replace('key_', '')}
                         </div>
                       </div>
 
-                      {/* Delete all projects (signed-in premium users only) */}
-                      {isSignedIn && isPremium && (
+                      {/* Delete all projects remains available for account data control. */}
+                      {canDeleteAllProjects(Boolean(isSignedIn)) && (
                         <div
                           className={cn(
                             'rounded-lg border border-border-subtle p-4',
@@ -3273,11 +3305,18 @@ ${encryptionKey.replace('key_', '')}
                       />
                     )}
                     <NativeBackupExport
-                      available={Boolean(isSignedIn && encryptionKey)}
+                      available={Boolean(
+                        isSignedIn &&
+                        canTransferProjectData(Boolean(isPremium)) &&
+                        encryptionKey,
+                      )}
                     />
                     <NativeBackupRestore
                       available={Boolean(
-                        isSignedIn && user?.id && encryptionKey,
+                        isSignedIn &&
+                        canTransferProjectData(Boolean(isPremium)) &&
+                        user?.id &&
+                        encryptionKey,
                       )}
                       ownerId={user?.id}
                       onChatsUpdated={onChatsUpdated}
@@ -4035,7 +4074,7 @@ ${encryptionKey.replace('key_', '')}
                           3
                         </div>
                         <div className="font-aeonik-fono text-sm text-content-muted">
-                          {shouldImportOffDevice()
+                          {isPremium && shouldImportOffDevice()
                             ? 'Download the ZIP file you receive by email.'
                             : 'Download and unzip the file you receive by email.'}
                         </div>
@@ -4052,7 +4091,7 @@ ${encryptionKey.replace('key_', '')}
                           4
                         </div>
                         <div className="font-aeonik-fono text-sm text-content-muted">
-                          {shouldImportOffDevice() ? (
+                          {isPremium && shouldImportOffDevice() ? (
                             <>
                               Select the ZIP export with the Conversations
                               button to include attachments. Use{' '}
@@ -4061,7 +4100,7 @@ ${encryptionKey.replace('key_', '')}
                               </code>{' '}
                               only for project imports.
                             </>
-                          ) : (
+                          ) : isPremium ? (
                             <>
                               Select{' '}
                               <code className="rounded bg-surface-chat px-1.5 py-0.5 font-mono text-xs">
@@ -4073,6 +4112,14 @@ ${encryptionKey.replace('key_', '')}
                               </code>{' '}
                               from the unzipped folder.
                             </>
+                          ) : (
+                            <>
+                              Select{' '}
+                              <code className="rounded bg-surface-chat px-1.5 py-0.5 font-mono text-xs">
+                                conversations.json
+                              </code>{' '}
+                              from the unzipped folder.
+                            </>
                           )}
                         </div>
                       </div>
@@ -4080,20 +4127,24 @@ ${encryptionKey.replace('key_', '')}
                         ref={claudeConversationsFileInputRef}
                         type="file"
                         accept={
-                          shouldImportOffDevice() ? '.json,.zip' : '.json'
+                          isPremium && shouldImportOffDevice()
+                            ? '.json,.zip'
+                            : '.json'
                         }
                         onChange={handleImportClaudeConversations}
                         className="hidden"
                         disabled={isImporting}
                       />
-                      <input
-                        ref={claudeProjectsFileInputRef}
-                        type="file"
-                        accept=".json"
-                        onChange={handleImportClaudeProjects}
-                        className="hidden"
-                        disabled={isImporting || !isPremium}
-                      />
+                      {isPremium && (
+                        <input
+                          ref={claudeProjectsFileInputRef}
+                          type="file"
+                          accept=".json"
+                          onChange={handleImportClaudeProjects}
+                          className="hidden"
+                          disabled={isImporting}
+                        />
+                      )}
                       <div className="mt-2 flex gap-2">
                         <button
                           onClick={() =>
@@ -4113,29 +4164,26 @@ ${encryptionKey.replace('key_', '')}
                           <ArrowUpTrayIcon className="h-4 w-4" />
                           Conversations
                         </button>
-                        <button
-                          onClick={() =>
-                            claudeProjectsFileInputRef.current?.click()
-                          }
-                          disabled={isImporting || !isPremium}
-                          className={cn(
-                            'flex flex-1 items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
-                            isImporting || !isPremium
-                              ? 'cursor-not-allowed opacity-50'
-                              : 'hover:bg-surface-chat',
-                            isDarkMode
-                              ? 'bg-surface-chat text-content-primary'
-                              : 'bg-surface-sidebar text-content-primary',
-                          )}
-                        >
-                          <ArrowUpTrayIcon className="h-4 w-4" />
-                          Projects
-                          {!isPremium && (
-                            <span className="ml-1 rounded-full bg-brand-accent-light/20 px-1.5 py-px text-[10px] font-medium text-brand-accent-light">
-                              Premium
-                            </span>
-                          )}
-                        </button>
+                        {isPremium && (
+                          <button
+                            onClick={() =>
+                              claudeProjectsFileInputRef.current?.click()
+                            }
+                            disabled={isImporting}
+                            className={cn(
+                              'flex flex-1 items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
+                              isImporting
+                                ? 'cursor-not-allowed opacity-50'
+                                : 'hover:bg-surface-chat',
+                              isDarkMode
+                                ? 'bg-surface-chat text-content-primary'
+                                : 'bg-surface-sidebar text-content-primary',
+                            )}
+                          >
+                            <ArrowUpTrayIcon className="h-4 w-4" />
+                            Projects
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -4158,7 +4206,7 @@ ${encryptionKey.replace('key_', '')}
                       <input
                         ref={tinfoilFileInputRef}
                         type="file"
-                        accept=".json,.zip"
+                        accept={isPremium ? '.json,.zip' : '.json'}
                         onChange={handleImportTinfoil}
                         className="hidden"
                         disabled={isImporting}

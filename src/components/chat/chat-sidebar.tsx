@@ -683,9 +683,13 @@ export function ChatSidebar({
     return pinnedChatIds
       .map((chatId) => chatsById.get(chatId))
       .filter((chat): chat is Chat =>
-        Boolean(chat && isResolvedFavoriteChat(chat)),
+        Boolean(
+          chat &&
+          isResolvedFavoriteChat(chat) &&
+          (isPremium || !chat.projectId),
+        ),
       )
-  }, [chats, pinnedChatIds])
+  }, [chats, isPremium, pinnedChatIds])
 
   const { isFavoriteDropTarget, favoriteDropTargetProps } =
     useFavoriteDropTarget({
@@ -782,7 +786,7 @@ export function ChatSidebar({
     !!isSignedIn &&
     cloudSyncEnabled &&
     !(localOnlyModeEnabled && activeTab === 'local')
-  const chatSearch = useChatSearch(chatSearchTerm, searchEnabled)
+  const chatSearch = useChatSearch(chatSearchTerm, searchEnabled, isPremium)
   const isSearchActive = searchEnabled && chatSearchTerm.trim().length > 0
 
   const searchResultChats = useMemo((): ChatItemData[] => {
@@ -801,6 +805,7 @@ export function ChatSidebar({
       title: r.title,
       updatedAt: r.updatedAt,
       messageCount: r.messageCount,
+      projectId: r.projectId,
     }))
   }, [
     isSearchActive,

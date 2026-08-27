@@ -116,6 +116,7 @@ import {
 import { TfTinSad } from '@tinfoilsh/tinfoil-icons'
 import dynamic from 'next/dynamic'
 import Head from 'next/head'
+import { useRouter } from 'next/router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { SubscribePromptModal } from '../modals/subscribe-prompt-modal'
@@ -319,6 +320,7 @@ export function ChatInterface({
   suppressIntroModals = false,
 }: ChatInterfaceProps) {
   const { toast } = useToast()
+  const router = useRouter()
   const indexedDBBlockedToastShownRef = useRef(false)
 
   useEffect(() => {
@@ -673,6 +675,12 @@ export function ChatInterface({
   const userEmail = user?.primaryEmailAddress?.emailAddress || ''
 
   const isPremium = chat_subscription_active ?? false
+
+  useEffect(() => {
+    if (!router.isReady || router.query.upgrade !== 'projects') return
+    setIsSubscribePromptOpen(true)
+    void router.replace('/chat', undefined, { shallow: true })
+  }, [router])
 
   // Load projects for move to project functionality
   const { projects } = useProjects({
@@ -2288,6 +2296,10 @@ export function ChatInterface({
   }, [passkeyActive, setupPasskey])
 
   const handleCreateProject = useCallback(async () => {
+    if (!isPremium) {
+      setIsSubscribePromptOpen(true)
+      return
+    }
     invalidateFavoriteNavigation()
     try {
       const name = `My Project #${projects.length + 1}`
@@ -2313,6 +2325,7 @@ export function ChatInterface({
     createNewChat,
     enterProjectMode,
     invalidateFavoriteNavigation,
+    isPremium,
     projects.length,
     toast,
   ])
@@ -2324,6 +2337,22 @@ export function ChatInterface({
     createNewChat(false, true)
     exitProjectMode()
   }, [createNewChat, exitProjectMode])
+
+  useEffect(() => {
+    if (isPremium || (!isProjectMode && !currentChat.projectId)) return
+    setPendingProjectUpload(null)
+    setShowAddToProjectModal(false)
+    createNewChat(false, true)
+    exitProjectMode()
+    clearUrl()
+  }, [
+    clearUrl,
+    createNewChat,
+    currentChat.projectId,
+    exitProjectMode,
+    isPremium,
+    isProjectMode,
+  ])
 
   const handleToggleTemporaryMode = useCallback(() => {
     invalidateFavoriteNavigation()
@@ -2462,6 +2491,10 @@ export function ChatInterface({
   // Handler for moving a chat to a project via drag and drop
   const handleMoveChatToProject = useCallback(
     async (chatId: string, projectId: string) => {
+      if (!isPremium) {
+        setIsSubscribePromptOpen(true)
+        return
+      }
       try {
         // Update local storage first (optimistic)
         await indexedDBStorage.updateChatProject(chatId, projectId)
@@ -2499,12 +2532,16 @@ export function ChatInterface({
         })
       }
     },
-    [currentChat.id, createNewChat, reloadChats, toast],
+    [currentChat.id, createNewChat, isPremium, reloadChats, toast],
   )
 
   // Handler for removing a chat from a project via drag and drop
   const handleRemoveChatFromProject = useCallback(
     async (chatId: string): Promise<void> => {
+      if (!isPremium) {
+        setIsSubscribePromptOpen(true)
+        return
+      }
       try {
         await chatStorage.removeChatFromProject(chatId)
 
@@ -2531,7 +2568,7 @@ export function ChatInterface({
         })
       }
     },
-    [reloadChats, toast],
+    [isPremium, reloadChats, toast],
   )
 
   // Handler for deleting every chat that belongs to a project. Reloads from
@@ -2539,6 +2576,10 @@ export function ChatInterface({
   // page refresh.
   const handleDeleteProjectChats = useCallback(
     async (projectId: string): Promise<void> => {
+      if (!isPremium) {
+        setIsSubscribePromptOpen(true)
+        return
+      }
       try {
         const deletedChatIds =
           await chatStorage.deleteChatsByProjectWithIds(projectId)
@@ -2557,7 +2598,7 @@ export function ChatInterface({
         throw error
       }
     },
-    [reloadChats, unpinChats],
+    [isPremium, reloadChats, unpinChats],
   )
 
   // Handler for converting a local-only chat to cloud chat via drag and drop
@@ -2675,9 +2716,13 @@ export function ChatInterface({
     return pinnedChatIds
       .map((chatId) => chatsById.get(chatId))
       .filter((chat): chat is Chat =>
-        Boolean(chat && isResolvedFavoriteChat(chat)),
+        Boolean(
+          chat &&
+          isResolvedFavoriteChat(chat) &&
+          (isPremium || !chat.projectId),
+        ),
       )
-  }, [chats, pinnedChatIds])
+  }, [chats, isPremium, pinnedChatIds])
 
   // Handler for converting a cloud chat to local-only via drag and drop
   const handleConvertChatToLocal = useCallback(

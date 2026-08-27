@@ -5,6 +5,7 @@ import {
   UI_EXPAND_PROJECTS_ON_MOUNT,
 } from '@/constants/storage-keys'
 import { useMemory } from '@/hooks/use-memory'
+import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
 import { projectStorage } from '@/services/cloud/project-storage'
 import { projectEvents } from '@/services/project/project-events'
 import { projectCache } from '@/services/storage/project-cache'
@@ -41,6 +42,9 @@ export function ProjectProvider({
   initialProjectId,
 }: ProjectProviderProps) {
   const { isSignedIn, isLoaded, userId } = useAuth()
+  const { chat_subscription_active } = useSubscriptionStatus()
+  const hasPremiumAccessRef = useRef(chat_subscription_active)
+  hasPremiumAccessRef.current = chat_subscription_active
   const [activeProject, setActiveProject] = useState<Project | null>(null)
   const [projectDocuments, setProjectDocuments] = useState<ProjectDocument[]>(
     [],
@@ -60,6 +64,12 @@ export function ProjectProvider({
   const documentMutationGenerationRef = useRef(0)
 
   const isProjectMode = activeProject !== null
+
+  const requirePremiumAccess = useCallback(() => {
+    if (!hasPremiumAccessRef.current) {
+      throw new Error('Premium project access is required')
+    }
+  }, [])
 
   const resetProjectSessionState = useCallback(() => {
     projectLoadGenerationRef.current += 1
@@ -102,10 +112,15 @@ export function ProjectProvider({
     }
   }, [isLoaded, isSignedIn, resetProjectSessionState])
 
+  useEffect(() => {
+    if (!chat_subscription_active) resetProjectSessionState()
+  }, [chat_subscription_active, resetProjectSessionState])
+
   // Memory callbacks for useMemory hook
   const memoryCallbacks = useMemo(
     () => ({
       onSave: async (memory: MemoryState) => {
+        requirePremiumAccess()
         if (!activeProject) return
         const cacheSessionGeneration = projectCache.captureGeneration()
         const updatedProjectFromStorage = await projectStorage.updateProject(
@@ -143,12 +158,12 @@ export function ProjectProvider({
         }
       },
     }),
-    [activeProject, userId],
+    [activeProject, requirePremiumAccess, userId],
   )
 
   const { processMessages, loadMemory } = useMemory({
     callbacks: memoryCallbacks,
-    enabled: !!activeProject,
+    enabled: !!activeProject && chat_subscription_active,
   })
 
   // Load memory when project changes
@@ -187,6 +202,7 @@ export function ProjectProvider({
       projectName?: string,
       options?: EnterProjectModeOptions,
     ): Promise<boolean> => {
+      if (!hasPremiumAccessRef.current) return false
       const generation = projectLoadGenerationRef.current + 1
       const cacheGeneration = projectCache.captureGeneration()
       projectLoadGenerationRef.current = generation
@@ -248,6 +264,7 @@ export function ProjectProvider({
         )
 
         if (
+          !hasPremiumAccessRef.current ||
           !canCommitProjectLoad(
             generation,
             projectLoadGenerationRef.current,
@@ -300,6 +317,7 @@ export function ProjectProvider({
     if (
       initialProjectId &&
       isSignedIn &&
+      chat_subscription_active &&
       !initialProjectLoadedRef.current &&
       !activeProject
     ) {
@@ -310,7 +328,13 @@ export function ProjectProvider({
         }
       })
     }
-  }, [initialProjectId, isSignedIn, activeProject, enterProjectMode])
+  }, [
+    initialProjectId,
+    isSignedIn,
+    chat_subscription_active,
+    activeProject,
+    enterProjectMode,
+  ])
 
   const exitProjectMode = useCallback(() => {
     resetProjectSessionState()
@@ -326,6 +350,7 @@ export function ProjectProvider({
 
   const createProject = useCallback(
     async (data: CreateProjectData): Promise<Project> => {
+      requirePremiumAccess()
       setLoading(true)
       setError(null)
       const cacheSessionGeneration = projectCache.captureGeneration()
@@ -363,11 +388,12 @@ export function ProjectProvider({
         setLoading(false)
       }
     },
-    [userId],
+    [requirePremiumAccess, userId],
   )
 
   const updateProject = useCallback(
     async (id: string, data: UpdateProjectData) => {
+      requirePremiumAccess()
       setError(null)
       const cacheSessionGeneration = projectCache.captureGeneration()
 
@@ -414,11 +440,12 @@ export function ProjectProvider({
         throw err
       }
     },
-    [activeProject, userId],
+    [activeProject, requirePremiumAccess, userId],
   )
 
   const deleteProject = useCallback(
     async (id: string) => {
+      requirePremiumAccess()
       setError(null)
       const cacheSessionGeneration = projectCache.captureGeneration()
 
@@ -455,11 +482,12 @@ export function ProjectProvider({
         throw err
       }
     },
-    [activeProject, exitProjectMode, userId],
+    [activeProject, exitProjectMode, requirePremiumAccess, userId],
   )
 
   const uploadDocument = useCallback(
     async (file: File, content: string): Promise<ProjectDocument> => {
+      requirePremiumAccess()
       if (!activeProject) {
         throw new Error('No active project')
       }
@@ -503,11 +531,12 @@ export function ProjectProvider({
         throw err
       }
     },
-    [activeProject],
+    [activeProject, requirePremiumAccess],
   )
 
   const removeDocument = useCallback(
     async (docId: string) => {
+      requirePremiumAccess()
       if (!activeProject) {
         throw new Error('No active project')
       }
@@ -550,10 +579,11 @@ export function ProjectProvider({
         throw err
       }
     },
-    [activeProject, projectDocuments],
+    [activeProject, projectDocuments, requirePremiumAccess],
   )
 
   const refreshDocuments = useCallback(async () => {
+    requirePremiumAccess()
     if (!activeProject) return
     const projectId = activeProject.id
     const generation = documentRefreshGenerationRef.current + 1
@@ -591,15 +621,16 @@ export function ProjectProvider({
         metadata: { projectId },
       })
     }
-  }, [activeProject])
+  }, [activeProject, requirePremiumAccess])
 
   const updateProjectMemory = useCallback(
     async (memory: Fact[]) => {
+      requirePremiumAccess()
       if (!activeProject) return
 
       await updateProject(activeProject.id, { memory })
     },
-    [activeProject, updateProject],
+    [activeProject, requirePremiumAccess, updateProject],
   )
 
   const addUploadingFile = useCallback((file: UploadingFile) => {
@@ -611,13 +642,13 @@ export function ProjectProvider({
   }, [])
 
   const getProjectSystemPrompt = useCallback((): string => {
-    if (!activeProject) return ''
+    if (!chat_subscription_active || !activeProject) return ''
     return buildProjectContext(activeProject, projectDocuments)
-  }, [activeProject, projectDocuments])
+  }, [activeProject, chat_subscription_active, projectDocuments])
 
   const getContextUsage = useCallback(
     (modelContextLimit: number): ProjectContextUsage => {
-      if (!activeProject) {
+      if (!chat_subscription_active || !activeProject) {
         return {
           systemInstructions: 0,
           documents: [],
@@ -656,14 +687,14 @@ export function ProjectProvider({
         availableForChat: Math.max(0, modelContextLimit - totalUsed),
       }
     },
-    [activeProject, projectDocuments],
+    [activeProject, chat_subscription_active, projectDocuments],
   )
 
   const contextValue: ProjectContextValue = useMemo(
     () => ({
-      activeProject,
-      isProjectMode,
-      projectDocuments,
+      activeProject: chat_subscription_active ? activeProject : null,
+      isProjectMode: chat_subscription_active && isProjectMode,
+      projectDocuments: chat_subscription_active ? projectDocuments : [],
       loading,
       loadingProject,
       error,
@@ -684,6 +715,7 @@ export function ProjectProvider({
     }),
     [
       activeProject,
+      chat_subscription_active,
       isProjectMode,
       projectDocuments,
       loading,
