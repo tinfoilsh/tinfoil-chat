@@ -349,7 +349,7 @@ describe('chatStorage pendingSave is not persisted', () => {
     expect(acknowledgePendingDeletesSpy).not.toHaveBeenCalled()
   })
 
-  it('returns only local and cloud deletion counts', async () => {
+  it('reports completed cloud deletion with local and cloud counts', async () => {
     getAllChatIdsSpy.mockResolvedValueOnce(['local-1', 'local-2'])
     deleteAllChatsSpy.mockResolvedValueOnce(2)
     isCloudAuthenticatedSpy.mockResolvedValueOnce(true)
@@ -357,8 +357,23 @@ describe('chatStorage pendingSave is not persisted', () => {
 
     const result = await chatStorage.deleteAllChats()
 
-    expect(result).toEqual({ localDeleted: 2, cloudDeleted: 3 })
+    expect(result).toEqual({
+      localDeleted: 2,
+      cloudDeleted: 3,
+      cloudDeletionCompleted: true,
+    })
     expect(markAsDeletedSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports when cloud deletion is skipped without authentication', async () => {
+    deleteAllChatsSpy.mockResolvedValueOnce(2)
+
+    await expect(chatStorage.deleteAllChats()).resolves.toEqual({
+      localDeleted: 2,
+      cloudDeleted: 0,
+      cloudDeletionCompleted: false,
+    })
+    expect(deleteAllCloudChatsSpy).not.toHaveBeenCalled()
   })
 })
 

@@ -121,10 +121,14 @@ const DELETE_ALL_CHATS_CONFIRM_PHRASE = 'delete all chats'
 const DELETE_ALL_PROJECTS_CONFIRM_PHRASE = 'delete all projects'
 
 export function getDeleteAllChatsSuccessDescription(
-  isSignedIn?: boolean,
+  isSignedIn: boolean,
+  cloudDeletionCompleted: boolean,
 ): string {
+  if (cloudDeletionCompleted) {
+    return 'Removed all chats from this device and encrypted cloud storage.'
+  }
   return isSignedIn
-    ? 'Removed all chats from this device and encrypted cloud storage.'
+    ? 'Removed all chats from this device. Encrypted cloud storage was not cleared.'
     : 'Removed all chats from this browser session.'
 }
 
@@ -1802,16 +1806,19 @@ export function SettingsModal({
     setIsDeletingAllChats(true)
     try {
       if (isSignedIn) {
-        await chatStorage.deleteAllChats()
+        const result = await chatStorage.deleteAllChats()
         toast({
           title: 'All chats deleted',
-          description: getDeleteAllChatsSuccessDescription(isSignedIn),
+          description: getDeleteAllChatsSuccessDescription(
+            true,
+            result.cloudDeletionCompleted,
+          ),
         })
       } else {
         sessionChatStorage.clearAll()
         toast({
           title: 'All chats deleted',
-          description: getDeleteAllChatsSuccessDescription(isSignedIn),
+          description: getDeleteAllChatsSuccessDescription(false, false),
         })
       }
 
