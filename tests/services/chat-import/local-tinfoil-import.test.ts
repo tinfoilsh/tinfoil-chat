@@ -6,6 +6,8 @@ import {
   LocalImportBackgroundProcessingUnavailableError,
   LocalImportWorkerTimeoutError,
   parseLocalTinfoilExport,
+  parseLocalTinfoilExportForAccess,
+  PremiumProjectImportRequiredError,
 } from '@/services/chat-import/local-tinfoil-import'
 import { parseTinfoilExportBytes } from '@/services/chat-import/local-tinfoil-import-parser'
 import { createFunctionalImportWorker } from './functional-import-worker'
@@ -421,6 +423,64 @@ describe('parseLocalTinfoilExport', () => {
         base64: 'AQIDBA==',
       },
     ])
+  })
+
+  it('allows free users to import a chat-only Tinfoil ZIP', async () => {
+    const archive = zipSync({
+      'conversations.json': strToU8(JSON.stringify(conversation())),
+    })
+    const file = new File([archive], 'tinfoil-chats.zip', {
+      type: 'application/zip',
+    })
+
+    const result = await parseLocalTinfoilExportForAccess(file, options, false)
+
+    expect(result.chats).toHaveLength(1)
+    expect(result.chats[0].title).toBe('Portable chat')
+    expect(result.skippedProjectChats).toBe(0)
+  })
+
+  it('imports ordinary chats and reports skipped project chats from mixed archives', async () => {
+    const data = [
+      ...conversation(),
+      {
+        ...conversation()[0],
+        uuid: 'project-chat',
+        name: 'Project chat',
+        projectId: 'project-123',
+      },
+    ]
+    const archive = zipSync({
+      'conversations.json': strToU8(JSON.stringify(data)),
+    })
+    const file = new File([archive], 'mixed-tinfoil-chats.zip', {
+      type: 'application/zip',
+    })
+
+    const result = await parseLocalTinfoilExportForAccess(file, options, false)
+
+    expect(result.chats.map((chat) => chat.title)).toEqual(['Portable chat'])
+    expect(result.skippedProjectChats).toBe(1)
+  })
+
+  it('returns a clear Premium error for project-only archives', async () => {
+    const data = conversation()
+    ;(data[0] as Record<string, unknown>).projectId = 'project-123'
+    const archive = zipSync({
+      'conversations.json': strToU8(JSON.stringify(data)),
+    })
+    const file = new File([archive], 'project-chats.zip', {
+      type: 'application/zip',
+    })
+
+    const result = parseLocalTinfoilExportForAccess(file, options, false)
+
+    await expect(result).rejects.toEqual(
+      expect.any(PremiumProjectImportRequiredError),
+    )
+    await expect(result).rejects.toThrow(
+      'This backup contains only project chats. Premium is required to import it.',
+    )
   })
 
   it('rejects ZIP exports with missing attachment entries', async () => {

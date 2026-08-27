@@ -24,7 +24,10 @@ import { useSyncHealthAttention } from '@/hooks/use-sync-health'
 import { useToast } from '@/hooks/use-toast'
 import { authTokenManager } from '@/services/auth'
 import { buildChatExport } from '@/services/chat-export/export-archive'
-import { parseLocalTinfoilExport } from '@/services/chat-import/local-tinfoil-import'
+import {
+  parseLocalTinfoilExportForAccess,
+  PremiumProjectImportRequiredError,
+} from '@/services/chat-import/local-tinfoil-import'
 import { runOffDeviceImport } from '@/services/chat-import/off-device-import'
 import { hasPrimaryKey } from '@/services/cloud/cek-encoding'
 import { validateCurrentPrimaryKey } from '@/services/cloud/cloud-key-preflight'
@@ -1402,17 +1405,7 @@ export function SettingsModal({
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (!isPremium && file.name.toLowerCase().endsWith('.zip')) {
-      toast({
-        title: 'Premium required',
-        description: 'Backups containing projects require Premium',
-        variant: 'destructive',
-      })
-      e.target.value = ''
-      return
-    }
-
-    if (shouldImportOffDevice()) {
+    if (isPremium && shouldImportOffDevice()) {
       await importOffDevice('tinfoil', file, 'Tinfoil')
       e.target.value = ''
       return
@@ -1426,17 +1419,29 @@ export function SettingsModal({
     localTinfoilImportAbortControllerRef.current = abortController
 
     try {
-      const chats = await parseLocalTinfoilExport(file, {
-        ...getParseOptions(),
-        signal: abortController.signal,
-      })
+      const { chats, skippedProjectChats } =
+        await parseLocalTinfoilExportForAccess(
+          file,
+          {
+            ...getParseOptions(),
+            signal: abortController.signal,
+          },
+          Boolean(isPremium),
+        )
       const { imported, errors } = await saveImportedChats(chats)
+      const projectErrors =
+        skippedProjectChats > 0
+          ? [
+              `Skipped ${skippedProjectChats} project chat${skippedProjectChats === 1 ? '' : 's'}. Premium is required to import project chats.`,
+            ]
+          : []
+      const importErrors = [...errors, ...projectErrors]
 
       setImportResult({
-        success: errors.length === 0,
+        success: importErrors.length === 0,
         chatsImported: imported,
         projectsImported: 0,
-        errors,
+        errors: importErrors,
       })
 
       if (onChatsUpdated) {
@@ -1444,11 +1449,18 @@ export function SettingsModal({
       }
 
       toast({
-        title: 'Import complete',
-        description: `Imported ${imported} chat${imported !== 1 ? 's' : ''} from Tinfoil`,
+        title:
+          skippedProjectChats > 0
+            ? 'Chats imported; project chats skipped'
+            : 'Import complete',
+        description:
+          skippedProjectChats > 0
+            ? `Imported ${imported} chat${imported !== 1 ? 's' : ''}. Premium is required to import the ${skippedProjectChats} project chat${skippedProjectChats === 1 ? '' : 's'}.`
+            : `Imported ${imported} chat${imported !== 1 ? 's' : ''} from Tinfoil`,
       })
     } catch (err) {
       if (abortController.signal.aborted) return
+      const projectOnly = err instanceof PremiumProjectImportRequiredError
       setImportResult({
         success: false,
         chatsImported: 0,
@@ -1456,8 +1468,10 @@ export function SettingsModal({
         errors: [err instanceof Error ? err.message : 'Failed to parse file'],
       })
       toast({
-        title: 'Import failed',
-        description: 'Could not parse the Tinfoil export file',
+        title: projectOnly ? 'Premium required' : 'Import failed',
+        description: projectOnly
+          ? err.message
+          : 'Could not parse the Tinfoil export file',
         variant: 'destructive',
       })
     } finally {
@@ -4206,7 +4220,7 @@ ${encryptionKey.replace('key_', '')}
                       <input
                         ref={tinfoilFileInputRef}
                         type="file"
-                        accept={isPremium ? '.json,.zip' : '.json'}
+                        accept=".json,.zip"
                         onChange={handleImportTinfoil}
                         className="hidden"
                         disabled={isImporting}

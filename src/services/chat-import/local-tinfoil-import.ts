@@ -65,6 +65,18 @@ export class LocalImportWorkerTimeoutError extends Error {
   }
 }
 
+export class PremiumProjectImportRequiredError extends Error {
+  readonly projectChatCount: number
+
+  constructor(projectChatCount: number) {
+    super(
+      `This backup contains only project chats. Premium is required to import ${projectChatCount === 1 ? 'it' : 'them'}.`,
+    )
+    this.name = 'PremiumProjectImportRequiredError'
+    this.projectChatCount = projectChatCount
+  }
+}
+
 function getAbortError(signal: AbortSignal): Error {
   return signal.reason instanceof Error
     ? signal.reason
@@ -238,14 +250,25 @@ function importAttachment(
   return imported
 }
 
-export async function parseLocalTinfoilExport(
+export interface LocalTinfoilImportResult {
+  chats: Chat[]
+  skippedProjectChats: number
+}
+
+async function parseLocalTinfoilExportWithProjectPolicy(
   file: File,
   options: LocalTinfoilImportOptions,
-): Promise<Chat[]> {
+  includeProjectChats: boolean,
+): Promise<LocalTinfoilImportResult> {
   const { conversations, entries } = await readExport(file, options.signal)
   const chats: Chat[] = []
+  let skippedProjectChats = 0
 
   for (const conversation of conversations) {
+    if (!includeProjectChats && conversation.projectId) {
+      skippedProjectChats += 1
+      continue
+    }
     const messages: Message[] = []
 
     for (const exportedMessage of conversation.chat_messages ?? []) {
@@ -279,9 +302,8 @@ export async function parseLocalTinfoilExport(
 
     if (messages.length > 0) {
       const createdAt = new Date(conversation.created_at)
-      // Local import does not restore projects, and the sidebar hides
-      // chats whose projectId has no matching project, so drop the
-      // exported project association.
+      // Conversation imports do not restore project hierarchy, so eligible
+      // imported chats enter the root chat list.
       chats.push({
         id: options.generateChatId(createdAt),
         title: conversation.name || 'Imported Chat',
@@ -293,5 +315,33 @@ export async function parseLocalTinfoilExport(
     }
   }
 
-  return chats
+  if (!includeProjectChats && chats.length === 0 && skippedProjectChats > 0) {
+    throw new PremiumProjectImportRequiredError(skippedProjectChats)
+  }
+
+  return { chats, skippedProjectChats }
+}
+
+export async function parseLocalTinfoilExport(
+  file: File,
+  options: LocalTinfoilImportOptions,
+): Promise<Chat[]> {
+  const result = await parseLocalTinfoilExportWithProjectPolicy(
+    file,
+    options,
+    true,
+  )
+  return result.chats
+}
+
+export function parseLocalTinfoilExportForAccess(
+  file: File,
+  options: LocalTinfoilImportOptions,
+  hasPremiumProjectAccess: boolean,
+): Promise<LocalTinfoilImportResult> {
+  return parseLocalTinfoilExportWithProjectPolicy(
+    file,
+    options,
+    hasPremiumProjectAccess,
+  )
 }
