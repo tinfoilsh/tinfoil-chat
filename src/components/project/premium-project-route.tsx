@@ -19,12 +19,12 @@ export function PremiumProjectRoute({
   const { isLoading, chat_subscription_active } = useSubscriptionStatus()
 
   useEffect(() => {
-    if (!isLoading && !chat_subscription_active) {
+    if (router.isReady && !isLoading && !chat_subscription_active) {
       void router.replace('/chat?upgrade=projects')
     }
   }, [chat_subscription_active, isLoading, router])
 
-  if (isLoading || !chat_subscription_active) return null
+  if (!router.isReady || isLoading || !chat_subscription_active) return null
 
   return (
     <ProjectProvider initialProjectId={projectId}>

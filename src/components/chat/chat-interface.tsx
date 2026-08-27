@@ -427,7 +427,8 @@ export function ChatInterface({
 
   // Track whether we've loaded the initial chat from URL (to prevent URL flickering)
   const initialUrlChatLoadedRef = useRef(false)
-  const { chat_subscription_active } = useSubscriptionStatus()
+  const { isLoading: isSubscriptionLoading, chat_subscription_active } =
+    useSubscriptionStatus()
 
   // Initialize cloud sync and passkey backup as two separate hooks.
   // usePasskeyBackup depends on useCloudSync's `initialized` and `encryptionKey`,
@@ -674,7 +675,7 @@ export function ChatInterface({
 
   const userEmail = user?.primaryEmailAddress?.emailAddress || ''
 
-  const isPremium = chat_subscription_active ?? false
+  const isPremium = !isSubscriptionLoading && chat_subscription_active
 
   useEffect(() => {
     if (!router.isReady || router.query.upgrade !== 'projects') return
@@ -2339,7 +2340,12 @@ export function ChatInterface({
   }, [createNewChat, exitProjectMode])
 
   useEffect(() => {
-    if (isPremium || (!isProjectMode && !currentChat.projectId)) return
+    if (
+      isSubscriptionLoading ||
+      isPremium ||
+      (!isProjectMode && !currentChat.projectId)
+    )
+      return
     setPendingProjectUpload(null)
     setShowAddToProjectModal(false)
     createNewChat(false, true)
@@ -2352,6 +2358,7 @@ export function ChatInterface({
     exitProjectMode,
     isPremium,
     isProjectMode,
+    isSubscriptionLoading,
   ])
 
   const handleToggleTemporaryMode = useCallback(() => {
@@ -2496,6 +2503,11 @@ export function ChatInterface({
         return
       }
       try {
+        const chat = await chatStorage.getChat(chatId)
+        if (chat?.isLocalOnly) {
+          await chatStorage.convertChatToCloud(chatId)
+        }
+
         // Update local storage first (optimistic)
         await indexedDBStorage.updateChatProject(chatId, projectId)
 

@@ -1,6 +1,7 @@
 import {
   canDeleteAllProjects,
   canTransferProjectData,
+  countExcludedProjectChats,
   filterExportableChats,
 } from '@/components/chat/settings-project-policy'
 import type { Chat } from '@/components/chat/types'
@@ -30,5 +31,28 @@ describe('settings project policy', () => {
     expect(filterExportableChats(chats, false)).toEqual([regularChat])
     expect(chats).toEqual([regularChat, projectChat])
     expect(filterExportableChats(chats, true)).toEqual(chats)
+  })
+
+  it('uses loaded messages instead of stale message counts for exports', () => {
+    const staleEmptyChat = {
+      ...regularChat,
+      id: 'chat-empty',
+      messages: [],
+      messageCount: 4,
+    }
+    const stalePopulatedChat = {
+      ...regularChat,
+      id: 'chat-populated',
+      messageCount: 0,
+    }
+
+    expect(
+      filterExportableChats([staleEmptyChat, stalePopulatedChat], true),
+    ).toEqual([stalePopulatedChat])
+  })
+
+  it('counts project chats omitted from a free-user export', () => {
+    expect(countExcludedProjectChats([regularChat, projectChat], false)).toBe(1)
+    expect(countExcludedProjectChats([regularChat, projectChat], true)).toBe(0)
   })
 })

@@ -42,9 +42,11 @@ export function ProjectProvider({
   initialProjectId,
 }: ProjectProviderProps) {
   const { isSignedIn, isLoaded, userId } = useAuth()
-  const { chat_subscription_active } = useSubscriptionStatus()
-  const hasPremiumAccessRef = useRef(chat_subscription_active)
-  hasPremiumAccessRef.current = chat_subscription_active
+  const { isLoading: isSubscriptionLoading, chat_subscription_active } =
+    useSubscriptionStatus()
+  const hasPremiumAccess = !isSubscriptionLoading && chat_subscription_active
+  const hasPremiumAccessRef = useRef(hasPremiumAccess)
+  hasPremiumAccessRef.current = hasPremiumAccess
   const [activeProject, setActiveProject] = useState<Project | null>(null)
   const [projectDocuments, setProjectDocuments] = useState<ProjectDocument[]>(
     [],
@@ -113,8 +115,14 @@ export function ProjectProvider({
   }, [isLoaded, isSignedIn, resetProjectSessionState])
 
   useEffect(() => {
-    if (!chat_subscription_active) resetProjectSessionState()
-  }, [chat_subscription_active, resetProjectSessionState])
+    if (!isSubscriptionLoading && !chat_subscription_active) {
+      resetProjectSessionState()
+    }
+  }, [
+    chat_subscription_active,
+    isSubscriptionLoading,
+    resetProjectSessionState,
+  ])
 
   // Memory callbacks for useMemory hook
   const memoryCallbacks = useMemo(
@@ -163,7 +171,7 @@ export function ProjectProvider({
 
   const { processMessages, loadMemory } = useMemory({
     callbacks: memoryCallbacks,
-    enabled: !!activeProject && chat_subscription_active,
+    enabled: !!activeProject && hasPremiumAccess,
   })
 
   // Load memory when project changes
@@ -317,7 +325,7 @@ export function ProjectProvider({
     if (
       initialProjectId &&
       isSignedIn &&
-      chat_subscription_active &&
+      hasPremiumAccess &&
       !initialProjectLoadedRef.current &&
       !activeProject
     ) {
@@ -331,7 +339,7 @@ export function ProjectProvider({
   }, [
     initialProjectId,
     isSignedIn,
-    chat_subscription_active,
+    hasPremiumAccess,
     activeProject,
     enterProjectMode,
   ])
@@ -642,13 +650,13 @@ export function ProjectProvider({
   }, [])
 
   const getProjectSystemPrompt = useCallback((): string => {
-    if (!chat_subscription_active || !activeProject) return ''
+    if (!hasPremiumAccess || !activeProject) return ''
     return buildProjectContext(activeProject, projectDocuments)
-  }, [activeProject, chat_subscription_active, projectDocuments])
+  }, [activeProject, hasPremiumAccess, projectDocuments])
 
   const getContextUsage = useCallback(
     (modelContextLimit: number): ProjectContextUsage => {
-      if (!chat_subscription_active || !activeProject) {
+      if (!hasPremiumAccess || !activeProject) {
         return {
           systemInstructions: 0,
           documents: [],
@@ -687,14 +695,14 @@ export function ProjectProvider({
         availableForChat: Math.max(0, modelContextLimit - totalUsed),
       }
     },
-    [activeProject, chat_subscription_active, projectDocuments],
+    [activeProject, hasPremiumAccess, projectDocuments],
   )
 
   const contextValue: ProjectContextValue = useMemo(
     () => ({
-      activeProject: chat_subscription_active ? activeProject : null,
-      isProjectMode: chat_subscription_active && isProjectMode,
-      projectDocuments: chat_subscription_active ? projectDocuments : [],
+      activeProject: hasPremiumAccess ? activeProject : null,
+      isProjectMode: hasPremiumAccess && isProjectMode,
+      projectDocuments: hasPremiumAccess ? projectDocuments : [],
       loading,
       loadingProject,
       error,
@@ -715,7 +723,7 @@ export function ProjectProvider({
     }),
     [
       activeProject,
-      chat_subscription_active,
+      hasPremiumAccess,
       isProjectMode,
       projectDocuments,
       loading,

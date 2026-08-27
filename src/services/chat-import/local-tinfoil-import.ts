@@ -255,6 +255,15 @@ export interface LocalTinfoilImportResult {
   skippedProjectChats: number
 }
 
+function hasImportableMessages(
+  conversation: TinfoilExportedConversation,
+): boolean {
+  return (conversation.chat_messages ?? []).some(
+    (message) =>
+      Boolean(message.text?.trim()) || (message.attachments?.length ?? 0) > 0,
+  )
+}
+
 async function parseLocalTinfoilExportWithProjectPolicy(
   file: File,
   options: LocalTinfoilImportOptions,
@@ -266,7 +275,7 @@ async function parseLocalTinfoilExportWithProjectPolicy(
 
   for (const conversation of conversations) {
     if (!includeProjectChats && conversation.projectId) {
-      skippedProjectChats += 1
+      if (hasImportableMessages(conversation)) skippedProjectChats += 1
       continue
     }
     const messages: Message[] = []

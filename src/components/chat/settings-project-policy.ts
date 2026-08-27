@@ -8,14 +8,25 @@ export function canTransferProjectData(isPremium: boolean): boolean {
   return isPremium
 }
 
+function hasExportableMessages(chat: Chat): boolean {
+  return !chat.isBlankChat && chat.messages.length > 0
+}
+
 export function filterExportableChats(
   chats: Chat[],
   isPremium: boolean,
 ): Chat[] {
   return chats.filter(
-    (chat) =>
-      !chat.isBlankChat &&
-      (isPremium || !chat.projectId) &&
-      (chat.messageCount ?? chat.messages?.length ?? 0) > 0,
+    (chat) => hasExportableMessages(chat) && (isPremium || !chat.projectId),
   )
+}
+
+export function countExcludedProjectChats(
+  chats: Chat[],
+  isPremium: boolean,
+): number {
+  if (isPremium) return 0
+  return chats.filter(
+    (chat) => Boolean(chat.projectId) && hasExportableMessages(chat),
+  ).length
 }

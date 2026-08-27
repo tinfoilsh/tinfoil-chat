@@ -1821,16 +1821,6 @@ export function ChatSidebar({
                                       onMoveChatToProject &&
                                       !project.decryptionFailed
                                     ) {
-                                      // Convert local chat to cloud first if needed
-                                      const chat = chats.find(
-                                        (c) => c.id === chatId,
-                                      )
-                                      if (
-                                        chat?.isLocalOnly &&
-                                        onConvertChatToCloud
-                                      ) {
-                                        await onConvertChatToCloud(chatId)
-                                      }
                                       await onMoveChatToProject(
                                         chatId,
                                         project.id,
@@ -2412,11 +2402,6 @@ export function ChatSidebar({
                         onMoveToProject={
                           onMoveChatToProject
                             ? async (chatId, projectId) => {
-                                // Convert local chat to cloud first if needed
-                                const chat = chats.find((c) => c.id === chatId)
-                                if (chat?.isLocalOnly && onConvertChatToCloud) {
-                                  await onConvertChatToCloud(chatId)
-                                }
                                 await onMoveChatToProject(chatId, projectId)
                               }
                             : undefined

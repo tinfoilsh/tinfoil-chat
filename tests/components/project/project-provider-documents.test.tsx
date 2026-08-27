@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   loadMemory: vi.fn(),
   processMessages: vi.fn(),
   subscriptionActive: true,
+  subscriptionLoading: false,
   projectEventHandlers: new Map<string, (event: unknown) => void>(),
 }))
 
@@ -31,7 +32,7 @@ vi.mock('@/hooks/use-memory', () => ({
 
 vi.mock('@/hooks/use-subscription-status', () => ({
   useSubscriptionStatus: () => ({
-    isLoading: false,
+    isLoading: mocks.subscriptionLoading,
     chat_subscription_active: mocks.subscriptionActive,
   }),
 }))
@@ -108,6 +109,7 @@ describe('ProjectProvider documents', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.subscriptionActive = true
+    mocks.subscriptionLoading = false
     mocks.projectEventHandlers.clear()
     mocks.getProject.mockResolvedValue(project)
     mocks.listDocuments.mockResolvedValue({ documents: [listedDocument] })
@@ -136,6 +138,20 @@ describe('ProjectProvider documents', () => {
     expect(mocks.uploadDocument).not.toHaveBeenCalled()
   })
 
+  it('does not grant cached Premium access while entitlement is loading', async () => {
+    mocks.subscriptionLoading = true
+    mocks.subscriptionActive = true
+    const { result } = renderHook(() => useProject(), { wrapper })
+
+    await expect(result.current.enterProjectMode(project.id)).resolves.toBe(
+      false,
+    )
+    await expect(
+      result.current.createProject({ name: 'Blocked', description: '' }),
+    ).rejects.toThrow('Premium project access is required')
+    expect(mocks.getProject).not.toHaveBeenCalled()
+  })
+
   it('clears the active project when Premium access ends', async () => {
     const rendered = await renderInProject()
     expect(rendered.result.current.activeProject?.id).toBe(project.id)
@@ -152,6 +168,20 @@ describe('ProjectProvider documents', () => {
     await act(async () => {
       await rendered.result.current.enterProjectMode(project.id)
     })
+    expect(rendered.result.current.activeProject?.id).toBe(project.id)
+  })
+
+  it('waits for entitlement resolution before clearing project state', async () => {
+    const rendered = await renderInProject()
+
+    mocks.subscriptionLoading = true
+    mocks.subscriptionActive = false
+    rendered.rerender()
+    expect(rendered.result.current.activeProject).toBeNull()
+
+    mocks.subscriptionLoading = false
+    mocks.subscriptionActive = true
+    rendered.rerender()
     expect(rendered.result.current.activeProject?.id).toBe(project.id)
   })
 

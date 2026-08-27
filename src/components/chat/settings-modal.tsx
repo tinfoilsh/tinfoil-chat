@@ -126,6 +126,7 @@ import { NativeBackupRestore } from './native-backup-restore'
 import {
   canDeleteAllProjects,
   canTransferProjectData,
+  countExcludedProjectChats,
   filterExportableChats,
 } from './settings-project-policy'
 import type { Attachment, Chat } from './types'
@@ -1796,12 +1797,24 @@ export function SettingsModal({
       }
 
       // Filter out blank chats and chats that failed decryption
+      const allChats = Array.from(chatsById.values())
+      const hasPremiumProjectAccess = Boolean(isPremium)
       const exportableChats = filterExportableChats(
-        Array.from(chatsById.values()),
-        Boolean(isPremium),
+        allChats,
+        hasPremiumProjectAccess,
+      )
+      const excludedProjectChats = countExcludedProjectChats(
+        allChats,
+        hasPremiumProjectAccess,
       )
 
       setIsPreparingExport(false)
+      if (excludedProjectChats > 0) {
+        toast({
+          title: 'Project chats not included',
+          description: `${excludedProjectChats} project chat${excludedProjectChats === 1 ? '' : 's'} could not be exported. Premium is required to export project chats.`,
+        })
+      }
       await downloadChats(exportableChats)
     } catch (error) {
       logError('Failed to prepare chats for export', error, {

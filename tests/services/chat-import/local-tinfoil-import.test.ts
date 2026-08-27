@@ -483,6 +483,30 @@ describe('parseLocalTinfoilExport', () => {
     )
   })
 
+  it('ignores empty project conversations without requiring Premium', async () => {
+    const data = conversation()
+    ;(data[0] as Record<string, unknown>).projectId = 'project-123'
+    ;(data[0] as Record<string, unknown>).chat_messages = [
+      {
+        uuid: 'empty-message',
+        text: '   ',
+        sender: 'human',
+        created_at: '2025-01-01T10:00:00.000Z',
+        attachments: [],
+      },
+    ]
+    const archive = zipSync({
+      'conversations.json': strToU8(JSON.stringify(data)),
+    })
+    const file = new File([archive], 'empty-project-chats.zip', {
+      type: 'application/zip',
+    })
+
+    await expect(
+      parseLocalTinfoilExportForAccess(file, options, false),
+    ).resolves.toEqual({ chats: [], skippedProjectChats: 0 })
+  })
+
   it('rejects ZIP exports with missing attachment entries', async () => {
     const archive = zipSync({
       'conversations.json': strToU8(
