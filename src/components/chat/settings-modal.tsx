@@ -69,6 +69,15 @@ import {
   setLocalOnlyModeEnabled,
 } from '@/utils/cloud-sync-settings'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
+import {
+  clearPersonalizationDetails,
+  isPersonalizationEnabled,
+} from '@/utils/personalization-settings'
+import {
+  normalizeResponseLanguage,
+  RESPONSE_LANGUAGES,
+  SYSTEM_RESPONSE_LANGUAGE,
+} from '@/utils/response-language'
 import { generateReverseId } from '@/utils/reverse-id'
 import {
   hideSignoutProgress,
@@ -419,9 +428,11 @@ export function SettingsModal({
     traits: string[]
     additionalContext: string
   }>({ nickname: '', profession: '', traits: [], additionalContext: '' })
+  const [showClearPersonalizationConfirm, setShowClearPersonalizationConfirm] =
+    useState(false)
 
   // Language setting (separate from personalization)
-  const [language, setLanguage] = useState<string>('')
+  const [language, setLanguage] = useState<string>(SYSTEM_RESPONSE_LANGUAGE)
 
   // Custom system prompt settings
   const [isUsingCustomPrompt, setIsUsingCustomPrompt] = useState<boolean>(false)
@@ -551,30 +562,6 @@ export function SettingsModal({
     'optimistic',
   ]
 
-  // Available languages for dropdown
-  const availableLanguages = [
-    'English',
-    'Spanish',
-    'French',
-    'German',
-    'Italian',
-    'Portuguese',
-    'Russian',
-    'Japanese',
-    'Korean',
-    'Chinese (Simplified)',
-    'Chinese (Traditional)',
-    'Arabic',
-    'Hindi',
-    'Dutch',
-    'Swedish',
-    'Norwegian',
-    'Danish',
-    'Finnish',
-    'Polish',
-    'Turkish',
-  ]
-
   // Shared function to load settings from localStorage
   const loadSettingsFromStorage = useCallback(() => {
     // Load personalization settings
@@ -604,15 +591,13 @@ export function SettingsModal({
       traits: parsedTraits,
       additionalContext: savedContext ?? '',
     })
-    if (savedUsingPersonalization !== null) {
-      setIsUsingPersonalization(savedUsingPersonalization === 'true')
-    }
+    setIsUsingPersonalization(
+      isPersonalizationEnabled(savedUsingPersonalization),
+    )
 
     // Load language setting
     const savedLanguage = localStorage.getItem(USER_PREFS_LANGUAGE)
-    if (savedLanguage) {
-      setLanguage(savedLanguage)
-    }
+    setLanguage(normalizeResponseLanguage(savedLanguage))
 
     // Load custom system prompt settings
     const savedUsingCustomPrompt = localStorage.getItem(
@@ -669,13 +654,6 @@ export function SettingsModal({
   useEffect(() => {
     if (isClient) {
       loadSettingsFromStorage()
-
-      // Set default language if not already set
-      const savedLanguage = localStorage.getItem(USER_PREFS_LANGUAGE)
-      if (!savedLanguage) {
-        setLanguage('English')
-        localStorage.setItem(USER_PREFS_LANGUAGE, 'English')
-      }
     }
   }, [isClient, loadSettingsFromStorage])
 
@@ -914,32 +892,34 @@ export function SettingsModal({
     }
   }
 
-  const handleResetPersonalization = () => {
-    setNickname('')
-    setProfession('')
-    setSelectedTraits([])
-    setAdditionalContext('')
-    setLanguage('English')
-    setSavedPersonalization({
-      nickname: '',
-      profession: '',
-      traits: [],
-      additionalContext: '',
+  const handleClearPersonalization = () => {
+    const cleared = clearPersonalizationDetails({
+      nickname,
+      profession,
+      traits: selectedTraits,
+      additionalContext,
+      language,
+      isEnabled: isUsingPersonalization,
     })
+    setNickname(cleared.nickname)
+    setProfession(cleared.profession)
+    setSelectedTraits(cleared.traits)
+    setAdditionalContext(cleared.additionalContext)
+    setSavedPersonalization({
+      nickname: cleared.nickname,
+      profession: cleared.profession,
+      traits: cleared.traits,
+      additionalContext: cleared.additionalContext,
+    })
+    setShowClearPersonalizationConfirm(false)
 
     if (isClient) {
-      localStorage.removeItem(USER_PREFS_NICKNAME)
-      localStorage.removeItem(USER_PREFS_PROFESSION)
-      localStorage.removeItem(USER_PREFS_TRAITS)
-      localStorage.removeItem(USER_PREFS_ADDITIONAL_CONTEXT)
-      localStorage.setItem(USER_PREFS_LANGUAGE, 'English')
-      saveLanguageSetting('English')
       savePersonalizationSettings({
-        nickname: '',
-        profession: '',
-        traits: [],
-        additionalContext: '',
-        isEnabled: isUsingPersonalization,
+        nickname: cleared.nickname,
+        profession: cleared.profession,
+        traits: cleared.traits,
+        additionalContext: cleared.additionalContext,
+        isEnabled: cleared.isEnabled,
       })
     }
   }
@@ -2411,7 +2391,10 @@ ${encryptionKey.replace('key_', '')}
                               : 'border-border-subtle bg-surface-sidebar text-content-primary',
                           )}
                         >
-                          {availableLanguages.map((lang) => (
+                          {!RESPONSE_LANGUAGES.some(
+                            (option) => option === language,
+                          ) && <option value={language}>{language}</option>}
+                          {RESPONSE_LANGUAGES.map((lang) => (
                             <option key={lang} value={lang}>
                               {lang}
                             </option>
@@ -2984,18 +2967,50 @@ ${encryptionKey.replace('key_', '')}
                         </div>
                       </div>
 
-                      {/* Reset Button */}
-                      <button
-                        onClick={handleResetPersonalization}
-                        className={cn(
-                          'w-full rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors',
-                          isDarkMode
-                            ? 'border-red-500/30 bg-red-950/20 text-red-400 hover:bg-red-950/40'
-                            : 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100',
-                        )}
-                      >
-                        Reset all fields
-                      </button>
+                      {!showClearPersonalizationConfirm ? (
+                        <button
+                          onClick={() =>
+                            setShowClearPersonalizationConfirm(true)
+                          }
+                          className={cn(
+                            'w-full rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors',
+                            isDarkMode
+                              ? 'border-red-500/30 bg-red-950/20 text-red-400 hover:bg-red-950/40'
+                              : 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100',
+                          )}
+                        >
+                          Clear details
+                        </button>
+                      ) : (
+                        <div className="space-y-2 rounded-lg border border-border-subtle p-3">
+                          <p className="font-aeonik-fono text-xs text-content-muted">
+                            Clear your name, occupation, traits, and additional
+                            context? Your personalization setting and response
+                            language will not change.
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={handleClearPersonalization}
+                              className={cn(
+                                'flex-1 rounded-md px-3 py-1.5 text-sm font-medium text-white',
+                                isDarkMode
+                                  ? 'bg-red-600 hover:bg-red-500'
+                                  : 'bg-red-600 hover:bg-red-700',
+                              )}
+                            >
+                              Clear details
+                            </button>
+                            <button
+                              onClick={() =>
+                                setShowClearPersonalizationConfirm(false)
+                              }
+                              className="flex-1 rounded-md border border-border-subtle px-3 py-1.5 text-sm font-medium text-content-secondary"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
                 </>

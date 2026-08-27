@@ -8,16 +8,15 @@ import {
   USER_PREFS_PROFESSION,
   USER_PREFS_TRAITS,
 } from '@/constants/storage-keys'
+import {
+  isPersonalizationEnabled,
+  type PersonalizationSettings,
+} from '@/utils/personalization-settings'
+import {
+  normalizeResponseLanguage,
+  resolveResponseLanguage,
+} from '@/utils/response-language'
 import { useEffect, useState } from 'react'
-
-type PersonalizationSettings = {
-  nickname: string
-  profession: string
-  traits: string[]
-  additionalContext: string
-  language: string
-  isEnabled: boolean
-}
 
 type UseCustomSystemPromptReturn = {
   effectiveSystemPrompt: string
@@ -48,8 +47,8 @@ export const useCustomSystemPrompt = (
       profession: '',
       traits: [],
       additionalContext: '',
-      language: '',
-      isEnabled: false,
+      language: normalizeResponseLanguage(null),
+      isEnabled: true,
     })
 
   const [isUsingCustomPrompt, setIsUsingCustomPrompt] = useState(false)
@@ -64,8 +63,9 @@ export const useCustomSystemPrompt = (
       const savedContext =
         localStorage.getItem(USER_PREFS_ADDITIONAL_CONTEXT) || ''
       const savedLanguage = localStorage.getItem(USER_PREFS_LANGUAGE)
-      const savedEnabled =
-        localStorage.getItem(USER_PREFS_PERSONALIZATION_ENABLED) === 'true'
+      const savedEnabled = localStorage.getItem(
+        USER_PREFS_PERSONALIZATION_ENABLED,
+      )
 
       let traits: string[] = []
       if (savedTraits) {
@@ -76,7 +76,7 @@ export const useCustomSystemPrompt = (
         }
       }
 
-      const language = savedLanguage || ''
+      const language = normalizeResponseLanguage(savedLanguage)
 
       setPersonalization({
         nickname: savedNickname,
@@ -84,7 +84,7 @@ export const useCustomSystemPrompt = (
         traits,
         additionalContext: savedContext,
         language,
-        isEnabled: savedEnabled,
+        isEnabled: isPersonalizationEnabled(savedEnabled),
       })
 
       // Load custom system prompt settings
@@ -115,21 +115,24 @@ export const useCustomSystemPrompt = (
         language,
         isEnabled,
       } = event.detail
-      setPersonalization({
+      setPersonalization((previous) => ({
         nickname: nickname || '',
         profession: profession || '',
         traits: traits || [],
         additionalContext: additionalContext || '',
-        language: language || personalization.language, // Keep existing language if not provided
-        isEnabled: isEnabled || false,
-      })
+        language:
+          typeof language === 'string'
+            ? normalizeResponseLanguage(language)
+            : previous.language,
+        isEnabled: isEnabled !== false,
+      }))
     }
 
     const handleLanguageChange = (event: CustomEvent) => {
       const { language } = event.detail
       setPersonalization((prev) => ({
         ...prev,
-        language: language || '',
+        language: normalizeResponseLanguage(language),
       }))
     }
 
@@ -166,7 +169,7 @@ export const useCustomSystemPrompt = (
         handleCustomPromptChange as EventListener,
       )
     }
-  }, [personalization.language, defaultSystemPrompt])
+  }, [defaultSystemPrompt])
 
   // Generate the user preferences XML
   const generateUserPreferencesXML = (): string => {
@@ -211,14 +214,11 @@ export const useCustomSystemPrompt = (
 
   // Shared helper to replace placeholders in text
   const replacePlaceholders = (text: string): string => {
-    // Personalization is opt-in: even when fields are filled, nothing
-    // is sent to the model unless the user enabled the toggle.
     const userPreferencesXML = personalization.isEnabled
       ? generateUserPreferencesXML()
       : ''
 
-    // Get the effective language (default to English if not set)
-    const effectiveLanguage = personalization.language.trim() || 'English'
+    const effectiveLanguage = resolveResponseLanguage(personalization.language)
 
     // Extract timezone separately
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone

@@ -31,13 +31,16 @@ import type {
   ProfilePromptPreset,
 } from '@/services/cloud/profile-sync'
 import { logWarning } from '@/utils/error-handling'
+import { isPersonalizationEnabled } from '@/utils/personalization-settings'
+import {
+  normalizeResponseLanguage,
+  SYSTEM_RESPONSE_LANGUAGE,
+} from '@/utils/response-language'
 import {
   loadPinnedChatIds,
   normalizePinnedChatIds,
 } from '../storage/pinned-chats'
 import { ProfileDataSchema } from './schemas'
-
-const DEFAULT_PROFILE_LANGUAGE = 'English'
 
 function safeParsePromptPresets(raw: string | null): ProfilePromptPreset[] {
   if (!raw) return []
@@ -130,10 +133,9 @@ export function loadLocalSettings(): ProfileData {
     settings.themeMode = savedThemeMode
   }
 
-  const language = localStorage.getItem(USER_PREFS_LANGUAGE)
-  if (language) {
-    settings.language = language
-  }
+  settings.language = normalizeResponseLanguage(
+    localStorage.getItem(USER_PREFS_LANGUAGE),
+  )
 
   // Personalization
   const nickname = localStorage.getItem(USER_PREFS_NICKNAME)
@@ -157,9 +159,9 @@ export function loadLocalSettings(): ProfileData {
   const isUsingPersonalization = localStorage.getItem(
     USER_PREFS_PERSONALIZATION_ENABLED,
   )
-  if (isUsingPersonalization) {
-    settings.isUsingPersonalization = isUsingPersonalization === 'true'
-  }
+  settings.isUsingPersonalization = isPersonalizationEnabled(
+    isUsingPersonalization,
+  )
 
   // Custom system prompt settings
   const isUsingCustomPrompt = localStorage.getItem(
@@ -264,12 +266,12 @@ export function loadLocalSettings(): ProfileData {
 export function resetSettingsToLocalDefaults(): ProfileData {
   const defaults: ProfileData = {
     themeMode: 'system',
-    language: DEFAULT_PROFILE_LANGUAGE,
+    language: SYSTEM_RESPONSE_LANGUAGE,
     nickname: '',
     profession: '',
     traits: [],
     additionalContext: '',
-    isUsingPersonalization: false,
+    isUsingPersonalization: true,
     isUsingCustomPrompt: false,
     customSystemPrompt: '',
     customPromptPresets: [],
@@ -585,10 +587,12 @@ export function applySettingsToLocal(settings: ProfileData): void {
           language:
             settings.language ??
             localStorage.getItem(USER_PREFS_LANGUAGE) ??
-            'English',
+            SYSTEM_RESPONSE_LANGUAGE,
           isEnabled:
             settings.isUsingPersonalization ??
-            localStorage.getItem(USER_PREFS_PERSONALIZATION_ENABLED) === 'true',
+            isPersonalizationEnabled(
+              localStorage.getItem(USER_PREFS_PERSONALIZATION_ENABLED),
+            ),
         },
       }),
     )
