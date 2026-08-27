@@ -49,11 +49,9 @@ describe('profile-settings-serializer', () => {
     })
   })
 
-  it('uses shared defaults when language and personalization are missing', () => {
-    expect(loadLocalSettings()).toMatchObject({
-      language: 'System',
-      isUsingPersonalization: true,
-    })
+  it('preserves absent language and personalization as unedited fields', () => {
+    expect(loadLocalSettings().language).toBeUndefined()
+    expect(loadLocalSettings().isUsingPersonalization).toBeUndefined()
   })
 
   it('preserves explicit and unknown response languages through storage', () => {

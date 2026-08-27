@@ -133,9 +133,10 @@ export function loadLocalSettings(): ProfileData {
     settings.themeMode = savedThemeMode
   }
 
-  settings.language = normalizeResponseLanguage(
-    localStorage.getItem(USER_PREFS_LANGUAGE),
-  )
+  const language = localStorage.getItem(USER_PREFS_LANGUAGE)
+  if (language) {
+    settings.language = normalizeResponseLanguage(language)
+  }
 
   // Personalization
   const nickname = localStorage.getItem(USER_PREFS_NICKNAME)
@@ -159,9 +160,11 @@ export function loadLocalSettings(): ProfileData {
   const isUsingPersonalization = localStorage.getItem(
     USER_PREFS_PERSONALIZATION_ENABLED,
   )
-  settings.isUsingPersonalization = isPersonalizationEnabled(
-    isUsingPersonalization,
-  )
+  if (isUsingPersonalization) {
+    settings.isUsingPersonalization = isPersonalizationEnabled(
+      isUsingPersonalization,
+    )
+  }
 
   // Custom system prompt settings
   const isUsingCustomPrompt = localStorage.getItem(
