@@ -1,7 +1,20 @@
-import { getDeleteAllChatsSuccessDescription } from '@/components/chat/settings-modal'
+import {
+  getDeleteAllChatsSuccessDescription,
+  getDeleteAllChatsSuccessTitle,
+} from '@/components/chat/settings-modal'
 import { describe, expect, it } from 'vitest'
 
 describe('settings chat deletion confirmation', () => {
+  it('scopes the title to the device when cloud deletion is incomplete', () => {
+    expect(getDeleteAllChatsSuccessTitle(true, false)).toBe(
+      'Chats deleted from this device',
+    )
+    expect(getDeleteAllChatsSuccessTitle(true, true)).toBe('All chats deleted')
+    expect(getDeleteAllChatsSuccessTitle(false, false)).toBe(
+      'All chats deleted',
+    )
+  })
+
   it('describes completed cloud deletion without claiming an email was sent', () => {
     expect(getDeleteAllChatsSuccessDescription(true, true)).toBe(
       'Removed all chats from this device and encrypted cloud storage.',
