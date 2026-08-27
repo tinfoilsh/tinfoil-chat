@@ -120,6 +120,14 @@ const DASHBOARD_URL = 'https://dash.tinfoil.sh'
 const DELETE_ALL_CHATS_CONFIRM_PHRASE = 'delete all chats'
 const DELETE_ALL_PROJECTS_CONFIRM_PHRASE = 'delete all projects'
 
+export function getDeleteAllChatsSuccessDescription(
+  isSignedIn?: boolean,
+): string {
+  return isSignedIn
+    ? 'Removed all chats from this device and encrypted cloud storage.'
+    : 'Removed all chats from this browser session.'
+}
+
 const ScrambleText = ({
   text,
   className,
@@ -1794,18 +1802,16 @@ export function SettingsModal({
     setIsDeletingAllChats(true)
     try {
       if (isSignedIn) {
-        const result = await chatStorage.deleteAllChats()
+        await chatStorage.deleteAllChats()
         toast({
           title: 'All chats deleted',
-          description: result.notificationSent
-            ? 'We will email you a confirmation.'
-            : 'Email confirmation could not be sent.',
+          description: getDeleteAllChatsSuccessDescription(isSignedIn),
         })
       } else {
         sessionChatStorage.clearAll()
         toast({
           title: 'All chats deleted',
-          description: 'Removed all chats from this browser session.',
+          description: getDeleteAllChatsSuccessDescription(isSignedIn),
         })
       }
 

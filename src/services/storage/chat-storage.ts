@@ -291,7 +291,6 @@ export class ChatStorageService {
   async deleteAllChats(): Promise<{
     localDeleted: number
     cloudDeleted: number
-    notificationSent: boolean
   }> {
     // Capture the guard before any await so the whole operation —
     // ID snapshot, cloud delete, and local wipe — is pinned to the
@@ -312,13 +311,11 @@ export class ChatStorageService {
     // and skip both the tracker update and the local wipe so the user can
     // retry without partial-deletion side effects.
     let cloudDeleted = 0
-    let notificationSent = false
     if (await cloudStorage.isAuthenticated()) {
       try {
         guard.assertCurrent()
         const result = await cloudStorage.deleteAllChats(guard)
         cloudDeleted = result.deleted
-        notificationSent = result.notificationSent ?? false
       } catch (error) {
         logError('Failed to bulk-delete cloud chats', error, {
           component: 'ChatStorageService',
@@ -346,7 +343,7 @@ export class ChatStorageService {
       metadata: { localDeleted, cloudDeleted },
     })
 
-    return { localDeleted, cloudDeleted, notificationSent }
+    return { localDeleted, cloudDeleted }
   }
 
   async getAllChats(): Promise<Chat[]> {
