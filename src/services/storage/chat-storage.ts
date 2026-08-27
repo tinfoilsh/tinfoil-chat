@@ -483,6 +483,45 @@ export class ChatStorageService {
     chatEvents.emit({ reason: 'save', ids: [chatId] })
   }
 
+  async moveChatToProject(chatId: string, projectId: string): Promise<void> {
+    await this.initialize()
+
+    const originalChat = await indexedDBStorage.getChat(chatId)
+    if (!originalChat) {
+      throw new Error('Chat not found')
+    }
+
+    let convertedToCloud = false
+    try {
+      if (originalChat.isLocalOnly) {
+        await this.convertChatToCloud(chatId)
+        convertedToCloud = true
+      }
+
+      await indexedDBStorage.updateChatProject(chatId, projectId)
+      await cloudSync.updateChatProject(chatId, projectId)
+      await cloudSync.backupChat(chatId)
+    } catch (error) {
+      if (convertedToCloud) {
+        try {
+          await this.convertChatToLocal(chatId)
+          await indexedDBStorage.saveChat(originalChat)
+        } catch (rollbackError) {
+          logError(
+            'Failed to restore local chat after project move',
+            rollbackError,
+            {
+              component: 'ChatStorageService',
+              action: 'moveChatToProject.rollback',
+              metadata: { chatId, projectId },
+            },
+          )
+        }
+      }
+      throw error
+    }
+  }
+
   async removeChatFromProject(chatId: string): Promise<void> {
     await this.initialize()
 

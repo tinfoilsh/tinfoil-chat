@@ -6,12 +6,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   isLoading: false,
   subscriptionActive: false,
-  routerReady: true,
-  replace: vi.fn(),
+  router: {
+    isReady: true,
+    replace: vi.fn(),
+  },
 }))
 
 vi.mock('next/router', () => ({
-  useRouter: () => ({ isReady: mocks.routerReady, replace: mocks.replace }),
+  useRouter: () => mocks.router,
 }))
 
 vi.mock('@/hooks/use-subscription-status', () => ({
@@ -34,13 +36,13 @@ describe('PremiumProjectRoute', () => {
     vi.clearAllMocks()
     mocks.isLoading = false
     mocks.subscriptionActive = false
-    mocks.routerReady = true
+    mocks.router.isReady = true
   })
 
   it('redirects free users to chat with the upgrade prompt marker', () => {
     render(<PremiumProjectRoute projectId="project-1" />)
 
-    expect(mocks.replace).toHaveBeenCalledWith('/chat?upgrade=projects')
+    expect(mocks.router.replace).toHaveBeenCalledWith('/chat?upgrade=projects')
     expect(screen.queryByText('Project chat')).not.toBeInTheDocument()
   })
 
@@ -49,7 +51,7 @@ describe('PremiumProjectRoute', () => {
     render(<PremiumProjectRoute projectId="project-1" />)
 
     expect(screen.getByText('Project chat')).toBeInTheDocument()
-    expect(mocks.replace).not.toHaveBeenCalled()
+    expect(mocks.router.replace).not.toHaveBeenCalled()
   })
 
   it('does not render or redirect while subscription status is loading', () => {
@@ -57,15 +59,26 @@ describe('PremiumProjectRoute', () => {
     render(<PremiumProjectRoute projectId="project-1" />)
 
     expect(screen.queryByText('Project chat')).not.toBeInTheDocument()
-    expect(mocks.replace).not.toHaveBeenCalled()
+    expect(mocks.router.replace).not.toHaveBeenCalled()
   })
 
   it('does not render project chat before route parameters are ready', () => {
     mocks.subscriptionActive = true
-    mocks.routerReady = false
+    mocks.router.isReady = false
     render(<PremiumProjectRoute projectId={null} />)
 
     expect(screen.queryByText('Project chat')).not.toBeInTheDocument()
-    expect(mocks.replace).not.toHaveBeenCalled()
+    expect(mocks.router.replace).not.toHaveBeenCalled()
+  })
+
+  it('redirects a free user when the router becomes ready', () => {
+    mocks.router.isReady = false
+    const view = render(<PremiumProjectRoute projectId={null} />)
+    expect(mocks.router.replace).not.toHaveBeenCalled()
+
+    mocks.router.isReady = true
+    view.rerender(<PremiumProjectRoute projectId={null} />)
+
+    expect(mocks.router.replace).toHaveBeenCalledWith('/chat?upgrade=projects')
   })
 })

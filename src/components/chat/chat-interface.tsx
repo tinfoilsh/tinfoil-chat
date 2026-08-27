@@ -89,7 +89,6 @@ import { chatEvents } from '@/services/storage/chat-events'
 import { chatStorage } from '@/services/storage/chat-storage'
 import {
   INDEXED_DB_UPGRADE_BLOCKED_EVENT,
-  indexedDBStorage,
   isIndexedDBUpgradeBlocked,
 } from '@/services/storage/indexed-db'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -2503,17 +2502,7 @@ export function ChatInterface({
         return
       }
       try {
-        const chat = await chatStorage.getChat(chatId)
-        if (chat?.isLocalOnly) {
-          await chatStorage.convertChatToCloud(chatId)
-        }
-
-        // Update local storage first (optimistic)
-        await indexedDBStorage.updateChatProject(chatId, projectId)
-
-        // Update cloud storage, then re-upload encrypted blob to keep it consistent
-        await cloudSync.updateChatProject(chatId, projectId)
-        await cloudSync.backupChat(chatId)
+        await chatStorage.moveChatToProject(chatId, projectId)
 
         // Reload chats to update the UI
         await reloadChats()

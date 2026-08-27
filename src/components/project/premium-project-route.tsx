@@ -22,7 +22,7 @@ export function PremiumProjectRoute({
     if (router.isReady && !isLoading && !chat_subscription_active) {
       void router.replace('/chat?upgrade=projects')
     }
-  }, [chat_subscription_active, isLoading, router])
+  }, [chat_subscription_active, isLoading, router, router.isReady])
 
   if (!router.isReady || isLoading || !chat_subscription_active) return null
 
