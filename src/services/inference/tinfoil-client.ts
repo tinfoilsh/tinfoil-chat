@@ -25,6 +25,9 @@ import { INFERENCE_CLIENT_INITIALIZATION_TIMEOUT_MS } from './constants'
 export interface RateLimitInfo {
   maxRequests: number
   remaining: number
+  maxTokens?: number
+  tokensUsed?: number
+  tokensRemaining?: number
   resetsAt: string
   /**
    * Which limit this represents. Absent or `free_daily` is the anonymous/
@@ -339,6 +342,9 @@ async function fetchSessionTokenForGeneration(
     cachedRateLimit = {
       maxRequests: data.rate_limit.max_requests,
       remaining: data.rate_limit.remaining,
+      maxTokens: data.rate_limit.max_tokens,
+      tokensUsed: data.rate_limit.tokens_used,
+      tokensRemaining: data.rate_limit.tokens_remaining,
       resetsAt: data.rate_limit.resets_at,
       kind: 'free_daily',
     }

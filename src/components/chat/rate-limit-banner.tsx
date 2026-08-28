@@ -1,6 +1,7 @@
 'use client'
 
 import { cn } from '@/components/ui/utils'
+import { DAILY_RATE_LIMIT_MESSAGE } from '@/constants/rate-limits'
 import type { RateLimitInfo } from '@/services/inference/tinfoil-client'
 
 const RATE_LIMIT_WARNING_THRESHOLD = 3
@@ -61,7 +62,7 @@ export function RateLimitBanner({
           {isHourly
             ? `You've reached your hourly usage limit${resetLabel ? ` — resets at ${resetLabel}` : ''}`
             : exhausted
-              ? "You've used all your free requests for today"
+              ? DAILY_RATE_LIMIT_MESSAGE
               : `You have ${rateLimit.remaining} free request${rateLimit.remaining === 1 ? '' : 's'} left today`}
         </span>
       </div>

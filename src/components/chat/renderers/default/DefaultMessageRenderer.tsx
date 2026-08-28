@@ -2,6 +2,7 @@ import { GenUIToolCallRenderer } from '@/components/chat/genui/GenUIToolCallRend
 import { renderGenUIResolved } from '@/components/chat/genui/render'
 import { cn } from '@/components/ui/utils'
 import { REQUEST_UPGRADE_EVENT } from '@/constants/chat-events'
+import { DAILY_RATE_LIMIT_MESSAGE } from '@/constants/rate-limits'
 import {
   ArrowPathIcon,
   ArrowUturnLeftIcon,
@@ -488,11 +489,11 @@ const DefaultMessageComponent = ({
                       <div className="flex items-center gap-2">
                         <GoClockFill className="h-5 w-5 flex-shrink-0 text-brand-accent-dark dark:text-brand-accent-light" />
                         <span className="font-semibold text-brand-accent-dark dark:text-brand-accent-light">
-                          Daily limit reached
+                          Daily rate limit reached
                         </span>
                       </div>
                       <p className="text-sm text-brand-accent-dark/70 dark:text-brand-accent-light/70">
-                        You&apos;ve used all your free requests for today.
+                        {DAILY_RATE_LIMIT_MESSAGE}
                       </p>
                       <button
                         type="button"
