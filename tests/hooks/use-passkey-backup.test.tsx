@@ -393,7 +393,7 @@ describe('usePasskeyBackup', () => {
     expect(result.current.passkeySetupAvailable).toBe(true)
   })
 
-  it('ignores stale empty initialization after a same-tab user switch', async () => {
+  it('waits for a key change before initializing a switched user', async () => {
     let resolveOldState!: (state: 'empty') => void
     const oldState = new Promise<'empty'>((resolve) => {
       resolveOldState = resolve
@@ -416,16 +416,22 @@ describe('usePasskeyBackup', () => {
     )
 
     await waitFor(() => expect(mocks.getPasskeyDeviceState).toHaveBeenCalled())
-    rerender({ userId: 'user_2', encryptionKey: 'key_2' })
-    await waitFor(() => expect(result.current.passkeyActive).toBe(true))
+    rerender({ userId: 'user_2', encryptionKey: 'key_1' })
 
     await act(async () => {
       resolveOldState('empty')
       await oldState
     })
 
+    expect(mocks.getPasskeyDeviceState).toHaveBeenCalledTimes(1)
     expect(localStorage.getItem(SECRET_PASSKEY_BACKED_UP)).toBe('true')
-    expect(result.current.passkeyActive).toBe(true)
+    expect(result.current.passkeyActive).toBe(false)
+    expect(result.current.passkeySetupAvailable).toBe(false)
+
+    rerender({ userId: 'user_2', encryptionKey: 'key_2' })
+    await waitFor(() => expect(result.current.passkeyActive).toBe(true))
+
+    expect(mocks.getPasskeyDeviceState).toHaveBeenCalledTimes(2)
     expect(result.current.passkeySetupAvailable).toBe(false)
   })
 

@@ -972,7 +972,7 @@ export function usePasskeyBackup({
 
   // --- Passkey initialization (runs once after cloud sync init completes) ---
   useEffect(() => {
-    const initializationUserId = user?.id
+    const initializationUserId = userRef.current?.id
     const initializationEncryptionKey = encryptionKey
     if (!initialized || !isSignedIn || !initializationUserId) {
       return
@@ -1222,7 +1222,7 @@ export function usePasskeyBackup({
     }
 
     initializePasskey()
-  }, [initialized, isSignedIn, encryptionKey, user?.id])
+  }, [initialized, isSignedIn, encryptionKey])
 
   // Clear the persistent "recovery dismissed" flag and the session
   // first-time-prompt flag once the user has a key again (via passkey
