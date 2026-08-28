@@ -260,6 +260,8 @@ export function usePasskeyBackup({
   const passkeyFlowInProgressRef = useRef(false)
   const userRef = useRef(user)
   userRef.current = user
+  const encryptionKeyRef = useRef(encryptionKey)
+  encryptionKeyRef.current = encryptionKey
   const onEncryptionKeyRecoveredRef = useRef(onEncryptionKeyRecovered)
   onEncryptionKeyRecoveredRef.current = onEncryptionKeyRecovered
   const hasInitializedPasskeyRef = useRef(false)
@@ -1095,11 +1097,13 @@ export function usePasskeyBackup({
           deviceState === 'empty' &&
           !passkeyFlowInProgressRef.current
         ) {
+          localStorage.removeItem(SECRET_PASSKEY_BACKED_UP)
           if (isMountedRef.current) {
             setState((prev) => ({
               ...prev,
               passkeySetupAvailable: true,
               passkeyAddDeviceAvailable: false,
+              passkeyActive: false,
             }))
           }
         }
@@ -1634,9 +1638,18 @@ export function usePasskeyBackup({
   const refreshBundleState = useCallback(async (): Promise<void> => {
     if (!encryptionKey) return
     if (passkeyFlowInProgressRef.current) return
+    const refreshUserId = userRef.current?.id
+    const refreshEncryptionKey = encryptionKey
+    if (!refreshUserId) return
     const localCredentialId = getLocalPasskeyCredentialId()
     const deviceState = await getPasskeyDeviceState(localCredentialId)
-    if (!isMountedRef.current) return
+    if (
+      !isMountedRef.current ||
+      userRef.current?.id !== refreshUserId ||
+      encryptionKeyRef.current !== refreshEncryptionKey
+    ) {
+      return
+    }
 
     if (deviceState === 'this-device') {
       localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
@@ -1655,10 +1668,12 @@ export function usePasskeyBackup({
         passkeyActive: false,
       }))
     } else if (deviceState === 'empty') {
+      localStorage.removeItem(SECRET_PASSKEY_BACKED_UP)
       setState((prev) => ({
         ...prev,
         passkeySetupAvailable: true,
         passkeyAddDeviceAvailable: false,
+        passkeyActive: false,
       }))
     }
   }, [encryptionKey])

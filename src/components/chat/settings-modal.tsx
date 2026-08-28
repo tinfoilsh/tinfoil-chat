@@ -3536,9 +3536,9 @@ ${encryptionKey.replace('key_', '')}
                                   await deletePasskeyCredential(credentialId)
                                 if (ok) {
                                   toast({
-                                    title: 'Passkey removed',
+                                    title: 'Passkey recovery removed',
                                     description:
-                                      'That platform can no longer unlock your chats with this passkey.',
+                                      'That platform can no longer recover your cloud encryption key with this bundle.',
                                   })
                                   await refreshPasskeyBundles()
                                   if (onRefreshBundleState) {
