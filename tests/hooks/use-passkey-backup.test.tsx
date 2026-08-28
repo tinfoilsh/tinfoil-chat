@@ -450,9 +450,7 @@ describe('usePasskeyBackup', () => {
 
     await waitFor(() => expect(mocks.getPasskeyDeviceState).toHaveBeenCalled())
     rerender({ encryptionKey: 'key_2' })
-    await act(async () => {
-      await result.current.refreshBundleState()
-    })
+    await waitFor(() => expect(result.current.passkeyActive).toBe(true))
 
     await act(async () => {
       resolveOldState('empty')
@@ -474,6 +472,31 @@ describe('usePasskeyBackup', () => {
 
     expect(localStorage.getItem(SECRET_PASSKEY_BACKED_UP)).toBeNull()
     expect(result.current.passkeyActive).toBe(false)
+  })
+
+  it('does not initialize twice for equivalent rerenders', async () => {
+    mocks.getPasskeyDeviceState.mockResolvedValue('this-device')
+    const { rerender } = renderHook(
+      ({ user }) =>
+        usePasskeyBackup({
+          ...baseOptions,
+          user,
+          encryptionKey: 'key_current',
+        }),
+      { initialProps: { user: { id: 'user_1' } as any } },
+    )
+
+    await waitFor(() =>
+      expect(mocks.getPasskeyDeviceState).toHaveBeenCalledTimes(1),
+    )
+    rerender({ user: { id: 'user_1' } as any })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(mocks.isPrfSupported).toHaveBeenCalledTimes(1)
+    expect(mocks.validateCurrentPrimaryKey).toHaveBeenCalledTimes(1)
+    expect(mocks.getPasskeyDeviceState).toHaveBeenCalledTimes(1)
   })
 
   it.each([

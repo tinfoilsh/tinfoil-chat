@@ -103,6 +103,11 @@ type GeneratedPasskeyKey = {
   credentialId: string
 }
 
+type PasskeyInitializationSnapshot = {
+  userId: string
+  encryptionKey: string | null
+}
+
 type ApplyRecoveredKeyBundleResult =
   | { mode: CloudKeyAuthorizationMode }
   | { mode: null; reason: PasskeyRecoveryFailure }
@@ -269,7 +274,8 @@ export function usePasskeyBackup({
   encryptionKeyRef.current = encryptionKey
   const onEncryptionKeyRecoveredRef = useRef(onEncryptionKeyRecovered)
   onEncryptionKeyRecoveredRef.current = onEncryptionKeyRecovered
-  const hasInitializedPasskeyRef = useRef(false)
+  const initializedPasskeySnapshotRef =
+    useRef<PasskeyInitializationSnapshot | null>(null)
   const previousUserIdRef = useRef<string | null | undefined>(undefined)
 
   // Cleanup on unmount
@@ -298,7 +304,7 @@ export function usePasskeyBackup({
       return
     }
     if (currentUserId !== null && currentUserId !== previousUserIdRef.current) {
-      hasInitializedPasskeyRef.current = false
+      initializedPasskeySnapshotRef.current = null
       passkeyRecoveryDismissedFlag.clear()
       firstTimePromptDismissedFlag.clear()
       setupWarningDismissedFlag.clear()
@@ -968,20 +974,27 @@ export function usePasskeyBackup({
   useEffect(() => {
     const initializationUserId = user?.id
     const initializationEncryptionKey = encryptionKey
+    if (!initialized || !isSignedIn || !initializationUserId) {
+      return
+    }
+    const initializedSnapshot = initializedPasskeySnapshotRef.current
     if (
-      !initialized ||
-      !isSignedIn ||
-      !initializationUserId ||
-      hasInitializedPasskeyRef.current
+      initializedSnapshot?.userId === initializationUserId &&
+      initializedSnapshot.encryptionKey === initializationEncryptionKey
     ) {
       return
     }
-    hasInitializedPasskeyRef.current = true
+    const initializationSnapshot: PasskeyInitializationSnapshot = {
+      userId: initializationUserId,
+      encryptionKey: initializationEncryptionKey,
+    }
+    initializedPasskeySnapshotRef.current = initializationSnapshot
 
     const isCurrentInitialization = () =>
       isMountedRef.current &&
-      userRef.current?.id === initializationUserId &&
-      encryptionKeyRef.current === initializationEncryptionKey
+      initializedPasskeySnapshotRef.current === initializationSnapshot &&
+      userRef.current?.id === initializationSnapshot.userId &&
+      encryptionKeyRef.current === initializationSnapshot.encryptionKey
 
     const initializePasskey = async () => {
       const prfSupported = await isPrfSupported()
