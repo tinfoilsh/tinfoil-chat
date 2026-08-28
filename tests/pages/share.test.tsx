@@ -1,6 +1,6 @@
 import SharePage from '@/pages/share/[[...slug]]'
 import { act, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   fetchSharedChat: vi.fn(),
@@ -54,22 +54,32 @@ const payload = {
   createdAt: 1,
 }
 
+const VALID_SHARE_KEY = 'ab'.repeat(32)
+const CIPHERTEXT = new Uint8Array([1, 2, 3])
+let originalHash = ''
+
 describe('SharePage', () => {
   beforeEach(() => {
+    originalHash = window.location.hash
+    window.location.hash = ''
     vi.clearAllMocks()
     mocks.router.isReady = true
     mocks.router.query = { slug: ['chat-id'] }
     mocks.fetchSharedChat.mockResolvedValue({
       formatVersion: 1,
-      binary: new Uint8Array([1, 2, 3]).buffer,
+      binary: CIPHERTEXT.buffer,
     })
     mocks.shareOpen.mockResolvedValue(
       new TextEncoder().encode(JSON.stringify(payload)),
     )
   })
 
+  afterEach(() => {
+    window.location.hash = originalHash
+  })
+
   it('opens a v2 link through the enclave', async () => {
-    const shareKey = 'ab'.repeat(32)
+    const shareKey = VALID_SHARE_KEY
     window.location.hash = `#v2:${shareKey}`
 
     render(<SharePage />)
@@ -78,7 +88,7 @@ describe('SharePage', () => {
     expect(mocks.fetchSharedChat).toHaveBeenCalledWith('chat-id')
     expect(mocks.shareOpen).toHaveBeenCalledWith({
       shareKeyHex: shareKey,
-      ciphertext: new Uint8Array([1, 2, 3]),
+      ciphertext: CIPHERTEXT,
     })
     expect(mocks.sharedChatView).toHaveBeenCalledWith(
       expect.objectContaining({ chatData: payload }),
@@ -88,10 +98,10 @@ describe('SharePage', () => {
   it.each([
     ['', 'a missing fragment'],
     ['#legacyBase64UrlKey', 'an unprefixed fragment'],
-    [`#v1:${'ab'.repeat(32)}`, 'a v1 marker'],
-    [`#v2:${'AB'.repeat(32)}`, 'uppercase hexadecimal'],
-    [`#v2:${'ab'.repeat(31)}`, 'a short key'],
-    [`#v2:${'ab'.repeat(32)}extra`, 'a key with trailing data'],
+    [`#v1:${VALID_SHARE_KEY}`, 'a v1 marker'],
+    [`#v2:${VALID_SHARE_KEY.toUpperCase()}`, 'uppercase hexadecimal'],
+    [`#v2:${VALID_SHARE_KEY.slice(2)}`, 'a short key'],
+    [`#v2:${VALID_SHARE_KEY}extra`, 'a key with trailing data'],
   ])('rejects %s as unsupported (%s)', async (hash) => {
     window.location.hash = hash
 
@@ -107,7 +117,7 @@ describe('SharePage', () => {
   })
 
   it('shows unsupported-link UI for legacy storage format 0', async () => {
-    window.location.hash = `#v2:${'ab'.repeat(32)}`
+    window.location.hash = `#v2:${VALID_SHARE_KEY}`
     const { UnsupportedShareFormatError } = await import('@/services/share-api')
     mocks.fetchSharedChat.mockRejectedValue(
       new UnsupportedShareFormatError('Unsupported share storage format'),

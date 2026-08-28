@@ -1,7 +1,7 @@
 import { type BaseModel } from '@/config/models'
 import { attachmentGetPublic } from '@/services/sync-enclave/sync-api'
 import { uint8ArrayToBase64 } from '@/utils/binary-codec'
-import type { ShareableChatData } from '@/utils/compression'
+import type { ShareableChatData } from '@/utils/share-payload'
 import 'katex/dist/katex.min.css'
 import { memo, useEffect, useMemo, useState } from 'react'
 import { ensureTimeline } from './ensure-timeline'

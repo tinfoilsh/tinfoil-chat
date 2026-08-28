@@ -4,11 +4,18 @@ import { authTokenManager } from './auth'
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
 
+export const SHARE_STORAGE_FORMAT_HEADER = 'X-Format-Version'
+export const SHARE_STORAGE_FORMAT_VERSION = '1'
+export const SHARE_FORMAT_VERSION = 1 as const
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
   return authTokenManager.getAuthHeaders()
 }
 
-export type FetchedShareData = { formatVersion: 1; binary: ArrayBuffer }
+export type FetchedShareData = {
+  formatVersion: typeof SHARE_FORMAT_VERSION
+  binary: ArrayBuffer
+}
 
 export class SharedChatNotFoundError extends Error {}
 
@@ -26,7 +33,7 @@ export async function uploadSharedChat(
     headers: {
       ...(await getAuthHeaders()),
       'Content-Type': 'application/octet-stream',
-      'X-Format-Version': '1',
+      [SHARE_STORAGE_FORMAT_HEADER]: SHARE_STORAGE_FORMAT_VERSION,
     },
     body: encryptedData as unknown as BodyInit,
   })
@@ -59,10 +66,13 @@ export async function fetchSharedChat(
     throw new Error(`Failed to fetch shared chat: ${response.status}`)
   }
 
-  if (response.headers.get('X-Format-Version') !== '1') {
+  if (
+    response.headers.get(SHARE_STORAGE_FORMAT_HEADER) !==
+    SHARE_STORAGE_FORMAT_VERSION
+  ) {
     throw new UnsupportedShareFormatError('Unsupported share storage format')
   }
 
   const binary = await response.arrayBuffer()
-  return { formatVersion: 1, binary }
+  return { formatVersion: SHARE_FORMAT_VERSION, binary }
 }

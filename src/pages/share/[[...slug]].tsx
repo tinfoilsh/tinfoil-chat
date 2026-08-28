@@ -12,7 +12,7 @@ import { shareOpen as enclaveShareOpen } from '@/services/sync-enclave/sync-api'
 import {
   validateShareableChatData,
   type ShareableChatData,
-} from '@/utils/compression'
+} from '@/utils/share-payload'
 import Head from 'next/head'
 import Link from 'next/link'
 import { useRouter } from 'next/router'

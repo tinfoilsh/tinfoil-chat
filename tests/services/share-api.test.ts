@@ -1,5 +1,8 @@
 import {
   fetchSharedChat,
+  SHARE_FORMAT_VERSION,
+  SHARE_STORAGE_FORMAT_HEADER,
+  SHARE_STORAGE_FORMAT_VERSION,
   SharedChatNotFoundError,
   UnsupportedShareFormatError,
 } from '@/services/share-api'
@@ -18,12 +21,14 @@ describe('fetchSharedChat', () => {
     const binary = new Uint8Array([1, 2, 3]).buffer
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(binary, {
-        headers: { 'X-Format-Version': '1' },
+        headers: {
+          [SHARE_STORAGE_FORMAT_HEADER]: SHARE_STORAGE_FORMAT_VERSION,
+        },
       }),
     )
 
     await expect(fetchSharedChat('chat-id')).resolves.toEqual({
-      formatVersion: 1,
+      formatVersion: SHARE_FORMAT_VERSION,
       binary,
     })
   })
@@ -33,7 +38,7 @@ describe('fetchSharedChat', () => {
     async (formatVersion) => {
       const headers = new Headers()
       if (formatVersion !== null) {
-        headers.set('X-Format-Version', formatVersion)
+        headers.set(SHARE_STORAGE_FORMAT_HEADER, formatVersion)
       }
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response('{}', { headers }),

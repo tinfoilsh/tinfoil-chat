@@ -1,4 +1,4 @@
-import { validateShareableChatData } from '@/utils/compression'
+import { validateShareableChatData } from '@/utils/share-payload'
 import { describe, expect, it } from 'vitest'
 
 const validPayload = {
