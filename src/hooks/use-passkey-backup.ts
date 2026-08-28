@@ -304,7 +304,6 @@ export function usePasskeyBackup({
       return
     }
     if (currentUserId !== null && currentUserId !== previousUserIdRef.current) {
-      initializedPasskeySnapshotRef.current = null
       passkeyRecoveryDismissedFlag.clear()
       firstTimePromptDismissedFlag.clear()
       setupWarningDismissedFlag.clear()
@@ -972,7 +971,7 @@ export function usePasskeyBackup({
 
   // --- Passkey initialization (runs once after cloud sync init completes) ---
   useEffect(() => {
-    const initializationUserId = userRef.current?.id
+    const initializationUserId = user?.id
     const initializationEncryptionKey = encryptionKey
     if (!initialized || !isSignedIn || !initializationUserId) {
       return
@@ -980,6 +979,13 @@ export function usePasskeyBackup({
     const initializedSnapshot = initializedPasskeySnapshotRef.current
     if (
       initializedSnapshot?.userId === initializationUserId &&
+      initializedSnapshot.encryptionKey === initializationEncryptionKey
+    ) {
+      return
+    }
+    if (
+      initializedSnapshot &&
+      initializedSnapshot.userId !== initializationUserId &&
       initializedSnapshot.encryptionKey === initializationEncryptionKey
     ) {
       return
@@ -1222,7 +1228,7 @@ export function usePasskeyBackup({
     }
 
     initializePasskey()
-  }, [initialized, isSignedIn, encryptionKey])
+  }, [initialized, isSignedIn, encryptionKey, user?.id])
 
   // Clear the persistent "recovery dismissed" flag and the session
   // first-time-prompt flag once the user has a key again (via passkey

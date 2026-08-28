@@ -424,6 +424,7 @@ describe('usePasskeyBackup', () => {
     })
 
     expect(mocks.getPasskeyDeviceState).toHaveBeenCalledTimes(1)
+    expect(mocks.isPrfSupported).toHaveBeenCalledTimes(1)
     expect(localStorage.getItem(SECRET_PASSKEY_BACKED_UP)).toBe('true')
     expect(result.current.passkeyActive).toBe(false)
     expect(result.current.passkeySetupAvailable).toBe(false)
@@ -432,7 +433,29 @@ describe('usePasskeyBackup', () => {
     await waitFor(() => expect(result.current.passkeyActive).toBe(true))
 
     expect(mocks.getPasskeyDeviceState).toHaveBeenCalledTimes(2)
+    expect(mocks.isPrfSupported).toHaveBeenCalledTimes(2)
     expect(result.current.passkeySetupAvailable).toBe(false)
+  })
+
+  it('initializes once when the signed-in user finishes hydrating', async () => {
+    mocks.getPasskeyDeviceState.mockResolvedValue('this-device')
+    const { result, rerender } = renderHook(
+      ({ userId }) =>
+        usePasskeyBackup({
+          ...baseOptions,
+          user: userId ? ({ id: userId } as any) : null,
+          encryptionKey: 'key_current',
+        }),
+      { initialProps: { userId: null as string | null } },
+    )
+
+    expect(mocks.getPasskeyDeviceState).not.toHaveBeenCalled()
+    rerender({ userId: 'user_1' })
+    await waitFor(() => expect(result.current.passkeyActive).toBe(true))
+
+    expect(mocks.isPrfSupported).toHaveBeenCalledTimes(1)
+    expect(mocks.validateCurrentPrimaryKey).toHaveBeenCalledTimes(1)
+    expect(mocks.getPasskeyDeviceState).toHaveBeenCalledTimes(1)
   })
 
   it('ignores stale empty initialization after encryption key rotation', async () => {
