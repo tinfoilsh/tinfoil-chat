@@ -1,5 +1,3 @@
-import pako from 'pako'
-
 const AES_GCM = 'AES-GCM'
 const IV_LENGTH = 12
 
@@ -82,50 +80,6 @@ export function bufferSourceToArrayBuffer(source: BufferSource): ArrayBuffer {
     source.byteOffset,
     source.byteOffset + source.byteLength,
   ) as ArrayBuffer
-}
-
-/**
- * Compress and encrypt a JSON-serialisable object into raw binary.
- * Pipeline: JSON.stringify → gzip → AES-GCM encrypt → IV(12) || ciphertext
- */
-export async function compressAndEncrypt(
-  data: unknown,
-  cryptoKey: CryptoKey,
-): Promise<Uint8Array> {
-  const json = JSON.stringify(data)
-  const compressed = pako.gzip(json)
-
-  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH))
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: AES_GCM, iv },
-    cryptoKey,
-    compressed,
-  )
-
-  return packIvCiphertext(iv, ciphertext)
-}
-
-/**
- * Decrypt and decompress raw binary back to a parsed object.
- * Pipeline: split IV/ciphertext → AES-GCM decrypt → gunzip → JSON.parse
- */
-export async function decryptAndDecompress(
-  binary: Uint8Array,
-  cryptoKey: CryptoKey,
-): Promise<unknown> {
-  const { iv, ciphertext } = unpackIvCiphertext(
-    binary,
-    'Binary data too short to contain IV and ciphertext',
-  )
-
-  const decrypted = await crypto.subtle.decrypt(
-    { name: AES_GCM, iv: toBuffer(iv) },
-    cryptoKey,
-    toBuffer(ciphertext),
-  )
-
-  const decompressed = pako.ungzip(new Uint8Array(decrypted), { to: 'string' })
-  return JSON.parse(decompressed)
 }
 
 /**

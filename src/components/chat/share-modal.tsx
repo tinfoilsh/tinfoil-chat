@@ -2,7 +2,7 @@ import { TextureGrid } from '@/components/texture-grid'
 import { useToast } from '@/hooks/use-toast'
 import { uploadSharedChat } from '@/services/share-api'
 import { shareSeal as enclaveShareSeal } from '@/services/sync-enclave/sync-api'
-import type { ShareableChatData } from '@/utils/compression'
+import type { ShareableChatData } from '@/utils/share-payload'
 import {
   CheckIcon,
   DocumentDuplicateIcon,

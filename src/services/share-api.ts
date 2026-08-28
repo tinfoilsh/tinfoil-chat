@@ -1,20 +1,25 @@
 import { logError } from '@/utils/error-handling'
-import type { EncryptedShareData } from '@/utils/share-encryption'
 import { authTokenManager } from './auth'
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
 
+export const SHARE_STORAGE_FORMAT_HEADER = 'X-Format-Version'
+export const SHARE_STORAGE_FORMAT_VERSION = '1'
+export const SHARE_FORMAT_VERSION = 1 as const
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
   return authTokenManager.getAuthHeaders()
 }
 
-/**
- * Fetched share data — either v0 JSON or v1 raw binary.
- */
-export type FetchedShareData =
-  | { formatVersion: 0; data: EncryptedShareData }
-  | { formatVersion: 1; binary: ArrayBuffer }
+export type FetchedShareData = {
+  formatVersion: typeof SHARE_FORMAT_VERSION
+  binary: ArrayBuffer
+}
+
+export class SharedChatNotFoundError extends Error {}
+
+export class UnsupportedShareFormatError extends Error {}
 
 /**
  * Upload v1 binary encrypted shared chat data to the server.
@@ -28,7 +33,7 @@ export async function uploadSharedChat(
     headers: {
       ...(await getAuthHeaders()),
       'Content-Type': 'application/octet-stream',
-      'X-Format-Version': '1',
+      [SHARE_STORAGE_FORMAT_HEADER]: SHARE_STORAGE_FORMAT_VERSION,
     },
     body: encryptedData as unknown as BodyInit,
   })
@@ -45,8 +50,7 @@ export async function uploadSharedChat(
 }
 
 /**
- * Fetch encrypted shared chat data from the server.
- * Returns v0 JSON or v1 binary based on X-Format-Version header.
+ * Fetch v1 binary encrypted shared chat data from the server.
  */
 export async function fetchSharedChat(
   chatId: string,
@@ -57,21 +61,18 @@ export async function fetchSharedChat(
 
   if (!response.ok) {
     if (response.status === 404) {
-      throw new Error('Shared chat not found')
+      throw new SharedChatNotFoundError('Shared chat not found')
     }
     throw new Error(`Failed to fetch shared chat: ${response.status}`)
   }
 
-  const formatVersion = parseInt(
-    response.headers.get('X-Format-Version') || '0',
-    10,
-  )
-
-  if (formatVersion === 1) {
-    const binary = await response.arrayBuffer()
-    return { formatVersion: 1, binary }
+  if (
+    response.headers.get(SHARE_STORAGE_FORMAT_HEADER) !==
+    SHARE_STORAGE_FORMAT_VERSION
+  ) {
+    throw new UnsupportedShareFormatError('Unsupported share storage format')
   }
 
-  const data: EncryptedShareData = await response.json()
-  return { formatVersion: 0, data }
+  const binary = await response.arrayBuffer()
+  return { formatVersion: SHARE_FORMAT_VERSION, binary }
 }
