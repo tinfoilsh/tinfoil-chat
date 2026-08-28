@@ -519,6 +519,34 @@ describe('mergeProfilesThreeWay', () => {
     expect(result.conflicts).toEqual([])
   })
 
+  it('retains baseline preferences when migrated local keys are absent', () => {
+    const result = mergeProfilesThreeWay({
+      baseline: { language: 'Spanish', isUsingPersonalization: false },
+      local: {},
+      remote: {
+        language: 'Spanish',
+        isUsingPersonalization: false,
+        version: 2,
+      },
+    })
+
+    expect(result.merged.language).toBe('Spanish')
+    expect(result.merged.isUsingPersonalization).toBe(false)
+    expect(result.conflicts).toEqual([])
+  })
+
+  it('adopts remote preference updates when migrated local keys are absent', () => {
+    const result = mergeProfilesThreeWay({
+      baseline: { language: 'Spanish', isUsingPersonalization: true },
+      local: {},
+      remote: { language: 'French', isUsingPersonalization: false, version: 2 },
+    })
+
+    expect(result.merged.language).toBe('French')
+    expect(result.merged.isUsingPersonalization).toBe(false)
+    expect(result.conflicts).toEqual([])
+  })
+
   it('combines independent edits from both devices', () => {
     const result = mergeProfilesThreeWay({
       baseline: { nickname: 'Ada', profession: 'Engineer' },

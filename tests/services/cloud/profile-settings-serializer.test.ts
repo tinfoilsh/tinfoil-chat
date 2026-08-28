@@ -12,6 +12,7 @@ import {
   USER_PREFS_CUSTOM_PROMPT_PRESETS,
   USER_PREFS_CUSTOM_SYSTEM_PROMPT,
   USER_PREFS_FAVORITE_PROMPT_PRESETS,
+  USER_PREFS_LANGUAGE,
   USER_PREFS_NICKNAME,
   USER_PREFS_PERSONALIZATION_ENABLED,
   USER_PREFS_PINNED_CHAT_IDS,
@@ -46,6 +47,20 @@ describe('profile-settings-serializer', () => {
       customSystemPrompt: '',
       isUsingPersonalization: false,
     })
+  })
+
+  it('preserves absent language and personalization as unedited fields', () => {
+    expect(loadLocalSettings().language).toBeUndefined()
+    expect(loadLocalSettings().isUsingPersonalization).toBeUndefined()
+  })
+
+  it('preserves explicit and unknown response languages through storage', () => {
+    localStorage.setItem(USER_PREFS_LANGUAGE, 'Klingon')
+    expect(loadLocalSettings().language).toBe('Klingon')
+
+    applySettingsToLocal({ language: 'Elvish' })
+    expect(localStorage.getItem(USER_PREFS_LANGUAGE)).toBe('Elvish')
+    expect(loadLocalSettings().language).toBe('Elvish')
   })
 
   it('round-trips pins while preserving absent and explicit-clear semantics', () => {
@@ -92,6 +107,23 @@ describe('profile-settings-serializer', () => {
     expect(localStorage.getItem(USER_PREFS_PERSONALIZATION_ENABLED)).toBe(
       'true',
     )
+  })
+
+  it('retains saved details when personalization is disabled', () => {
+    localStorage.setItem(USER_PREFS_NICKNAME, 'Alice')
+    localStorage.setItem(USER_PREFS_PROFESSION, 'Dev')
+    localStorage.setItem(USER_PREFS_TRAITS, JSON.stringify(['concise']))
+    localStorage.setItem(USER_PREFS_ADDITIONAL_CONTEXT, 'context')
+
+    applySettingsToLocal({ isUsingPersonalization: false })
+
+    expect(loadLocalSettings()).toMatchObject({
+      nickname: 'Alice',
+      profession: 'Dev',
+      traits: ['concise'],
+      additionalContext: 'context',
+      isUsingPersonalization: false,
+    })
   })
 
   it('clears explicitly emptied personalization fields', () => {
