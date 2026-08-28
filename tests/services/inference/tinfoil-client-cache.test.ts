@@ -32,6 +32,9 @@ const chatKeyResponse = (key: string, remaining: number) =>
       rate_limit: {
         max_requests: 7,
         remaining,
+        max_tokens: 2_000_000,
+        tokens_used: 750_000,
+        tokens_remaining: 1_250_000,
         resets_at: '2026-07-24T00:00:00Z',
       },
     }),
@@ -76,7 +79,12 @@ describe('tinfoil-client session cache', () => {
     await currentRefresh
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(getRateLimitInfo()?.remaining).toBe(6)
+    expect(getRateLimitInfo()).toMatchObject({
+      remaining: 6,
+      maxTokens: 2_000_000,
+      tokensUsed: 750_000,
+      tokensRemaining: 1_250_000,
+    })
   })
 
   it('keeps tracking a newer refresh when an older refresh finishes', async () => {
