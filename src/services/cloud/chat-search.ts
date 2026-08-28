@@ -207,6 +207,7 @@ export interface SearchResultChat {
   title: string
   updatedAt?: string
   messageCount: number
+  projectId?: string
 }
 
 /**
@@ -218,17 +219,20 @@ export interface SearchResultChat {
  */
 export async function resolveSearchResultChats(
   results: SearchQueryResult[],
+  includeProjectChats = true,
 ): Promise<SearchResultChat[]> {
   const byId = new Map<string, SearchResultChat>()
   const missing: string[] = []
   for (const r of results) {
     const local = await chatStorage.getChat(r.id)
     if (local) {
+      if (!includeProjectChats && local.projectId) continue
       byId.set(r.id, {
         id: local.id,
         title: local.title,
         updatedAt: local.updatedAt,
         messageCount: local.messages.length,
+        projectId: local.projectId,
       })
     } else {
       missing.push(r.id)
@@ -245,11 +249,13 @@ export async function resolveSearchResultChats(
             id: item.id,
             plaintext: new TextDecoder().decode(plaintextBytes),
           })
+          if (!includeProjectChats && chat.projectId) continue
           byId.set(item.id, {
             id: chat.id,
             title: chat.title,
             updatedAt: chat.updatedAt,
             messageCount: chat.messages.length,
+            projectId: chat.projectId,
           })
         } catch (err) {
           logError('search result chat decode failed', err, {

@@ -31,7 +31,11 @@ export interface ChatSearchState {
  * settle and re-runs the current term so results fill in without any
  * user action.
  */
-export function useChatSearch(term: string, enabled: boolean): ChatSearchState {
+export function useChatSearch(
+  term: string,
+  enabled: boolean,
+  includeProjectChats = true,
+): ChatSearchState {
   const trimmed = term.trim()
   const active = enabled && trimmed.length > 0
 
@@ -59,7 +63,10 @@ export function useChatSearch(term: string, enabled: boolean): ChatSearchState {
         if (cancelled) return
         setAvailable(outcome.available)
         setIsIndexing(outcome.indexing)
-        const chats = await resolveSearchResultChats(outcome.results)
+        const chats = await resolveSearchResultChats(
+          outcome.results,
+          includeProjectChats,
+        )
         if (cancelled) return
         setResults(chats)
         setIsSearching(false)
@@ -92,7 +99,7 @@ export function useChatSearch(term: string, enabled: boolean): ChatSearchState {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [trimmed, active, refreshNonce])
+  }, [trimmed, active, includeProjectChats, refreshNonce])
 
   return { results, isSearching, isIndexing, available }
 }

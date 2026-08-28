@@ -24,7 +24,10 @@ import { useSyncHealthAttention } from '@/hooks/use-sync-health'
 import { useToast } from '@/hooks/use-toast'
 import { authTokenManager } from '@/services/auth'
 import { buildChatExport } from '@/services/chat-export/export-archive'
-import { parseLocalTinfoilExport } from '@/services/chat-import/local-tinfoil-import'
+import {
+  parseLocalTinfoilExportForAccess,
+  PremiumProjectImportRequiredError,
+} from '@/services/chat-import/local-tinfoil-import'
 import { runOffDeviceImport } from '@/services/chat-import/off-device-import'
 import { hasPrimaryKey } from '@/services/cloud/cek-encoding'
 import { validateCurrentPrimaryKey } from '@/services/cloud/cloud-key-preflight'
@@ -120,6 +123,12 @@ import { normalizeChatFont, type ChatFont } from './hooks/use-chat-font'
 import { MfaSettingsCard } from './mfa-settings-card'
 import { NativeBackupExport } from './native-backup-export'
 import { NativeBackupRestore } from './native-backup-restore'
+import {
+  canDeleteAllProjects,
+  canTransferProjectData,
+  countExcludedProjectChats,
+  filterExportableChats,
+} from './settings-project-policy'
 import type { Attachment, Chat } from './types'
 
 const CHARS = '0123456789ABCDEF!@#$%^&*()_+<>?/'
@@ -1397,7 +1406,7 @@ export function SettingsModal({
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (shouldImportOffDevice()) {
+    if (isPremium && shouldImportOffDevice()) {
       await importOffDevice('tinfoil', file, 'Tinfoil')
       e.target.value = ''
       return
@@ -1411,17 +1420,29 @@ export function SettingsModal({
     localTinfoilImportAbortControllerRef.current = abortController
 
     try {
-      const chats = await parseLocalTinfoilExport(file, {
-        ...getParseOptions(),
-        signal: abortController.signal,
-      })
+      const { chats, skippedProjectChats } =
+        await parseLocalTinfoilExportForAccess(
+          file,
+          {
+            ...getParseOptions(),
+            signal: abortController.signal,
+          },
+          Boolean(isPremium),
+        )
       const { imported, errors } = await saveImportedChats(chats)
+      const projectErrors =
+        skippedProjectChats > 0
+          ? [
+              `Skipped ${skippedProjectChats} project chat${skippedProjectChats === 1 ? '' : 's'}. Premium is required to import project chats.`,
+            ]
+          : []
+      const importErrors = [...errors, ...projectErrors]
 
       setImportResult({
-        success: errors.length === 0,
+        success: importErrors.length === 0,
         chatsImported: imported,
         projectsImported: 0,
-        errors,
+        errors: importErrors,
       })
 
       if (onChatsUpdated) {
@@ -1429,11 +1450,18 @@ export function SettingsModal({
       }
 
       toast({
-        title: 'Import complete',
-        description: `Imported ${imported} chat${imported !== 1 ? 's' : ''} from Tinfoil`,
+        title:
+          skippedProjectChats > 0
+            ? 'Chats imported; project chats skipped'
+            : 'Import complete',
+        description:
+          skippedProjectChats > 0
+            ? `Imported ${imported} chat${imported !== 1 ? 's' : ''}. Premium is required to import the ${skippedProjectChats} project chat${skippedProjectChats === 1 ? '' : 's'}.`
+            : `Imported ${imported} chat${imported !== 1 ? 's' : ''} from Tinfoil`,
       })
     } catch (err) {
       if (abortController.signal.aborted) return
+      const projectOnly = err instanceof PremiumProjectImportRequiredError
       setImportResult({
         success: false,
         chatsImported: 0,
@@ -1441,8 +1469,10 @@ export function SettingsModal({
         errors: [err instanceof Error ? err.message : 'Failed to parse file'],
       })
       toast({
-        title: 'Import failed',
-        description: 'Could not parse the Tinfoil export file',
+        title: projectOnly ? 'Premium required' : 'Import failed',
+        description: projectOnly
+          ? err.message
+          : 'Could not parse the Tinfoil export file',
         variant: 'destructive',
       })
     } finally {
@@ -1460,6 +1490,16 @@ export function SettingsModal({
   ) => {
     const file = e.target.files?.[0]
     if (!file) return
+
+    if (!isPremium && file.name.toLowerCase().endsWith('.zip')) {
+      toast({
+        title: 'Premium required',
+        description: 'Claude archives containing projects require Premium',
+        variant: 'destructive',
+      })
+      e.target.value = ''
+      return
+    }
 
     if (shouldImportOffDevice()) {
       await importOffDevice('claude', file, 'Claude')
@@ -1757,13 +1797,24 @@ export function SettingsModal({
       }
 
       // Filter out blank chats and chats that failed decryption
-      const exportableChats = Array.from(chatsById.values()).filter(
-        (chat) =>
-          !chat.isBlankChat &&
-          (chat.messageCount ?? chat.messages?.length ?? 0) > 0,
+      const allChats = Array.from(chatsById.values())
+      const hasPremiumProjectAccess = Boolean(isPremium)
+      const exportableChats = filterExportableChats(
+        allChats,
+        hasPremiumProjectAccess,
+      )
+      const excludedProjectChats = countExcludedProjectChats(
+        allChats,
+        hasPremiumProjectAccess,
       )
 
       setIsPreparingExport(false)
+      if (excludedProjectChats > 0) {
+        toast({
+          title: 'Project chats not included',
+          description: `${excludedProjectChats} project chat${excludedProjectChats === 1 ? '' : 's'} could not be exported. Premium is required to export project chats.`,
+        })
+      }
       await downloadChats(exportableChats)
     } catch (error) {
       logError('Failed to prepare chats for export', error, {
@@ -1883,6 +1934,14 @@ export function SettingsModal({
   }
 
   const downloadProjectsForClaude = async () => {
+    if (!isPremium) {
+      toast({
+        title: 'Premium required',
+        description: 'Project export is only available for premium users',
+        variant: 'destructive',
+      })
+      return
+    }
     setIsExporting(true)
     setExportType('projects')
     setProjectExportResult(null)
@@ -2694,8 +2753,8 @@ ${encryptionKey.replace('key_', '')}
                         </div>
                       </div>
 
-                      {/* Delete all projects (signed-in premium users only) */}
-                      {isSignedIn && isPremium && (
+                      {/* Delete all projects remains available for account data control. */}
+                      {canDeleteAllProjects(Boolean(isSignedIn)) && (
                         <div
                           className={cn(
                             'rounded-lg border border-border-subtle p-4',
@@ -3273,11 +3332,18 @@ ${encryptionKey.replace('key_', '')}
                       />
                     )}
                     <NativeBackupExport
-                      available={Boolean(isSignedIn && encryptionKey)}
+                      available={Boolean(
+                        isSignedIn &&
+                        canTransferProjectData(Boolean(isPremium)) &&
+                        encryptionKey,
+                      )}
                     />
                     <NativeBackupRestore
                       available={Boolean(
-                        isSignedIn && user?.id && encryptionKey,
+                        isSignedIn &&
+                        canTransferProjectData(Boolean(isPremium)) &&
+                        user?.id &&
+                        encryptionKey,
                       )}
                       ownerId={user?.id}
                       onChatsUpdated={onChatsUpdated}
@@ -4035,7 +4101,7 @@ ${encryptionKey.replace('key_', '')}
                           3
                         </div>
                         <div className="font-aeonik-fono text-sm text-content-muted">
-                          {shouldImportOffDevice()
+                          {isPremium && shouldImportOffDevice()
                             ? 'Download the ZIP file you receive by email.'
                             : 'Download and unzip the file you receive by email.'}
                         </div>
@@ -4052,7 +4118,7 @@ ${encryptionKey.replace('key_', '')}
                           4
                         </div>
                         <div className="font-aeonik-fono text-sm text-content-muted">
-                          {shouldImportOffDevice() ? (
+                          {isPremium && shouldImportOffDevice() ? (
                             <>
                               Select the ZIP export with the Conversations
                               button to include attachments. Use{' '}
@@ -4061,7 +4127,7 @@ ${encryptionKey.replace('key_', '')}
                               </code>{' '}
                               only for project imports.
                             </>
-                          ) : (
+                          ) : isPremium ? (
                             <>
                               Select{' '}
                               <code className="rounded bg-surface-chat px-1.5 py-0.5 font-mono text-xs">
@@ -4073,6 +4139,14 @@ ${encryptionKey.replace('key_', '')}
                               </code>{' '}
                               from the unzipped folder.
                             </>
+                          ) : (
+                            <>
+                              Select{' '}
+                              <code className="rounded bg-surface-chat px-1.5 py-0.5 font-mono text-xs">
+                                conversations.json
+                              </code>{' '}
+                              from the unzipped folder.
+                            </>
                           )}
                         </div>
                       </div>
@@ -4080,20 +4154,24 @@ ${encryptionKey.replace('key_', '')}
                         ref={claudeConversationsFileInputRef}
                         type="file"
                         accept={
-                          shouldImportOffDevice() ? '.json,.zip' : '.json'
+                          isPremium && shouldImportOffDevice()
+                            ? '.json,.zip'
+                            : '.json'
                         }
                         onChange={handleImportClaudeConversations}
                         className="hidden"
                         disabled={isImporting}
                       />
-                      <input
-                        ref={claudeProjectsFileInputRef}
-                        type="file"
-                        accept=".json"
-                        onChange={handleImportClaudeProjects}
-                        className="hidden"
-                        disabled={isImporting || !isPremium}
-                      />
+                      {isPremium && (
+                        <input
+                          ref={claudeProjectsFileInputRef}
+                          type="file"
+                          accept=".json"
+                          onChange={handleImportClaudeProjects}
+                          className="hidden"
+                          disabled={isImporting}
+                        />
+                      )}
                       <div className="mt-2 flex gap-2">
                         <button
                           onClick={() =>
@@ -4113,29 +4191,26 @@ ${encryptionKey.replace('key_', '')}
                           <ArrowUpTrayIcon className="h-4 w-4" />
                           Conversations
                         </button>
-                        <button
-                          onClick={() =>
-                            claudeProjectsFileInputRef.current?.click()
-                          }
-                          disabled={isImporting || !isPremium}
-                          className={cn(
-                            'flex flex-1 items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
-                            isImporting || !isPremium
-                              ? 'cursor-not-allowed opacity-50'
-                              : 'hover:bg-surface-chat',
-                            isDarkMode
-                              ? 'bg-surface-chat text-content-primary'
-                              : 'bg-surface-sidebar text-content-primary',
-                          )}
-                        >
-                          <ArrowUpTrayIcon className="h-4 w-4" />
-                          Projects
-                          {!isPremium && (
-                            <span className="ml-1 rounded-full bg-brand-accent-light/20 px-1.5 py-px text-[10px] font-medium text-brand-accent-light">
-                              Premium
-                            </span>
-                          )}
-                        </button>
+                        {isPremium && (
+                          <button
+                            onClick={() =>
+                              claudeProjectsFileInputRef.current?.click()
+                            }
+                            disabled={isImporting}
+                            className={cn(
+                              'flex flex-1 items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
+                              isImporting
+                                ? 'cursor-not-allowed opacity-50'
+                                : 'hover:bg-surface-chat',
+                              isDarkMode
+                                ? 'bg-surface-chat text-content-primary'
+                                : 'bg-surface-sidebar text-content-primary',
+                            )}
+                          >
+                            <ArrowUpTrayIcon className="h-4 w-4" />
+                            Projects
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
