@@ -292,6 +292,44 @@ describe('SignInPage', () => {
     })
   })
 
+  it('shows TOTP verification errors in a centered alert box', async () => {
+    auth.signIn.emailCode.verifyCode.mockImplementation(async () => {
+      auth.signIn.status = 'needs_second_factor'
+      auth.signIn.supportedSecondFactors = [{ strategy: 'totp' }]
+      return { error: null }
+    })
+    auth.signIn.mfa.verifyTOTP.mockResolvedValue({
+      error: { longMessage: 'The verification code is invalid.' },
+    })
+    render(<SignInPage />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), {
+      target: { value: 'person@example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.change(
+      await screen.findByRole('textbox', { name: 'Verification code' }),
+      { target: { value: '123456' } },
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Verify' }))
+    await screen.findByRole('heading', { name: 'Two-step verification' })
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Verification code' }),
+      { target: { value: '987654' } },
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Verify' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('The verification code is invalid.')
+    expect(alert).toHaveClass(
+      'mx-auto',
+      'rounded-lg',
+      'border',
+      'bg-red-500/10',
+      'text-center',
+    )
+  })
+
   it('lets the user fall back to an email MFA code from the TOTP prompt', async () => {
     auth.signIn.emailCode.verifyCode.mockImplementation(async () => {
       auth.signIn.status = 'needs_second_factor'

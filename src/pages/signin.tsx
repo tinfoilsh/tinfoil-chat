@@ -738,7 +738,7 @@ export default function SignInPage() {
           <p
             id="auth-error"
             role="alert"
-            className="mt-4 text-center text-sm text-red-500"
+            className="mx-auto mt-4 w-full break-words rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-center text-sm leading-relaxed text-red-500"
           >
             {errorMessage ||
               signInErrors.fields.identifier?.longMessage ||
