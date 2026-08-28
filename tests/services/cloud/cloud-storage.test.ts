@@ -12,6 +12,7 @@ const mockGetKeyBytesOrThrow = vi.fn()
 const mockGetAlternativeKeyBytes = vi.fn()
 const mockEnclavePush = vi.fn()
 const mockEnclavePull = vi.fn()
+const mockEnclaveDeleteRow = vi.fn()
 const mockRevisionSnapshot = vi.fn()
 const mockListStatus = vi.fn()
 const mockAttachmentPut = vi.fn()
@@ -42,6 +43,7 @@ vi.mock('@/services/sync-enclave/sync-api', async () => {
     ...actual,
     push: (...args: any[]) => mockEnclavePush(...args),
     pull: (...args: any[]) => mockEnclavePull(...args),
+    deleteRow: (...args: any[]) => mockEnclaveDeleteRow(...args),
     revisionSnapshot: (...args: any[]) => mockRevisionSnapshot(...args),
     listStatus: (...args: any[]) => mockListStatus(...args),
     attachmentPut: (...args: any[]) => mockAttachmentPut(...args),
@@ -72,6 +74,7 @@ describe('CloudStorageService auth readiness', () => {
     mockGetAlternativeKeyBytes.mockReturnValue(TEST_BYTES)
     mockEnclavePush.mockResolvedValue({ ok: true, etag: '1', keyId: 'kid' })
     mockEnclavePull.mockResolvedValue({ items: [] })
+    mockEnclaveDeleteRow.mockResolvedValue(undefined)
     mockRevisionSnapshot.mockResolvedValue({
       items: [],
       snapshot_revision: '0',
@@ -237,6 +240,31 @@ describe('CloudStorageService auth readiness', () => {
     expect(isAuthenticated).toBe(true)
     expect(mockWaitForInit).toHaveBeenCalledWith(3000)
     expect(mockIsAuthenticated).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns only the number of chats deleted from cloud storage', async () => {
+    mockRevisionSnapshot.mockResolvedValueOnce({
+      items: [{ id: 'chat-1' }, { id: 'chat-2' }],
+      snapshot_revision: '2',
+    })
+
+    const result = await new CloudStorageService().deleteAllChats()
+
+    expect(result).toEqual({ deleted: 2 })
+    expect(mockEnclaveDeleteRow).toHaveBeenCalledTimes(2)
+  })
+
+  it('returns only the deleted count for project chat deletion', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ deleted: 2, ignored: true }),
+    } as Response)
+
+    const result = await new CloudStorageService().deleteChatsByProject(
+      'project-1',
+    )
+
+    expect(result).toEqual({ deleted: 2 })
   })
 
   it('marks restore uploads so the enclave can clear stale tombstones', async () => {

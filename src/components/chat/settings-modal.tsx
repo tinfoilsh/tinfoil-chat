@@ -120,6 +120,27 @@ const DASHBOARD_URL = 'https://dash.tinfoil.sh'
 const DELETE_ALL_CHATS_CONFIRM_PHRASE = 'delete all chats'
 const DELETE_ALL_PROJECTS_CONFIRM_PHRASE = 'delete all projects'
 
+export function getDeleteAllChatsSuccessTitle(
+  isSignedIn: boolean,
+  cloudDeletionCompleted: boolean,
+): string {
+  return isSignedIn && !cloudDeletionCompleted
+    ? 'Chats deleted from this device'
+    : 'All chats deleted'
+}
+
+export function getDeleteAllChatsSuccessDescription(
+  isSignedIn: boolean,
+  cloudDeletionCompleted: boolean,
+): string {
+  if (cloudDeletionCompleted) {
+    return 'Removed all chats from this device and encrypted cloud storage.'
+  }
+  return isSignedIn
+    ? 'Removed all chats from this device. Encrypted cloud storage was not cleared.'
+    : 'Removed all chats from this browser session.'
+}
+
 const ScrambleText = ({
   text,
   className,
@@ -1796,16 +1817,20 @@ export function SettingsModal({
       if (isSignedIn) {
         const result = await chatStorage.deleteAllChats()
         toast({
-          title: 'All chats deleted',
-          description: result.notificationSent
-            ? 'We will email you a confirmation.'
-            : 'Email confirmation could not be sent.',
+          title: getDeleteAllChatsSuccessTitle(
+            true,
+            result.cloudDeletionCompleted,
+          ),
+          description: getDeleteAllChatsSuccessDescription(
+            true,
+            result.cloudDeletionCompleted,
+          ),
         })
       } else {
         sessionChatStorage.clearAll()
         toast({
-          title: 'All chats deleted',
-          description: 'Removed all chats from this browser session.',
+          title: getDeleteAllChatsSuccessTitle(false, false),
+          description: getDeleteAllChatsSuccessDescription(false, false),
         })
       }
 

@@ -682,7 +682,6 @@ export class CloudStorageService {
 
   async deleteAllChats(guard?: AccountOperationGuard): Promise<{
     deleted: number
-    notificationSent?: boolean
   }> {
     let deleted = 0
     let cursor: string | undefined
@@ -718,7 +717,6 @@ export class CloudStorageService {
     guard?: AccountOperationGuard,
   ): Promise<{
     deleted: number
-    notificationSent?: boolean
   }> {
     // Single server-side bulk delete: the controlplane removes every chat
     // in the project and writes one tombstone per row, so other devices
@@ -739,9 +737,9 @@ export class CloudStorageService {
       throw new Error(`Failed to delete project chats: ${response.statusText}`)
     }
 
-    const result = await response.json()
+    const result: { deleted: number } = await response.json()
     guard?.assertCurrent()
-    return result
+    return { deleted: result.deleted }
   }
 
   async listChatIdsByProject(

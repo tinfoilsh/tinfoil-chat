@@ -9,6 +9,8 @@ const {
   saveChatSpy,
   getChatSpy,
   getAllChatsSpy,
+  getAllChatIdsSpy,
+  deleteAllChatsSpy,
   backupChatSpy,
   deleteChatsByProjectSpy,
   acknowledgePendingDeletesSpy,
@@ -23,8 +25,11 @@ const {
   deleteChatWithPendingIntentSpy,
   deleteLocalChatSpy,
   deleteFromCloudSpy,
+  deleteAllCloudChatsSpy,
+  isCloudAuthenticatedSpy,
   hasPendingUploadSpy,
   isDeletedSpy,
+  markAsDeletedSpy,
 } = vi.hoisted(() => ({
   saveChatSpy: vi.fn(async (chat: unknown) => ({
     saved: true,
@@ -32,6 +37,8 @@ const {
   })),
   getChatSpy: vi.fn(async () => null as unknown),
   getAllChatsSpy: vi.fn(async () => [] as unknown[]),
+  getAllChatIdsSpy: vi.fn(async () => [] as string[]),
+  deleteAllChatsSpy: vi.fn(async () => 0),
   backupChatSpy: vi.fn(async () => {}),
   deleteChatsByProjectSpy: vi.fn(async () => [] as string[]),
   acknowledgePendingDeletesSpy: vi.fn(async () => {}),
@@ -49,8 +56,11 @@ const {
   deleteChatWithPendingIntentSpy: vi.fn(async () => true),
   deleteLocalChatSpy: vi.fn(async () => {}),
   deleteFromCloudSpy: vi.fn(async () => {}),
+  deleteAllCloudChatsSpy: vi.fn(async () => ({ deleted: 0 })),
+  isCloudAuthenticatedSpy: vi.fn(async () => false),
   hasPendingUploadSpy: vi.fn(() => false),
   isDeletedSpy: vi.fn((_id: unknown) => false),
+  markAsDeletedSpy: vi.fn(),
 }))
 
 vi.mock('@/services/storage/indexed-db', () => ({
@@ -59,6 +69,8 @@ vi.mock('@/services/storage/indexed-db', () => ({
     getChat: getChatSpy,
     saveChat: saveChatSpy,
     getAllChats: getAllChatsSpy,
+    getAllChatIds: getAllChatIdsSpy,
+    deleteAllChats: deleteAllChatsSpy,
     resetChatTimestamps: resetChatTimestampsSpy,
     updateChatLocalOnly: updateChatLocalOnlySpy,
     updateChatProject: updateChatProjectSpy,
@@ -81,6 +93,8 @@ vi.mock('@/services/cloud/cloud-storage', () => ({
   cloudStorage: {
     deleteChatsByProject: deleteRemoteProjectChatsSpy,
     listChatIdsByProject: listChatIdsByProjectSpy,
+    deleteAllChats: deleteAllCloudChatsSpy,
+    isAuthenticated: isCloudAuthenticatedSpy,
   },
 }))
 vi.mock('@/services/sync-enclave/sync-api', () => ({
@@ -94,7 +108,7 @@ vi.mock('@/services/storage/chat-events', () => ({
 }))
 vi.mock('@/services/storage/deleted-chats-tracker', () => ({
   deletedChatsTracker: {
-    markAsDeleted: vi.fn(),
+    markAsDeleted: markAsDeletedSpy,
     isDeleted: isDeletedSpy,
   },
 }))
@@ -124,6 +138,10 @@ describe('chatStorage pendingSave is not persisted', () => {
     listChatIdsByProjectSpy.mockResolvedValue([])
     deleteChatWithPendingIntentSpy.mockResolvedValue(true)
     hasPendingUploadSpy.mockReturnValue(false)
+    getAllChatIdsSpy.mockResolvedValue([])
+    deleteAllChatsSpy.mockResolvedValue(0)
+    deleteAllCloudChatsSpy.mockResolvedValue({ deleted: 0 })
+    isCloudAuthenticatedSpy.mockResolvedValue(false)
     createAccountOperationGuardSpy.mockImplementation(() => {
       const userId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
       const isCurrent = () =>
@@ -329,6 +347,33 @@ describe('chatStorage pendingSave is not persisted', () => {
       'bulk delete unavailable',
     )
     expect(acknowledgePendingDeletesSpy).not.toHaveBeenCalled()
+  })
+
+  it('reports completed cloud deletion with local and cloud counts', async () => {
+    getAllChatIdsSpy.mockResolvedValueOnce(['local-1', 'local-2'])
+    deleteAllChatsSpy.mockResolvedValueOnce(2)
+    isCloudAuthenticatedSpy.mockResolvedValueOnce(true)
+    deleteAllCloudChatsSpy.mockResolvedValueOnce({ deleted: 3 })
+
+    const result = await chatStorage.deleteAllChats()
+
+    expect(result).toEqual({
+      localDeleted: 2,
+      cloudDeleted: 3,
+      cloudDeletionCompleted: true,
+    })
+    expect(markAsDeletedSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports when cloud deletion is skipped without authentication', async () => {
+    deleteAllChatsSpy.mockResolvedValueOnce(2)
+
+    await expect(chatStorage.deleteAllChats()).resolves.toEqual({
+      localDeleted: 2,
+      cloudDeleted: 0,
+      cloudDeletionCompleted: false,
+    })
+    expect(deleteAllCloudChatsSpy).not.toHaveBeenCalled()
   })
 })
 
