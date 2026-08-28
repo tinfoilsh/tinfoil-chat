@@ -237,6 +237,11 @@ const backupWarningDismissedFlag = createStorageFlag(
   SETTINGS_BACKUP_WARNING_DISMISSED,
 )
 
+const passkeyBackedUpFlag = createStorageFlag(
+  () => localStorage,
+  SECRET_PASSKEY_BACKED_UP,
+)
+
 export function usePasskeyBackup({
   encryptionKey,
   initialized,
@@ -961,13 +966,28 @@ export function usePasskeyBackup({
 
   // --- Passkey initialization (runs once after cloud sync init completes) ---
   useEffect(() => {
-    if (!initialized || !isSignedIn || hasInitializedPasskeyRef.current) return
+    const initializationUserId = user?.id
+    const initializationEncryptionKey = encryptionKey
+    if (
+      !initialized ||
+      !isSignedIn ||
+      !initializationUserId ||
+      hasInitializedPasskeyRef.current
+    ) {
+      return
+    }
     hasInitializedPasskeyRef.current = true
+
+    const isCurrentInitialization = () =>
+      isMountedRef.current &&
+      userRef.current?.id === initializationUserId &&
+      encryptionKeyRef.current === initializationEncryptionKey
 
     const initializePasskey = async () => {
       const prfSupported = await isPrfSupported()
+      if (!isCurrentInitialization()) return
 
-      if (encryptionKey) {
+      if (initializationEncryptionKey) {
         // A local key that derives a different key id than the
         // enclave's registered one can never write or migrate — this
         // device is stale and needs to converge onto the registered
@@ -976,6 +996,7 @@ export function usePasskeyBackup({
         // key entry when it was adopted bundleless (e.g. by the
         // migration path on another device).
         const validation = await validateCurrentPrimaryKey()
+        if (!isCurrentInitialization()) return
         if (!validation.canWrite && validation.remoteState === 'exists') {
           let hasRemoteBundles = false
           try {
@@ -985,7 +1006,7 @@ export function usePasskeyBackup({
             // Transient enclave failure: fall through to the manual
             // prompt, which is dismissible and retried next visit.
           }
-          if (!isMountedRef.current) return
+          if (!isCurrentInitialization()) return
           if (hasRemoteBundles && prfSupported) {
             if (!passkeyRecoveryDismissedFlag.isSet()) {
               setState((prev) => ({
@@ -1005,7 +1026,7 @@ export function usePasskeyBackup({
           }
           return
         }
-        if (!isMountedRef.current) return
+        if (!isCurrentInitialization()) return
       }
 
       if (!prfSupported) {
@@ -1015,9 +1036,9 @@ export function usePasskeyBackup({
         // offer the manual-backup fallback. If remote data exists, they need
         // the manual recovery flow to decrypt it. Users who already have a
         // local key stay silent — local storage works fine even without PRF.
-        if (!encryptionKey) {
+        if (!initializationEncryptionKey) {
           const remoteState = await inspectRemoteEncryptedState()
-          if (!isMountedRef.current) return
+          if (!isCurrentInitialization()) return
           if (remoteState === 'empty') {
             if (!backupWarningDismissedFlag.isSet()) {
               setState((prev) => ({
@@ -1059,10 +1080,11 @@ export function usePasskeyBackup({
         return
       }
 
-      if (encryptionKey) {
+      if (initializationEncryptionKey) {
         // User has local keys — check for existing backup
         const localCredentialId = getLocalPasskeyCredentialId()
         const deviceState = await getPasskeyDeviceState(localCredentialId)
+        if (!isCurrentInitialization()) return
 
         if (deviceState === 'this-device') {
           // This device already has its own bundle — show green badge,
@@ -1097,15 +1119,13 @@ export function usePasskeyBackup({
           deviceState === 'empty' &&
           !passkeyFlowInProgressRef.current
         ) {
-          localStorage.removeItem(SECRET_PASSKEY_BACKED_UP)
-          if (isMountedRef.current) {
-            setState((prev) => ({
-              ...prev,
-              passkeySetupAvailable: true,
-              passkeyAddDeviceAvailable: false,
-              passkeyActive: false,
-            }))
-          }
+          passkeyBackedUpFlag.clear()
+          setState((prev) => ({
+            ...prev,
+            passkeySetupAvailable: true,
+            passkeyAddDeviceAvailable: false,
+            passkeyActive: false,
+          }))
         }
       } else {
         // No localStorage keys — check backend state but do not auto-prompt
@@ -1113,6 +1133,7 @@ export function usePasskeyBackup({
         // UI state flag instead and let the user trigger the WebAuthn call
         // explicitly from a confirmation or recovery modal.
         const credentialState = await getPasskeyCredentialState()
+        if (!isCurrentInitialization()) return
 
         if (credentialState === 'exists') {
           // If the user explicitly dismissed the recovery prompt on a
@@ -1129,6 +1150,7 @@ export function usePasskeyBackup({
           }
         } else if (credentialState === 'empty') {
           const remoteState = await inspectRemoteEncryptedState()
+          if (!isCurrentInitialization()) return
 
           if (remoteState === 'empty') {
             if (isMountedRef.current && !firstTimePromptDismissedFlag.isSet()) {
@@ -1187,7 +1209,7 @@ export function usePasskeyBackup({
     }
 
     initializePasskey()
-  }, [initialized, isSignedIn, encryptionKey])
+  }, [initialized, isSignedIn, encryptionKey, user?.id])
 
   // Clear the persistent "recovery dismissed" flag and the session
   // first-time-prompt flag once the user has a key again (via passkey
@@ -1668,7 +1690,7 @@ export function usePasskeyBackup({
         passkeyActive: false,
       }))
     } else if (deviceState === 'empty') {
-      localStorage.removeItem(SECRET_PASSKEY_BACKED_UP)
+      passkeyBackedUpFlag.clear()
       setState((prev) => ({
         ...prev,
         passkeySetupAvailable: true,

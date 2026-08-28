@@ -361,6 +361,121 @@ describe('usePasskeyBackup', () => {
     expect(result.current.passkeySetupAvailable).toBe(true)
   })
 
+  it('updates empty refresh state when marker removal throws', async () => {
+    localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
+    mocks.getLocalPasskeyCredentialId.mockReturnValue('cred-local')
+    mocks.getPasskeyDeviceState
+      .mockResolvedValueOnce('this-device')
+      .mockResolvedValueOnce('empty')
+    const { result } = renderHook(() =>
+      usePasskeyBackup({
+        ...baseOptions,
+        initialized: false,
+        encryptionKey: 'key_current',
+      }),
+    )
+
+    await act(async () => {
+      await result.current.refreshBundleState()
+    })
+    const removeItem = vi
+      .spyOn(Storage.prototype, 'removeItem')
+      .mockImplementationOnce(() => {
+        throw new Error('storage unavailable')
+      })
+
+    await act(async () => {
+      await result.current.refreshBundleState()
+    })
+    removeItem.mockRestore()
+
+    expect(result.current.passkeyActive).toBe(false)
+    expect(result.current.passkeySetupAvailable).toBe(true)
+  })
+
+  it('ignores stale empty initialization after a same-tab user switch', async () => {
+    let resolveOldState!: (state: 'empty') => void
+    const oldState = new Promise<'empty'>((resolve) => {
+      resolveOldState = resolve
+    })
+    localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
+    mocks.getLocalPasskeyCredentialId.mockReturnValue('cred-local')
+    mocks.getPasskeyDeviceState
+      .mockReturnValueOnce(oldState)
+      .mockResolvedValueOnce('this-device')
+    const { result, rerender } = renderHook(
+      ({ userId, encryptionKey }) =>
+        usePasskeyBackup({
+          ...baseOptions,
+          user: { id: userId } as any,
+          encryptionKey,
+        }),
+      {
+        initialProps: { userId: 'user_1', encryptionKey: 'key_1' },
+      },
+    )
+
+    await waitFor(() => expect(mocks.getPasskeyDeviceState).toHaveBeenCalled())
+    rerender({ userId: 'user_2', encryptionKey: 'key_2' })
+    await waitFor(() => expect(result.current.passkeyActive).toBe(true))
+
+    await act(async () => {
+      resolveOldState('empty')
+      await oldState
+    })
+
+    expect(localStorage.getItem(SECRET_PASSKEY_BACKED_UP)).toBe('true')
+    expect(result.current.passkeyActive).toBe(true)
+    expect(result.current.passkeySetupAvailable).toBe(false)
+  })
+
+  it('ignores stale empty initialization after encryption key rotation', async () => {
+    let resolveOldState!: (state: 'empty') => void
+    const oldState = new Promise<'empty'>((resolve) => {
+      resolveOldState = resolve
+    })
+    localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
+    mocks.getLocalPasskeyCredentialId.mockReturnValue('cred-local')
+    mocks.getPasskeyDeviceState
+      .mockReturnValueOnce(oldState)
+      .mockResolvedValueOnce('this-device')
+    const { result, rerender } = renderHook(
+      ({ encryptionKey }) =>
+        usePasskeyBackup({
+          ...baseOptions,
+          encryptionKey,
+        }),
+      { initialProps: { encryptionKey: 'key_1' } },
+    )
+
+    await waitFor(() => expect(mocks.getPasskeyDeviceState).toHaveBeenCalled())
+    rerender({ encryptionKey: 'key_2' })
+    await act(async () => {
+      await result.current.refreshBundleState()
+    })
+
+    await act(async () => {
+      resolveOldState('empty')
+      await oldState
+    })
+
+    expect(localStorage.getItem(SECRET_PASSKEY_BACKED_UP)).toBe('true')
+    expect(result.current.passkeyActive).toBe(true)
+    expect(result.current.passkeySetupAvailable).toBe(false)
+  })
+
+  it('applies final-empty initialization for the current account and key', async () => {
+    localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
+    const { result } = renderHook(() =>
+      usePasskeyBackup({ ...baseOptions, encryptionKey: 'key_current' }),
+    )
+
+    await waitFor(() => expect(result.current.passkeySetupAvailable).toBe(true))
+
+    expect(localStorage.getItem(SECRET_PASSKEY_BACKED_UP)).toBeNull()
+    expect(result.current.passkeyActive).toBe(false)
+  })
+
   it.each([
     {
       name: 'signed-in user changes',
