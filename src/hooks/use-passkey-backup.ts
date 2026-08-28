@@ -977,17 +977,9 @@ export function usePasskeyBackup({
       return
     }
     const initializedSnapshot = initializedPasskeySnapshotRef.current
-    if (
-      initializedSnapshot?.userId === initializationUserId &&
-      initializedSnapshot.encryptionKey === initializationEncryptionKey
-    ) {
-      return
-    }
-    if (
-      initializedSnapshot &&
-      initializedSnapshot.userId !== initializationUserId &&
-      initializedSnapshot.encryptionKey === initializationEncryptionKey
-    ) {
+    // The same key was either initialized for this user or is still awaiting
+    // account-scoped cleanup from the previous user.
+    if (initializedSnapshot?.encryptionKey === initializationEncryptionKey) {
       return
     }
     const initializationSnapshot: PasskeyInitializationSnapshot = {
