@@ -4,6 +4,7 @@ import { isLocalRecoveryEnvelope } from '@/types/chat-recovery'
 import {
   base64ToUint8Array,
   decryptAttachment,
+  EncryptedAttachmentValidationError,
   uint8ArrayToBase64,
 } from '@/utils/binary-codec'
 import { logError, logWarning } from '@/utils/error-handling'
@@ -46,11 +47,6 @@ const PROJECT_CHAT_LIST_LIMIT = 500
 const ATTACHMENT_NOT_FOUND_STATUS = 404
 const LEGACY_ATTACHMENT_GONE_STATUS = 410
 const ATTACHMENT_IDEMPOTENCY_KEY_BYTES = 16
-const LEGACY_ATTACHMENT_DATA_ERROR_NAMES = new Set([
-  'DataError',
-  'InvalidCharacterError',
-  'OperationError',
-])
 
 /**
  * Lean chat list entry. Anything the caller needs beyond (id,
@@ -730,13 +726,32 @@ export class CloudStorageService {
         response.status,
       )
     const encrypted = new Uint8Array(await response.arrayBuffer())
+    let key: Uint8Array
     try {
-      return await decryptAttachment(encrypted, base64ToUint8Array(keyB64))
+      key = base64ToUint8Array(keyB64)
     } catch (error) {
-      if (
-        error instanceof Error &&
-        LEGACY_ATTACHMENT_DATA_ERROR_NAMES.has(error.name)
-      )
+      if (error instanceof Error && error.name === 'InvalidCharacterError')
+        throw new CloudBackupReadError(
+          'item_invalid',
+          'attachment_key_invalid',
+          true,
+          { cause: error },
+        )
+      throw error
+    }
+    try {
+      return await decryptAttachment(encrypted, key)
+    } catch (error) {
+      if (error instanceof EncryptedAttachmentValidationError)
+        throw new CloudBackupReadError(
+          'item_invalid',
+          error.code === 'invalid_key_length'
+            ? 'attachment_key_invalid'
+            : 'attachment_payload_invalid',
+          true,
+          { cause: error },
+        )
+      if (error instanceof Error && error.name === 'OperationError')
         throw new CloudBackupReadError(
           'item_invalid',
           'attachment_payload_invalid',

@@ -1,5 +1,8 @@
 import { CloudBackupReadError } from '@/services/cloud/backup-read-error'
-import type { NativeBackupCollectionDependencies } from '@/services/native-backup/collect'
+import {
+  NativeBackupCollectionError,
+  type NativeBackupCollectionDependencies,
+} from '@/services/native-backup/collect'
 import type { StoredChat } from '@/services/storage/indexed-db'
 import type { BackupInventoryItem } from '@/services/sync-enclave/sync-api'
 
@@ -177,5 +180,69 @@ describe('native backup collection limits', () => {
     expect(result.cloudChats[0].messages[0].attachments).toHaveLength(1)
     expect(result.images).toHaveLength(1)
     expect(result.omissions).toHaveLength(1)
+  })
+
+  it('stops scheduling later downloads after an incremental limit failure', async () => {
+    const { collectNativeBackupV2 } =
+      await import('@/services/native-backup/collect')
+    const attachmentIds = Array.from(
+      { length: 8 },
+      (_, index) => `image-${index}`,
+    )
+    const source: StoredChat = {
+      ...cloudChat,
+      messages: [
+        {
+          role: 'user',
+          content: 'images',
+          timestamp: new Date(timestamp),
+          attachments: attachmentIds.map((id) => ({
+            id,
+            type: 'image' as const,
+            fileName: `${id}.png`,
+            encryptionKey: 'key',
+          })),
+        },
+      ],
+    }
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+    let releaseEarlier!: (bytes: Uint8Array) => void
+    const earlier = new Promise<Uint8Array>((resolve) => {
+      releaseEarlier = resolve
+    })
+    let rejectLater!: (error: Error) => void
+    const later = new Promise<Uint8Array>((_resolve, reject) => {
+      rejectLater = reject
+    })
+    const failure = new NativeBackupCollectionError(
+      'limits',
+      'collection',
+      'image budget exceeded',
+    )
+    const getCloudImage = vi.fn(({ id }: { id: string }) => {
+      if (id === 'image-0') return earlier
+      if (id === 'image-1') return later
+      return Promise.resolve(png)
+    })
+
+    const collection = collectNativeBackupV2(
+      dependencies({
+        getCloudInventory: async () => ({
+          captured_at: timestamp,
+          total_items: 1,
+          items: [item('chat')],
+        }),
+        getCloudChat: async () => source,
+        getCloudImage,
+      }),
+    )
+    await vi.waitFor(() => expect(getCloudImage).toHaveBeenCalledTimes(4))
+    rejectLater(failure)
+    releaseEarlier(png)
+
+    await expect(collection).rejects.toBe(failure)
+    expect(getCloudImage.mock.calls.map(([{ id }]) => id)).toEqual(
+      attachmentIds.slice(0, 4),
+    )
   })
 })

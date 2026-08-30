@@ -193,31 +193,49 @@ async function mapLimitInOrder<T, R>(
   values: readonly T[],
   concurrency: number,
   fn: (value: T) => Promise<R>,
+  consume: (result: R) => void,
   signal?: AbortSignal,
-): Promise<R[]> {
-  const output = new Array<R>(values.length)
+): Promise<void> {
+  type Settled = { ok: true; value: R } | { ok: false; error: unknown }
+  const started = new Map<number, Promise<Settled>>()
   let nextIndex = 0
   let stopped = false
   let firstError: unknown
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, values.length) }, async () => {
-      while (nextIndex < values.length && !stopped) {
-        const index = nextIndex++
-        try {
-          signal?.throwIfAborted()
-          output[index] = await fn(values[index])
-          signal?.throwIfAborted()
-        } catch (error) {
-          if (!stopped) {
-            stopped = true
-            firstError = error
-          }
-        }
-      }
-    }),
-  )
-  if (stopped) throw firstError
-  return output
+  const stop = (error: unknown) => {
+    if (stopped) return
+    stopped = true
+    firstError = error
+  }
+  const start = () => {
+    const index = nextIndex++
+    started.set(
+      index,
+      Promise.resolve()
+        .then(() => fn(values[index]))
+        .then(
+          (value) => ({ ok: true as const, value }),
+          (error: unknown) => {
+            stop(error)
+            return { ok: false as const, error }
+          },
+        ),
+    )
+  }
+  while (nextIndex < Math.min(concurrency, values.length)) start()
+  try {
+    for (let index = 0; index < values.length; index++) {
+      const result = await wait(signal, () => started.get(index)!)
+      started.delete(index)
+      if (stopped) throw firstError
+      if (!result.ok) throw result.error
+      consume(result.value)
+      if (!stopped && nextIndex < values.length) start()
+    }
+  } catch (error) {
+    stop(error)
+    await Promise.all(started.values())
+    throw firstError
+  }
 }
 type Pending = [number, number, number, number, number]
 const budgetLimits: Array<[string, number]> = [
@@ -243,13 +261,6 @@ class Budget {
     const pending: Pending = [value.messages.length, count, bytes, bytes, 1]
     this.check(pending)
     return pending
-  }
-  preflightChat(value: ReturnType<typeof sanitizeNativeBackupChat>) {
-    this.limit(
-      'message',
-      this.used[0] + value.messages.length,
-      NATIVE_BACKUP_LIMITS.messages,
-    )
   }
   imageSize(bytes: Uint8Array) {
     this.limit('image size', bytes.length, NATIVE_BACKUP_LIMITS.imageBytes)
@@ -428,18 +439,47 @@ async function collectChat(
   const value = valid(cloud ? 'cloud chat' : 'local chat', chat.id, () =>
     portable(chat, candidates),
   )
-  let pending: Pending | undefined
-  if (allowPartial) budget.preflightChat(value)
-  else pending = budget.chat(value)
-  const images: Array<{
+  type SuccessfulImage = {
+    candidate: NativeBackupImageCandidate
     metadata: ReturnType<typeof sanitizeNativeBackupImage>
     bytes: Uint8Array
-  }> = []
+    mimeType: string
+  }
+  let pending: Pending | undefined
+  const successful: SuccessfulImage[] = []
   const omitted: Array<{
     candidate: NativeBackupImageCandidate
     failure: NativeBackupCollectionError
   }> = []
-  const results = await mapLimitInOrder(
+  const partialPending = (prospective: SuccessfulImage[]): Pending => {
+    const progressiveValue = structuredClone(value)
+    for (const image of prospective) {
+      if (image.candidate.legacyIndex !== undefined)
+        progressiveValue.messages[image.candidate.messageIndex].imageData![
+          image.candidate.legacyIndex
+        ].mimeType = image.mimeType
+    }
+    const included = new Set(
+      prospective.map(({ candidate }) => candidate.sourceKey),
+    )
+    const progressiveImages = prospective.map(({ metadata, bytes }) => ({
+      metadata: structuredClone(metadata),
+      bytes,
+    }))
+    removeOmittedImageReferences(
+      progressiveValue,
+      candidates
+        .filter(({ sourceKey }) => !included.has(sourceKey))
+        .map((candidate) => ({ candidate })),
+      progressiveImages,
+    )
+    const nextPending = budget.chat(progressiveValue)
+    for (const image of progressiveImages)
+      budget.image(nextPending, image.metadata, image.bytes)
+    return nextPending
+  }
+  pending = allowPartial ? partialPending([]) : budget.chat(value)
+  await mapLimitInOrder(
     candidates,
     ATTACHMENT_DOWNLOAD_CONCURRENCY,
     async (candidate) => {
@@ -513,21 +553,27 @@ async function collectChat(
         return { candidate, failure: error }
       }
     },
+    (result) => {
+      if (result.failure) {
+        omitted.push({ candidate: result.candidate, failure: result.failure })
+        return
+      }
+      const { candidate, bytes, metadata, mimeType } = result
+      if (allowPartial)
+        pending = partialPending([
+          ...successful,
+          { candidate, bytes, metadata, mimeType },
+        ])
+      else budget.image(pending!, metadata, bytes)
+      if (candidate.legacyIndex !== undefined)
+        value.messages[candidate.messageIndex].imageData![
+          candidate.legacyIndex
+        ].mimeType = mimeType
+      successful.push({ candidate, bytes, metadata, mimeType })
+    },
     signal,
   )
-  for (const result of results) {
-    if (result.failure) {
-      omitted.push({ candidate: result.candidate, failure: result.failure })
-      continue
-    }
-    const { candidate, bytes, metadata, mimeType } = result
-    if (candidate.legacyIndex !== undefined)
-      value.messages[candidate.messageIndex].imageData![
-        candidate.legacyIndex
-      ].mimeType = mimeType
-    if (!allowPartial) budget.image(pending!, metadata, bytes)
-    images.push({ metadata, bytes })
-  }
+  const images = successful.map(({ metadata, bytes }) => ({ metadata, bytes }))
   if (omitted.length) removeOmittedImageReferences(value, omitted, images)
   if (allowPartial) {
     pending = budget.chat(value)

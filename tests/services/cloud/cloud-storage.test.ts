@@ -4,6 +4,7 @@ import {
   CloudStorageService,
 } from '@/services/cloud/cloud-storage'
 import { SyncEnclaveError, SyncNetworkError } from '@/services/sync-enclave'
+import { EncryptedAttachmentValidationError } from '@/utils/binary-codec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockGetAuthHeaders = vi.fn()
@@ -462,12 +463,64 @@ describe('CloudStorageService auth readiness', () => {
       >[0]),
     ).rejects.toMatchObject({
       category: 'item_invalid',
-      reason: 'attachment_payload_invalid',
+      reason: 'attachment_key_invalid',
       omittable: true,
       cause: expect.objectContaining({ name: 'InvalidCharacterError' }),
     })
 
     const key = btoa(String.fromCharCode(...new Uint8Array(32)))
+    const invalidLength = await storage
+      .loadChatImageForBackup({
+        id: 'invalid-key-length',
+        type: 'image',
+        fileName: 'legacy.png',
+        key: 'AA==',
+      } as unknown as Parameters<
+        CloudStorageService['loadChatImageForBackup']
+      >[0])
+      .catch((error: unknown) => error)
+    expect(invalidLength).toMatchObject({
+      category: 'item_invalid',
+      reason: 'attachment_key_invalid',
+      omittable: true,
+    })
+    expect(invalidLength.cause).toBeInstanceOf(
+      EncryptedAttachmentValidationError,
+    )
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => new Uint8Array(20).buffer,
+      }),
+    )
+    const truncated = await storage
+      .loadChatImageForBackup({
+        id: 'truncated-ciphertext',
+        type: 'image',
+        fileName: 'legacy.png',
+        key,
+      } as unknown as Parameters<
+        CloudStorageService['loadChatImageForBackup']
+      >[0])
+      .catch((error: unknown) => error)
+    expect(truncated).toMatchObject({
+      category: 'item_invalid',
+      reason: 'attachment_payload_invalid',
+      omittable: true,
+    })
+    expect(truncated.cause).toBeInstanceOf(EncryptedAttachmentValidationError)
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => encrypted,
+      }),
+    )
     await expect(
       storage.loadChatImageForBackup({
         id: 'corrupt-ciphertext',
