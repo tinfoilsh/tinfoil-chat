@@ -3959,6 +3959,7 @@ export function ChatInterface({
                 deleteChat={deleteChat}
                 isClient={isClient}
                 isPremium={isPremium}
+                isSubscriptionLoading={isSubscriptionLoading}
                 onEncryptionKeyClick={
                   isSignedIn ? handleOpenEncryptionKeyModal : undefined
                 }

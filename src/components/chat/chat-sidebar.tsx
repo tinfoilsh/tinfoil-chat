@@ -39,6 +39,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useRouter } from 'next/router'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { FaLock } from 'react-icons/fa6'
 import { GoSidebarCollapse, GoSidebarExpand } from 'react-icons/go'
@@ -57,6 +58,7 @@ import { CONSTANTS } from './constants'
 import { useDrag } from './drag-context'
 import { consumeFavoriteDrop } from './favorite-drag'
 import { SidebarSyncButton } from './sidebar-sync-button'
+import { getSidebarUpsellVariant } from './sidebar-upsell-state'
 import { useFavoriteDropTarget } from './use-favorite-drop-target'
 
 import { useProject } from '@/components/project/project-context'
@@ -112,6 +114,7 @@ type ChatSidebarProps = {
   deleteChat: (chatId: string) => void
   isClient: boolean
   isPremium?: boolean
+  isSubscriptionLoading?: boolean
   onEncryptionKeyClick?: () => void
   onCloudSyncSetupClick?: () => void
   onSetupPasskey?: () => Promise<boolean>
@@ -195,6 +198,7 @@ export function ChatSidebar({
   deleteChat,
   isClient,
   isPremium = true,
+  isSubscriptionLoading = false,
   onEncryptionKeyClick,
   onCloudSyncSetupClick,
   onSetupPasskey,
@@ -226,6 +230,8 @@ export function ChatSidebar({
   windowWidth,
   chatDecryptionProgress,
 }: ChatSidebarProps) {
+  const router = useRouter()
+  const authRedirectUrl = encodeURIComponent(router.asPath)
   const syncNeedsAttention = useSyncHealthAttention()
   const syncHealth = useSyncHealth()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
@@ -308,6 +314,12 @@ export function ChatSidebar({
     isLocalOnlyModeEnabled(),
   )
   const { isLoaded: isAuthLoaded, isSignedIn } = useAuth()
+  const upsellVariant = getSidebarUpsellVariant({
+    isAuthLoaded,
+    isSignedIn,
+    isSubscriptionLoading,
+    isPremium,
+  })
   const favoritesAvailable = Boolean(isSignedIn && cloudSyncEnabled)
   const { user } = useUser()
 
@@ -1168,7 +1180,7 @@ export function ChatSidebar({
           )}
         >
           {/* Message for non-premium users (signed in or not) */}
-          {!isPremium && (
+          {upsellVariant && (
             <div
               className={cn(
                 'relative z-10 m-2 flex-none rounded-lg border border-border-subtle bg-surface-chat p-4 transition-all duration-300',
@@ -1178,24 +1190,43 @@ export function ChatSidebar({
                 <h4 className="mb-3 text-sm font-semibold text-content-primary">
                   Get more out of Tinfoil Chat
                 </h4>
-                <div className="space-y-2.5">
-                  <div className="flex items-center gap-3 text-xs text-content-secondary">
-                    <PiMicrophone className="h-4 w-4 flex-shrink-0 text-content-muted" />
-                    <span>Speech-to-text voice input</span>
-                  </div>
+                {upsellVariant === 'premium' ? (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-3 text-xs text-content-secondary">
+                      <PiMicrophone className="h-4 w-4 flex-shrink-0 text-content-muted" />
+                      <span>Speech-to-text voice input</span>
+                    </div>
 
-                  <div className="flex items-center gap-3 text-xs text-content-secondary">
-                    <PiSparkle className="h-4 w-4 flex-shrink-0 text-content-muted" />
-                    <span>No daily request limits</span>
-                  </div>
+                    <div className="flex items-center gap-3 text-xs text-content-secondary">
+                      <PiSparkle className="h-4 w-4 flex-shrink-0 text-content-muted" />
+                      <span>No daily request limits</span>
+                    </div>
 
-                  <div className="flex items-center gap-3 text-xs text-content-secondary">
-                    <PiFolder className="h-4 w-4 flex-shrink-0 text-content-muted" />
-                    <span>Create projects to chat with files</span>
+                    <div className="flex items-center gap-3 text-xs text-content-secondary">
+                      <PiFolder className="h-4 w-4 flex-shrink-0 text-content-muted" />
+                      <span>Create projects to chat with files</span>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-3 text-xs text-content-secondary">
+                      <IoChatbubblesOutline className="h-4 w-4 flex-shrink-0 text-content-muted" />
+                      <span>Keep your chat history</span>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-xs text-content-secondary">
+                      <CloudIcon className="h-4 w-4 flex-shrink-0 text-content-muted" />
+                      <span>Encrypted sync across devices</span>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-xs text-content-secondary">
+                      <PiPushPin className="h-4 w-4 flex-shrink-0 text-content-muted" />
+                      <span>Save your favorite chats</span>
+                    </div>
+                  </div>
+                )}
                 <div className="mt-4">
-                  {isSignedIn ? (
+                  {upsellVariant === 'premium' ? (
                     <>
                       <button
                         type="button"
@@ -1237,15 +1268,15 @@ export function ChatSidebar({
                   ) : (
                     <div className="space-y-2">
                       <Link
-                        href="/signin"
+                        href={`/signup?redirect_url=${authRedirectUrl}`}
                         className="relative block w-full cursor-pointer rounded-md bg-brand-accent-dark px-4 py-2 text-center text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90"
                       >
-                        Subscribe to Premium
+                        Create account
                       </Link>
                       <p className="text-center text-xs text-content-secondary">
-                        Already subscribed?{' '}
+                        Already signed up?{' '}
                         <Link
-                          href="/signin"
+                          href={`/signin?redirect_url=${authRedirectUrl}`}
                           className="cursor-pointer underline hover:text-content-primary"
                         >
                           Log in
@@ -1259,7 +1290,7 @@ export function ChatSidebar({
           )}
 
           {/* Divider after boxes */}
-          {!isPremium && (
+          {upsellVariant && (
             <div className="relative z-10 border-b border-border-subtle" />
           )}
 
