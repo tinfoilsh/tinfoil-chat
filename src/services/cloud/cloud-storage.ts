@@ -46,6 +46,11 @@ const PROJECT_CHAT_LIST_LIMIT = 500
 const ATTACHMENT_NOT_FOUND_STATUS = 404
 const LEGACY_ATTACHMENT_GONE_STATUS = 410
 const ATTACHMENT_IDEMPOTENCY_KEY_BYTES = 16
+const LEGACY_ATTACHMENT_DATA_ERROR_NAMES = new Set([
+  'DataError',
+  'InvalidCharacterError',
+  'OperationError',
+])
 
 /**
  * Lean chat list entry. Anything the caller needs beyond (id,
@@ -725,7 +730,21 @@ export class CloudStorageService {
         response.status,
       )
     const encrypted = new Uint8Array(await response.arrayBuffer())
-    return decryptAttachment(encrypted, base64ToUint8Array(keyB64))
+    try {
+      return await decryptAttachment(encrypted, base64ToUint8Array(keyB64))
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        LEGACY_ATTACHMENT_DATA_ERROR_NAMES.has(error.name)
+      )
+        throw new CloudBackupReadError(
+          'item_invalid',
+          'attachment_payload_invalid',
+          true,
+          { cause: error },
+        )
+      throw error
+    }
   }
 
   async listChats(options?: {

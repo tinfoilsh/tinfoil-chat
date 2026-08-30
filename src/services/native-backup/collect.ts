@@ -202,8 +202,18 @@ class Budget {
     this.check(pending)
     return pending
   }
-  image(pending: Pending, metadata: unknown, bytes: Uint8Array) {
+  preflightChat(value: ReturnType<typeof sanitizeNativeBackupChat>) {
+    this.limit(
+      'message',
+      this.used[0] + value.messages.length,
+      NATIVE_BACKUP_LIMITS.messages,
+    )
+  }
+  imageSize(bytes: Uint8Array) {
     this.limit('image size', bytes.length, NATIVE_BACKUP_LIMITS.imageBytes)
+  }
+  image(pending: Pending, metadata: unknown, bytes: Uint8Array) {
+    this.imageSize(bytes)
     const json = jsonSize(metadata)
     pending[2] += json
     pending[3] += json + bytes.length
@@ -379,7 +389,9 @@ async function collectChat(
   const value = valid(cloud ? 'cloud chat' : 'local chat', chat.id, () =>
     portable(chat, candidates),
   )
-  const pending = budget.chat(value)
+  let pending: Pending | undefined
+  if (allowPartial) budget.preflightChat(value)
+  else pending = budget.chat(value)
   const images: Array<{
     metadata: ReturnType<typeof sanitizeNativeBackupImage>
     bytes: Uint8Array
@@ -463,7 +475,8 @@ async function collectChat(
           sizeBytes: bytes.length,
         }),
       )
-      budget.image(pending, metadata, bytes)
+      if (allowPartial) budget.imageSize(bytes)
+      else budget.image(pending!, metadata, bytes)
       images.push({ metadata, bytes })
     } catch (error) {
       if (
@@ -476,7 +489,12 @@ async function collectChat(
     }
   }
   if (omitted.length) removeOmittedImageReferences(value, omitted, images)
-  return { chat: value, images, pending, omitted }
+  if (allowPartial) {
+    pending = budget.chat(value)
+    for (const image of images)
+      budget.image(pending, image.metadata, image.bytes)
+  }
+  return { chat: value, images, pending: pending!, omitted }
 }
 
 function removeOmittedImageReferences(

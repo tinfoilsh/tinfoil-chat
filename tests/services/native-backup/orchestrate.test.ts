@@ -205,6 +205,46 @@ describe('restoreNativeBackup', () => {
     expect(result.report.cloud_chats.warnings[0]).not.toContain('omitted')
   })
 
+  it('attributes relationship adjustments for local source chat IDs locally', async () => {
+    const value = validated(false)
+    value.local.chats[0].projectId = undefined
+    value.backup = {
+      ...value.backup,
+      version: 2,
+      complete: false,
+      omissions: [
+        {
+          kind: 'relationship',
+          source_id: localChat.id,
+          parent_source_id: 'private-project-id',
+          category: 'unavailable',
+          reason: 'project_reference_unavailable',
+        },
+      ],
+      warnings: [
+        {
+          code: 'chats_detached_from_omitted_projects',
+          category: 'relationship_adjustment',
+          count: 1,
+        },
+      ],
+    } as ValidatedNativeRestore['backup']
+    dependencies.validate.mockResolvedValue(value)
+
+    const result = await restoreNativeBackup(
+      sourceFile,
+      'owner-a',
+      new AbortController().signal,
+      {},
+      dependencies,
+    )
+
+    expect(result.report.local_chats.warnings).toEqual([
+      'Source archive adjusted 1 relationship to keep restored data valid.',
+    ])
+    expect(result.report.cloud_chats.warnings).toEqual([])
+  })
+
   it('does not count a skipped storage write as imported', async () => {
     dependencies.validate.mockResolvedValue(validated(false))
     saveChat.mockResolvedValue(null)

@@ -378,7 +378,7 @@ export function assertNativeBackupOmissionsConsistent(
       const chat = chatById.get(omission.source_id)
       if (
         !chat ||
-        chat.projectId !== undefined ||
+        (chat.projectId !== undefined && chat.projectId !== null) ||
         projectIds.has(omission.parent_source_id!) ||
         projectChatRelations.has(
           relationKey(omission.parent_source_id!, omission.source_id),

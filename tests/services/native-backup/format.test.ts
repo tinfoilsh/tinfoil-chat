@@ -496,6 +496,36 @@ describe('native backup v2 manifest', () => {
     })
   })
 
+  it('treats a null project ID as detached for relationship adjustments', () => {
+    const value = input()
+    value.cloudChats[0].projectId = null
+    value.relationships.projectChats = []
+
+    const formatted = formatNativeBackupV2({
+      ...value,
+      omissions: [
+        {
+          kind: 'relationship',
+          source_id: 'c',
+          parent_source_id: 'missing-project',
+          category: 'unavailable',
+          reason: 'project_reference_unavailable',
+        },
+      ],
+      warnings: [
+        {
+          code: 'chats_detached_from_omitted_projects',
+          category: 'relationship_adjustment',
+          count: 1,
+        },
+      ],
+    })
+
+    expect(() =>
+      assertValidNativeBackupV2(formatted.manifestBytes, formatted.files),
+    ).not.toThrow()
+  })
+
   it('rejects omissions contradicted by included entities or relationships', () => {
     const entityOmission = {
       kind: 'project' as const,

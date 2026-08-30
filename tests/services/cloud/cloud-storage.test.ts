@@ -439,6 +439,95 @@ describe('CloudStorageService auth readiness', () => {
     ).rejects.toBe(runtimeFailure)
   })
 
+  it('omits only structured legacy attachment decode and decrypt failures', async () => {
+    const storage = new CloudStorageService()
+    const encrypted = new Uint8Array(32).buffer
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => encrypted,
+      }),
+    )
+
+    await expect(
+      storage.loadChatImageForBackup({
+        id: 'malformed-key',
+        type: 'image',
+        fileName: 'legacy.png',
+        key: 'not base64!',
+      } as unknown as Parameters<
+        CloudStorageService['loadChatImageForBackup']
+      >[0]),
+    ).rejects.toMatchObject({
+      category: 'item_invalid',
+      reason: 'attachment_payload_invalid',
+      omittable: true,
+      cause: expect.objectContaining({ name: 'InvalidCharacterError' }),
+    })
+
+    const key = btoa(String.fromCharCode(...new Uint8Array(32)))
+    await expect(
+      storage.loadChatImageForBackup({
+        id: 'corrupt-ciphertext',
+        type: 'image',
+        fileName: 'legacy.png',
+        key,
+      } as unknown as Parameters<
+        CloudStorageService['loadChatImageForBackup']
+      >[0]),
+    ).rejects.toMatchObject({
+      category: 'item_invalid',
+      reason: 'attachment_payload_invalid',
+      omittable: true,
+      cause: expect.objectContaining({ name: 'OperationError' }),
+    })
+  })
+
+  it('keeps legacy attachment transport, HTTP, and runtime failures fatal', async () => {
+    const storage = new CloudStorageService()
+    const attachment = {
+      id: 'legacy',
+      type: 'image',
+      fileName: 'legacy.png',
+      key: btoa(String.fromCharCode(...new Uint8Array(32))),
+    } as unknown as Parameters<CloudStorageService['loadChatImageForBackup']>[0]
+    const networkCause = new TypeError('Network unavailable')
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(networkCause))
+    await expect(
+      storage.loadChatImageForBackup(attachment),
+    ).rejects.toMatchObject({ code: 'NETWORK', cause: networkCause })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce({ ok: false, status: 503 }),
+    )
+    await expect(
+      storage.loadChatImageForBackup(attachment),
+    ).rejects.toMatchObject({ status: 503 })
+
+    const runtimeFailure = new Error('Unexpected crypto runtime failure')
+    const decrypt = vi
+      .spyOn(crypto.subtle, 'decrypt')
+      .mockRejectedValueOnce(runtimeFailure)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => new Uint8Array(32).buffer,
+      }),
+    )
+    try {
+      await expect(storage.loadChatImageForBackup(attachment)).rejects.toBe(
+        runtimeFailure,
+      )
+    } finally {
+      decrypt.mockRestore()
+    }
+  })
+
   it('preserves an explicit project delete on a single conflict pull', async () => {
     mockEnclavePull.mockResolvedValue({
       items: [

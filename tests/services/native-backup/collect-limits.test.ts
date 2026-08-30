@@ -11,6 +11,8 @@ vi.mock('@/services/native-backup/constants', async (importOriginal) => {
     NATIVE_BACKUP_LIMITS: {
       ...actual.NATIVE_BACKUP_LIMITS,
       messages: 1,
+      attachments: 1,
+      entries: 5,
       discoveredRecords: 2,
       omissions: 1,
     },
@@ -129,5 +131,51 @@ describe('native backup collection limits', () => {
       ),
     ).rejects.toThrow('omission limit exceeded')
     expect(getCloudChat).toHaveBeenCalledTimes(6)
+  })
+
+  it('recomputes partial chat limits after dropping an unavailable image', async () => {
+    const { collectNativeBackupV2 } =
+      await import('@/services/native-backup/collect')
+    const source: StoredChat = {
+      ...cloudChat,
+      messages: [
+        {
+          role: 'user',
+          content: 'images',
+          timestamp: new Date(timestamp),
+          attachments: [
+            {
+              id: 'available',
+              type: 'image',
+              fileName: 'available.png',
+              encryptionKey: 'key',
+            },
+            {
+              id: 'missing',
+              type: 'image',
+              fileName: 'missing.png',
+              encryptionKey: 'key',
+            },
+          ],
+        },
+      ],
+    }
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
+
+    const result = await collectNativeBackupV2(
+      dependencies({
+        getCloudInventory: async () => ({
+          captured_at: timestamp,
+          total_items: 1,
+          items: [item('chat')],
+        }),
+        getCloudChat: async () => source,
+        getCloudImage: async ({ id }) => (id === 'available' ? png : null),
+      }),
+    )
+
+    expect(result.cloudChats[0].messages[0].attachments).toHaveLength(1)
+    expect(result.images).toHaveLength(1)
+    expect(result.omissions).toHaveLength(1)
   })
 })

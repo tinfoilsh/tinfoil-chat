@@ -104,12 +104,18 @@ function applySourceBackupWarnings(
     report[kind].warnings.push(
       `Source archive omitted ${count} ${labels[kind][count === 1 ? 0 : 1]}.`,
     )
-  const adjusted = validated.backup.warnings
-    .filter(({ category }) => category === 'relationship_adjustment')
-    .reduce((sum, warning) => sum + warning.count, 0)
-  if (adjusted)
-    report.cloud_chats.warnings.push(
-      `Source archive adjusted ${adjusted} relationship${adjusted === 1 ? '' : 's'} to keep restored data valid.`,
+  const localChatIds = new Set(validated.local.chats.map(({ id }) => id))
+  const relationshipCounts = new Map<NativeRestoreKind, number>()
+  for (const omission of validated.backup.omissions) {
+    if (omission.kind !== 'relationship') continue
+    const target = localChatIds.has(omission.source_id)
+      ? 'local_chats'
+      : 'cloud_chats'
+    relationshipCounts.set(target, (relationshipCounts.get(target) ?? 0) + 1)
+  }
+  for (const [target, count] of relationshipCounts)
+    report[target].warnings.push(
+      `Source archive adjusted ${count} relationship${count === 1 ? '' : 's'} to keep restored data valid.`,
     )
   if (
     validated.backup.warnings.some(
