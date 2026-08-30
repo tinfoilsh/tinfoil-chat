@@ -60,16 +60,26 @@ describe('Clerk environment privacy check', () => {
     expect(
       getClerkAuthDrift(
         environment({
+          passwordEnabled: false,
           passwordRequired: false,
           signUpMode: 'restricted',
+          emailEnabled: false,
+          verifyEmailAtSignUp: false,
           emailVerifications: [],
         }),
       ),
     ).toEqual([
       'user_settings.sign_up.mode must be public',
+      'user_settings.attributes.password.enabled must be true',
       'user_settings.attributes.password.required must be true',
+      'user_settings.attributes.email_address.enabled must be true',
+      'user_settings.attributes.email_address.verify_at_sign_up must be true',
       'user_settings.attributes.email_address.verifications must include email_code',
     ])
+  })
+
+  it('fails closed when authentication configuration is absent', () => {
+    expect(getClerkAuthDrift({})).toHaveLength(6)
   })
 
   it('checks the fetched production response', async () => {

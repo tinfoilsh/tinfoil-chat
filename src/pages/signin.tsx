@@ -322,6 +322,39 @@ export default function SignInPage({
     )
   }
 
+  const verifyCode = () => {
+    switch (verificationKind) {
+      case 'signup':
+        return signUp.verifications.verifyEmailCode({ code })
+      case 'reset':
+        return signIn.resetPasswordEmailCode.verifyCode({ code })
+      case 'primary':
+        return signIn.emailCode.verifyCode({ code })
+      case 'mfa':
+        return signIn.mfa.verifyEmailCode({ code })
+      case 'backup':
+        return signIn.mfa.verifyBackupCode({ code })
+      case 'totp':
+        return signIn.mfa.verifyTOTP({ code })
+    }
+  }
+
+  const resendCode = () => {
+    switch (verificationKind) {
+      case 'signup':
+        return signUp.verifications.sendEmailCode()
+      case 'reset':
+        return signIn.resetPasswordEmailCode.sendCode()
+      case 'primary':
+        return signIn.emailCode.sendCode()
+      case 'mfa':
+        return signIn.mfa.sendEmailCode()
+      case 'backup':
+      case 'totp':
+        throw new Error('This verification strategy does not send codes')
+    }
+  }
+
   const handleCodeSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     await runAuthAction(
@@ -329,18 +362,7 @@ export default function SignInPage({
       'Could not verify sign-in code',
       'handleCodeSubmit',
       async () => {
-        const { error } =
-          verificationKind === 'signup'
-            ? await signUp.verifications.verifyEmailCode({ code })
-            : verificationKind === 'reset'
-              ? await signIn.resetPasswordEmailCode.verifyCode({ code })
-              : verificationKind === 'primary'
-                ? await signIn.emailCode.verifyCode({ code })
-                : verificationKind === 'mfa'
-                  ? await signIn.mfa.verifyEmailCode({ code })
-                  : verificationKind === 'backup'
-                    ? await signIn.mfa.verifyBackupCode({ code })
-                    : await signIn.mfa.verifyTOTP({ code })
+        const { error } = await verifyCode()
 
         if (error) {
           setErrorMessage(getClerkErrorMessage(error, AUTH_ERROR_MESSAGE))
@@ -379,14 +401,7 @@ export default function SignInPage({
       'Could not resend sign-in code',
       'handleResendCode',
       async () => {
-        const { error } =
-          verificationKind === 'signup'
-            ? await signUp.verifications.sendEmailCode()
-            : verificationKind === 'reset'
-              ? await signIn.resetPasswordEmailCode.sendCode()
-              : verificationKind === 'primary'
-                ? await signIn.emailCode.sendCode()
-                : await signIn.mfa.sendEmailCode()
+        const { error } = await resendCode()
         if (error) {
           setErrorMessage(getClerkErrorMessage(error, AUTH_ERROR_MESSAGE))
         }
@@ -643,9 +658,7 @@ export default function SignInPage({
                         ? 'Two-step verification'
                         : verificationKind === 'signup'
                           ? 'Verify your email'
-                          : verificationKind === 'reset'
-                            ? 'Check your email'
-                            : 'Check your email'}
+                          : 'Check your email'}
           </h1>
           <p className="mt-1 text-lg leading-tight text-content-muted">
             {step === 'email'

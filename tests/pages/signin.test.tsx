@@ -34,7 +34,6 @@ const auth = vi.hoisted(() => {
     status: 'missing_requirements',
     missingFields: [] as string[],
     unverifiedFields: [] as string[],
-    create: vi.fn(),
     update: vi.fn(),
     password: vi.fn(),
     sso: vi.fn(),
@@ -91,6 +90,17 @@ vi.mock('next/router', () => ({
   }),
 }))
 
+function renderAndSubmitPasswordSignIn(password = 'account password') {
+  render(<SignInPage />)
+  fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), {
+    target: { value: 'person@example.com' },
+  })
+  fireEvent.change(screen.getByLabelText('Password'), {
+    target: { value: password },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+}
+
 describe('SignInPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -129,7 +139,6 @@ describe('SignInPage', () => {
     })
     auth.signIn.finalize.mockResolvedValue({ error: null })
     auth.signIn.reset.mockResolvedValue({ error: null })
-    auth.signUp.create.mockResolvedValue({ error: null })
     auth.signUp.update.mockResolvedValue({ error: null })
     auth.signUp.password.mockResolvedValue({ error: null })
     auth.signUp.sso.mockResolvedValue({ error: null })
@@ -224,15 +233,7 @@ describe('SignInPage', () => {
       auth.signIn.status = 'complete'
       return { error: null }
     })
-    render(<SignInPage />)
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), {
-      target: { value: 'person@example.com' },
-    })
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'correct horse battery staple' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    renderAndSubmitPasswordSignIn('correct horse battery staple')
 
     await waitFor(() => {
       expect(auth.signIn.password).toHaveBeenCalledWith({
@@ -311,15 +312,7 @@ describe('SignInPage', () => {
       auth.signIn.status = 'complete'
       return { error: null }
     })
-    render(<SignInPage />)
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), {
-      target: { value: 'person@example.com' },
-    })
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'account password' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    renderAndSubmitPasswordSignIn()
 
     expect(
       await screen.findByRole('heading', { name: 'Two-step verification' }),
@@ -395,15 +388,7 @@ describe('SignInPage', () => {
     auth.signIn.password.mockResolvedValue({
       error: { longMessage: 'The password is incorrect.' },
     })
-    render(<SignInPage />)
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), {
-      target: { value: 'person@example.com' },
-    })
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'incorrect password' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    renderAndSubmitPasswordSignIn('incorrect password')
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('The password is incorrect.')
@@ -424,15 +409,7 @@ describe('SignInPage', () => {
     auth.signIn.finalize.mockResolvedValue({
       error: { longMessage: 'The session could not be activated.' },
     })
-    render(<SignInPage />)
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), {
-      target: { value: 'person@example.com' },
-    })
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'account password' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    renderAndSubmitPasswordSignIn()
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'The session could not be activated.',
@@ -448,15 +425,7 @@ describe('SignInPage', () => {
       ]
       return { error: null }
     })
-    render(<SignInPage />)
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), {
-      target: { value: 'person@example.com' },
-    })
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'account password' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    renderAndSubmitPasswordSignIn()
 
     fireEvent.click(
       await screen.findByRole('button', { name: 'Email me a code instead' }),
@@ -500,15 +469,7 @@ describe('SignInPage', () => {
       auth.signIn.status = 'complete'
       return { error: null }
     })
-    render(<SignInPage />)
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), {
-      target: { value: 'person@example.com' },
-    })
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'account password' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    renderAndSubmitPasswordSignIn()
     fireEvent.click(
       await screen.findByRole('button', { name: 'Use a recovery code' }),
     )
