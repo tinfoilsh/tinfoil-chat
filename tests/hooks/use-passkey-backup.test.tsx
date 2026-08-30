@@ -712,7 +712,6 @@ describe('usePasskeyBackup', () => {
       )
       expect(mocks.addWrappedKeyForCurrentKey).toHaveBeenCalledWith({
         wrappedKeys,
-        keyBundle,
         cek: new Uint8Array(32),
         keyIdHex: 'kid-current',
       })

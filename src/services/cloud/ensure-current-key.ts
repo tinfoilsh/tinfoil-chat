@@ -329,9 +329,9 @@ async function reconcileExistingAdoptedKey(
 }
 
 /**
- * Best-effort initial bundle for key adoption: wrap the complete key
- * history into the generic envelope using this device's cached passkey
- * PRF. Credential discovery is bounded so legacy auth or fetch hangs cannot
+ * Best-effort initial bundle for key adoption: wrap the current primary CEK
+ * using this device's cached passkey PRF. Credential discovery is bounded
+ * so legacy auth or fetch hangs cannot
  * starve the adoption queue. Every failure path returns null and the caller
  * registers bundleless.
  *
@@ -371,7 +371,7 @@ async function initialBundleFromCachedPrf(
       snapshot.keyBundle,
     )
     if (!wrappedKeys) return null
-    return tinfoilWrappedKeyBundleToEnclave(wrappedKeys, snapshot.keyBundle)
+    return tinfoilWrappedKeyBundleToEnclave(wrappedKeys)
   } catch (err) {
     logWarning('Could not build initial bundle for key adoption', {
       component: 'CloudSync',

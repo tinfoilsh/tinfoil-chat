@@ -118,19 +118,11 @@ function enableInitialBundle(): void {
       keyBundle: { alternatives: string[] },
     ) => ({ primary, alternatives: keyBundle.alternatives }),
   )
-  mockBundleToEnclave.mockImplementation(
-    (
-      _: unknown,
-      keyBundle: { alternatives: string[]; authorizationMode: string },
-    ) => ({
-      credentialId: 'AQID',
-      kekIvHex: '01'.repeat(12),
-      encryptedKeysHex: JSON.stringify({
-        alternatives: keyBundle.alternatives,
-        authorizationMode: keyBundle.authorizationMode,
-      }),
-    }),
-  )
+  mockBundleToEnclave.mockReturnValue({
+    credentialId: 'AQID',
+    kekIvHex: '01'.repeat(12),
+    encryptedKeysHex: '02'.repeat(48),
+  })
 }
 
 vi.mock('@/utils/error-handling', () => ({
@@ -468,7 +460,7 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
           JSON.stringify({ mode: 'explicit_start_fresh' }),
         ),
     ],
-  ])('reconciles changed %s after a delayed create', async (_, mutate) => {
+  ])('accepts changed %s after a delayed create', async (_, mutate) => {
     enableInitialBundle()
     let releaseFirstRegistration: () => void = () => {}
     const registrationGate = new Promise<void>((resolve) => {
@@ -488,7 +480,7 @@ describe('ensure-current-key adoptLocalKeyForMigration', () => {
     await expect(staleAdoption).resolves.toBe(false)
     await expect(currentAdoption).resolves.toBe(true)
     expect(mockRegisterKey).toHaveBeenCalledOnce()
-    expect(mockAddBundle).toHaveBeenCalledOnce()
+    expect(mockAddBundle).not.toHaveBeenCalled()
     expect(remoteKeyState.bundles.AQID.encrypted_keys).toBe(
       mockBundleToEnclave.mock.results.at(-1)?.value.encryptedKeysHex,
     )
