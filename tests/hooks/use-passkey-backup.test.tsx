@@ -3,6 +3,7 @@ import {
   SETTINGS_MANUAL_RECOVERY_DISMISSED,
 } from '@/constants/storage-keys'
 import { usePasskeyBackup } from '@/hooks/use-passkey-backup'
+import { PrfNotSupportedError } from '@/services/passkey'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -185,6 +186,23 @@ describe('usePasskeyBackup', () => {
 
     expect(prompted).toBe(false)
     expect(result.current.manualRecoveryNeeded).toBe(false)
+    expect(result.current.passkeySetupFailed).toBe(true)
+    expect(result.current.passkeyRetryAvailable).toBe(true)
+  })
+
+  it('surfaces unsupported passkey providers during first-time setup', async () => {
+    const error = new PrfNotSupportedError('PRF is not supported')
+    mocks.generateKey.mockResolvedValue('key_generated')
+    mocks.getAlternativeKeyBytes.mockReturnValue(new Uint8Array(32))
+    mocks.createAndWrapTinfoilKey.mockRejectedValue(error)
+    const { result } = renderHook(() =>
+      usePasskeyBackup({ ...baseOptions, initialized: false }),
+    )
+
+    await act(async () => {
+      await expect(result.current.setupFirstTimePasskey()).rejects.toBe(error)
+    })
+
     expect(result.current.passkeySetupFailed).toBe(true)
     expect(result.current.passkeyRetryAvailable).toBe(true)
   })
