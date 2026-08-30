@@ -305,6 +305,28 @@ describe('CloudSyncSetupModal onboarding', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('explains passkey failures while starting fresh', async () => {
+    const error = new PasskeyTimeoutError()
+    render(
+      <CloudSyncSetupModal
+        {...baseProps}
+        passkeyRecoveryNeeded
+        onRecoverWithPasskey={vi.fn()}
+        onSetupNewKey={vi.fn().mockRejectedValue(error)}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Fresh' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Yes, start fresh' }),
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: 'Passkey Setup Timed Out' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(error.message)).toBeInTheDocument()
+  })
+
   it('does not restrict the native recovery-key file picker', async () => {
     render(<CloudSyncSetupModal {...baseProps} manualRecoveryNeeded />)
 

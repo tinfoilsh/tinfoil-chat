@@ -910,9 +910,10 @@ ${generatedKey.replace('key_', '')}
         enterSetupFailed()
       }
     } catch (error) {
-      if (error instanceof PrfNotSupportedError) {
-        setSetupError(error.message)
-        enterSetupFailed()
+      const failure = getPasskeySetupFailure(error)
+      if (failure) {
+        setSetupError(failure.description)
+        enterSetupFailed('manual', failure.title)
       } else {
         logError('Start fresh failed', error, {
           component: 'CloudSyncSetupModal',
