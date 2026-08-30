@@ -87,6 +87,8 @@ import { Logo } from '../logo'
 import type { Chat } from './types'
 
 const FAVORITES_PANEL_ID = 'sidebar-favorites-panel'
+const SIDEBAR_CTA_CLASS_NAME =
+  'block w-full rounded-md bg-brand-accent-dark px-4 py-2 text-center text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90'
 
 // Utility function to detect iOS devices
 function isIOSDevice() {
@@ -1234,7 +1236,10 @@ export function ChatSidebar({
                           void handleUpgradeToPro()
                         }}
                         disabled={upgradeLoading}
-                        className={`block w-full rounded-md bg-brand-accent-dark px-4 py-2 text-center text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90 ${upgradeLoading ? 'cursor-not-allowed opacity-70' : ''}`}
+                        className={cn(
+                          SIDEBAR_CTA_CLASS_NAME,
+                          upgradeLoading && 'cursor-not-allowed opacity-70',
+                        )}
                       >
                         {upgradeLoading
                           ? 'Redirecting…'
@@ -1250,7 +1255,10 @@ export function ChatSidebar({
                     <div className="space-y-2">
                       <Link
                         href={`/signup?redirect_url=${authRedirectUrl}`}
-                        className="relative block w-full cursor-pointer rounded-md bg-brand-accent-dark px-4 py-2 text-center text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90"
+                        className={cn(
+                          SIDEBAR_CTA_CLASS_NAME,
+                          'relative cursor-pointer',
+                        )}
                       >
                         Create account
                       </Link>
