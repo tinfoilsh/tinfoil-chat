@@ -1,3 +1,4 @@
+import { CloudBackupReadError } from '@/services/cloud/backup-read-error'
 import type { NativeBackupCollectionDependencies } from '@/services/native-backup/collect'
 import type { StoredChat } from '@/services/storage/indexed-db'
 
@@ -9,6 +10,8 @@ vi.mock('@/services/native-backup/constants', async (importOriginal) => {
     NATIVE_BACKUP_LIMITS: {
       ...actual.NATIVE_BACKUP_LIMITS,
       messages: 1,
+      discoveredRecords: 2,
+      omissions: 1,
     },
   }
 })
@@ -65,5 +68,71 @@ describe('native backup collection limits', () => {
       'message limit exceeded',
     )
     expect(getCloudImage).not.toHaveBeenCalled()
+  })
+
+  it('bounds discovered records before reading record contents', async () => {
+    const { collectNativeBackupV2 } =
+      await import('@/services/native-backup/collect')
+    const getCloudChat = vi.fn()
+    const dependencies: NativeBackupCollectionDependencies = {
+      isAuthenticated: async () => true,
+      activeUserId: () => 'user',
+      requireUnlockedCek: () => {},
+      listChats: async () => ({
+        items: [1, 2, 3].map((index) => ({
+          id: `chat-${index}`,
+          syncVersion: 1,
+        })),
+      }),
+      getCloudChat,
+      getCloudImage: async () => null,
+      listProjects: async () => ({ items: [] }),
+      getProject: async () => null,
+      listDocuments: async () => [],
+      getDocument: async () => null,
+      getLocalChats: async () => [],
+      getLocalChat: async () => null,
+    }
+
+    await expect(collectNativeBackupV2(dependencies)).rejects.toThrow(
+      'discovered record limit exceeded',
+    )
+    expect(getCloudChat).not.toHaveBeenCalled()
+  })
+
+  it('bounds structured omissions incrementally', async () => {
+    const { collectNativeBackupV2 } =
+      await import('@/services/native-backup/collect')
+    const getCloudChat = vi.fn(async () => {
+      throw new CloudBackupReadError(
+        'item_invalid',
+        'chat_payload_invalid',
+        true,
+      )
+    })
+    const dependencies: NativeBackupCollectionDependencies = {
+      isAuthenticated: async () => true,
+      activeUserId: () => 'user',
+      requireUnlockedCek: () => {},
+      listChats: async () => ({
+        items: [
+          { id: 'chat-1', syncVersion: 1 },
+          { id: 'chat-2', syncVersion: 1 },
+        ],
+      }),
+      getCloudChat,
+      getCloudImage: async () => null,
+      listProjects: async () => ({ items: [] }),
+      getProject: async () => null,
+      listDocuments: async () => [],
+      getDocument: async () => null,
+      getLocalChats: async () => [],
+      getLocalChat: async () => null,
+    }
+
+    await expect(collectNativeBackupV2(dependencies)).rejects.toThrow(
+      'omission limit exceeded',
+    )
+    expect(getCloudChat).toHaveBeenCalledTimes(6)
   })
 })

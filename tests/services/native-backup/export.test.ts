@@ -19,7 +19,7 @@ describe('native backup export orchestration', () => {
       }),
       collect: vi.fn(async () => {
         order.push('collect')
-        return { value: true }
+        return { omissions: [], warnings: [] }
       }),
       format: vi.fn(() => {
         order.push('format')

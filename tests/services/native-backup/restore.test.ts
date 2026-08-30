@@ -2,6 +2,7 @@ import {
   NATIVE_BACKUP_LIMITS,
   forEachNativeBackupLocalImage,
   formatNativeBackupV1,
+  formatNativeBackupV2,
   validateAndPackageNativeBackup,
   type NativeBackupFileEntry,
   type NativeBackupFormatInput,
@@ -200,6 +201,34 @@ describe('native backup restore validation and cloud packaging', () => {
     expect(JSON.stringify(semantic)).not.toMatch(
       /encryptionKey|codeExecutionAccessToken|syncUserId|local-1/,
     )
+  })
+
+  it('accepts a partial V2 archive while preserving its source warnings', async () => {
+    const formatted = formatNativeBackupV2({
+      ...backupInput(),
+      omissions: [
+        {
+          kind: 'attachment',
+          source_id: 'missing-source-image',
+          parent_source_id: 'cloud-1',
+          category: 'unavailable',
+          reason: 'attachment_not_found',
+        },
+      ],
+      warnings: [
+        {
+          code: 'source_items_omitted',
+          category: 'source_coverage',
+          count: 1,
+        },
+      ],
+    })
+
+    const result = await validateAndPackageNativeBackup(
+      await zip(formatted.manifestBytes, formatted.files),
+    )
+
+    expect(result.backup).toMatchObject({ version: 2, complete: false })
   })
 
   it('rejects incomplete, tampered, unknown, and malformed archives', async () => {

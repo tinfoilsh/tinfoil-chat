@@ -18,16 +18,27 @@ export type NativeBackupImageCollector = (
   candidate: NativeBackupImageCandidate,
 ) => string
 
+export class NativeBackupDataValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'NativeBackupDataValidationError'
+  }
+}
+
 function row(value: unknown): Row {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Native backup records must be objects')
+    throw new NativeBackupDataValidationError(
+      'Native backup records must be objects',
+    )
   }
   return value as Row
 }
 function rows(value: unknown): Row[] {
   if (value === undefined) return []
   if (!Array.isArray(value))
-    throw new Error('Native backup collections must be arrays')
+    throw new NativeBackupDataValidationError(
+      'Native backup collections must be arrays',
+    )
   return value.map(row)
 }
 const list = (value: unknown, clean: Cleaner) =>
@@ -45,11 +56,11 @@ const iso = (value: unknown): string => {
     typeof value !== 'string' &&
     typeof value !== 'number'
   )
-    throw new Error('Invalid backup timestamp')
+    throw new NativeBackupDataValidationError('Invalid backup timestamp')
   const parsed =
     value instanceof Date ? value : new Date(value as string | number)
   if (Number.isNaN(parsed.getTime()))
-    throw new Error('Invalid backup timestamp')
+    throw new NativeBackupDataValidationError('Invalid backup timestamp')
   return parsed.toISOString()
 }
 export function sanitizeNativeBackupProject(value: unknown) {
@@ -112,7 +123,10 @@ const timelineFields: Record<string, readonly string[]> = {
 function cleanTimeline(value: unknown): unknown {
   const source = row(value)
   const fields = timelineFields[String(source.type)]
-  if (!fields) throw new Error('Unsupported native backup timeline block')
+  if (!fields)
+    throw new NativeBackupDataValidationError(
+      'Unsupported native backup timeline block',
+    )
   const output = pick(source, fields)
   if (source.type === 'web_search') output.state = cleanSearch(source.state)
   if (source.type === 'url_fetches') {
@@ -249,7 +263,9 @@ function cleanMessage(
 }
 
 const missingImageCollector: NativeBackupImageCollector = () => {
-  throw new Error('Native backup image collector is required')
+  throw new NativeBackupDataValidationError(
+    'Native backup image collector is required',
+  )
 }
 export function sanitizeNativeBackupChat(
   value: unknown,

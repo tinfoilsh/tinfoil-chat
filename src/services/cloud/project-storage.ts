@@ -19,8 +19,10 @@ import {
   push as enclavePush,
   newIdempotencyKey,
   pullItemPlaintext,
+  SyncEnclaveError,
 } from '../sync-enclave/sync-api'
 import type { AccountOperationGuard } from './account-operation'
+import { CloudBackupReadError } from './backup-read-error'
 import { pullKey, requirePrimaryKeyB64 } from './cek-encoding'
 import { canWriteToCloud } from './cloud-key-authorization'
 import { ProjectDataSchema, ProjectDocumentPlaintextSchema } from './schemas'
@@ -213,10 +215,21 @@ export class ProjectStorageService {
     }
   }
 
-  async getProject(projectId: string): Promise<Project | null> {
+  async getProject(
+    projectId: string,
+    options: { strictBackupRead?: boolean } = {},
+  ): Promise<Project | null> {
     try {
       const keys = pullKey()
-      if (keys.length === 0) return null
+      if (keys.length === 0) {
+        if (options.strictBackupRead)
+          throw new CloudBackupReadError(
+            'key_unavailable',
+            'cloud_key_unavailable',
+            false,
+          )
+        return null
+      }
 
       const resp = await enclavePull({
         scope: PROJECT_SCOPE,
@@ -226,14 +239,47 @@ export class ProjectStorageService {
       const item = resp.items[0]
       if (!item || !item.ok) {
         if (item && item.code === 'NOT_FOUND') return null
+        if (options.strictBackupRead)
+          throw new SyncEnclaveError(
+            'Project pull returned an invalid item',
+            undefined,
+            item?.code,
+          )
         return null
       }
       const plaintextBytes = pullItemPlaintext(item)
-      if (!plaintextBytes) return null
+      if (!plaintextBytes) {
+        if (options.strictBackupRead)
+          throw new CloudBackupReadError(
+            'item_invalid',
+            'project_payload_unavailable',
+            true,
+          )
+        return null
+      }
 
-      const parsed = JSON.parse(new TextDecoder().decode(plaintextBytes))
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(new TextDecoder().decode(plaintextBytes))
+      } catch (error) {
+        if (options.strictBackupRead && error instanceof SyntaxError)
+          throw new CloudBackupReadError(
+            'item_invalid',
+            'project_payload_invalid',
+            true,
+            { cause: error },
+          )
+        throw error
+      }
       const projectValidation = ProjectDataSchema.safeParse(parsed)
       if (!projectValidation.success) {
+        if (options.strictBackupRead)
+          throw new CloudBackupReadError(
+            'item_invalid',
+            'project_payload_invalid',
+            true,
+            { cause: projectValidation.error },
+          )
         logError('Discarding project with invalid shape', undefined, {
           component: 'ProjectStorage',
           action: 'getProject',
@@ -261,6 +307,7 @@ export class ProjectStorageService {
         syncVersion: etagToSyncVersion(item.etag),
       }
     } catch (error) {
+      if (options.strictBackupRead) throw error
       logError(`Failed to get project ${projectId}`, error, {
         component: 'ProjectStorage',
         action: 'getProject',
@@ -268,6 +315,10 @@ export class ProjectStorageService {
       })
       return null
     }
+  }
+
+  getProjectForBackup(projectId: string): Promise<Project | null> {
+    return this.getProject(projectId, { strictBackupRead: true })
   }
 
   // Batch variant of getProject: pulls every requested project in a
@@ -536,10 +587,19 @@ export class ProjectStorageService {
   async getDocument(
     projectId: string,
     documentId: string,
+    options: { strictBackupRead?: boolean } = {},
   ): Promise<ProjectDocument | null> {
     try {
       const keys = pullKey()
-      if (keys.length === 0) return null
+      if (keys.length === 0) {
+        if (options.strictBackupRead)
+          throw new CloudBackupReadError(
+            'key_unavailable',
+            'cloud_key_unavailable',
+            false,
+          )
+        return null
+      }
 
       const resp = await enclavePull({
         scope: PROJECT_DOCUMENT_SCOPE,
@@ -549,15 +609,48 @@ export class ProjectStorageService {
       const item = resp.items[0]
       if (!item || !item.ok) {
         if (item && item.code === 'NOT_FOUND') return null
+        if (options.strictBackupRead)
+          throw new SyncEnclaveError(
+            'Project document pull returned an invalid item',
+            undefined,
+            item?.code,
+          )
         return null
       }
       const plaintextBytes = pullItemPlaintext(item)
-      if (!plaintextBytes) return null
+      if (!plaintextBytes) {
+        if (options.strictBackupRead)
+          throw new CloudBackupReadError(
+            'item_invalid',
+            'document_payload_unavailable',
+            true,
+          )
+        return null
+      }
 
-      const documentValidation = ProjectDocumentPlaintextSchema.safeParse(
-        JSON.parse(new TextDecoder().decode(plaintextBytes)),
-      )
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(new TextDecoder().decode(plaintextBytes))
+      } catch (error) {
+        if (options.strictBackupRead && error instanceof SyntaxError)
+          throw new CloudBackupReadError(
+            'item_invalid',
+            'document_payload_invalid',
+            true,
+            { cause: error },
+          )
+        throw error
+      }
+      const documentValidation =
+        ProjectDocumentPlaintextSchema.safeParse(parsed)
       if (!documentValidation.success) {
+        if (options.strictBackupRead)
+          throw new CloudBackupReadError(
+            'item_invalid',
+            'document_payload_invalid',
+            true,
+            { cause: documentValidation.error },
+          )
         logError('Discarding document with invalid shape', undefined, {
           component: 'ProjectStorage',
           action: 'getDocument',
@@ -582,6 +675,7 @@ export class ProjectStorageService {
         content: decoded.content,
       }
     } catch (error) {
+      if (options.strictBackupRead) throw error
       logError(`Failed to get document ${documentId}`, error, {
         component: 'ProjectStorage',
         action: 'getDocument',
@@ -589,6 +683,13 @@ export class ProjectStorageService {
       })
       return null
     }
+  }
+
+  getDocumentForBackup(
+    projectId: string,
+    documentId: string,
+  ): Promise<ProjectDocument | null> {
+    return this.getDocument(projectId, documentId, { strictBackupRead: true })
   }
 
   // Batch variant of getDocument: pulls every requested document for a

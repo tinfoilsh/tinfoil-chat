@@ -20,10 +20,19 @@ import {
   pullItemPlaintext,
   revisionSnapshot,
 } from '../sync-enclave/sync-api'
+import {
+  SyncEnclaveError,
+  SyncNetworkError,
+} from '../sync-enclave/sync-enclave-client'
 import { RESTORE_DELETED_HEADERS } from '../sync-enclave/wire-contract'
 import type { AccountOperationGuard } from './account-operation'
+import { CloudBackupReadError } from './backup-read-error'
 import { pullKey, requirePrimaryKeyB64 } from './cek-encoding'
-import { processRemoteChat, type RemoteChatData } from './chat-codec'
+import {
+  processRemoteChat,
+  RemoteChatDecodeError,
+  type RemoteChatData,
+} from './chat-codec'
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
@@ -67,6 +76,8 @@ export interface BulkConversationResult {
   success: boolean
   error?: string
 }
+
+export { CloudBackupReadError } from './backup-read-error'
 
 export interface BulkUploadResponse {
   results: BulkConversationResult[]
@@ -418,9 +429,20 @@ export class CloudStorageService {
    * Fetch raw encrypted content for a single chat by ID.
    * Returns v0 JSON string or v1 binary ArrayBuffer based on X-Format-Version header.
    */
-  async fetchRawChatContent(chatId: string): Promise<RawChatContent | null> {
+  async fetchRawChatContent(
+    chatId: string,
+    options: { strictBackupRead?: boolean } = {},
+  ): Promise<RawChatContent | null> {
     const keys = pullKey()
-    if (keys.length === 0) return null
+    if (keys.length === 0) {
+      if (options.strictBackupRead)
+        throw new CloudBackupReadError(
+          'key_unavailable',
+          'cloud_key_unavailable',
+          false,
+        )
+      return null
+    }
 
     const resp = await enclavePull({
       scope: 'chat',
@@ -430,10 +452,24 @@ export class CloudStorageService {
     const item = resp.items[0]
     if (!item || !item.ok) {
       if (item && item.code === 'NOT_FOUND') return null
+      if (options.strictBackupRead)
+        throw new SyncEnclaveError(
+          'Chat pull returned an invalid item',
+          undefined,
+          item?.code,
+        )
       throw new Error(item?.code || 'Failed to pull chat from sync enclave')
     }
     const plaintext = pullItemPlaintext(item)
-    if (!plaintext) return null
+    if (!plaintext) {
+      if (options.strictBackupRead)
+        throw new CloudBackupReadError(
+          'item_invalid',
+          'chat_payload_unavailable',
+          true,
+        )
+      return null
+    }
     return {
       plaintext: new TextDecoder().decode(plaintext),
       formatVersion: 2,
@@ -470,6 +506,33 @@ export class CloudStorageService {
         metadata: { chatId },
       })
       throw error
+    }
+  }
+
+  async downloadChatForBackup(chatId: string): Promise<StoredChat | null> {
+    const raw = await this.fetchRawChatContent(chatId, {
+      strictBackupRead: true,
+    })
+    if (raw === null) return null
+    try {
+      const result = await processRemoteChat(
+        {
+          id: chatId,
+          plaintext: raw.plaintext,
+          formatVersion: 2,
+          syncVersion: raw.syncVersion,
+        },
+        raw.projectIdSet ? { projectId: raw.projectId } : {},
+      )
+      return result.chat
+    } catch (error) {
+      if (!(error instanceof RemoteChatDecodeError)) throw error
+      throw new CloudBackupReadError(
+        'item_invalid',
+        'chat_payload_invalid',
+        true,
+        { cause: error },
+      )
     }
   }
 
@@ -569,6 +632,40 @@ export class CloudStorageService {
     return results
   }
 
+  async loadChatImageForBackup(value: Attachment): Promise<Uint8Array | null> {
+    if (value.type !== 'image') {
+      throw new CloudBackupReadError(
+        'item_invalid',
+        'attachment_type_invalid',
+        false,
+      )
+    }
+    const keyB64 = value.encryptionKey
+    const legacyKeyB64 = (value as { key?: string }).key
+    if (!keyB64 && !legacyKeyB64) {
+      throw new CloudBackupReadError(
+        'item_invalid',
+        'attachment_key_unavailable',
+        true,
+      )
+    }
+    if (keyB64) {
+      const plaintext = await enclaveAttachmentGet({
+        id: value.id,
+        attKeyB64: keyB64,
+      })
+      if (!plaintext) {
+        throw new CloudBackupReadError(
+          'item_unavailable',
+          'attachment_not_found',
+          true,
+        )
+      }
+      return plaintext
+    }
+    return this.fetchLegacyAttachment(value.id, legacyKeyB64!)
+  }
+
   // Part of the v0/v1 → v2 attachment migration. Safe to remove once
   // the controlplane `chat_attachments_legacy` table is drained and
   // no client (web or iOS) still depends on this fallback.
@@ -576,12 +673,30 @@ export class CloudStorageService {
     attachmentId: string,
     keyB64: string,
   ): Promise<Uint8Array> {
-    const response = await fetch(
-      `${API_BASE_URL}/api/storage/attachment/${attachmentId}`,
-    )
-    if (!response.ok || response.status === LEGACY_ATTACHMENT_GONE_STATUS) {
-      throw new Error(`Failed to fetch legacy attachment: ${response.status}`)
+    let response: Response
+    try {
+      response = await fetch(
+        `${API_BASE_URL}/api/storage/attachment/${attachmentId}`,
+      )
+    } catch (error) {
+      if (error instanceof TypeError)
+        throw new SyncNetworkError({ cause: error })
+      throw error
     }
+    if (
+      response.status === 404 ||
+      response.status === LEGACY_ATTACHMENT_GONE_STATUS
+    )
+      throw new CloudBackupReadError(
+        'item_unavailable',
+        'attachment_not_found',
+        true,
+      )
+    if (!response.ok)
+      throw new SyncEnclaveError(
+        'Legacy attachment request failed',
+        response.status,
+      )
     const encrypted = new Uint8Array(await response.arrayBuffer())
     return decryptAttachment(encrypted, base64ToUint8Array(keyB64))
   }

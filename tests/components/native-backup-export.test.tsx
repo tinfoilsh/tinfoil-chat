@@ -67,6 +67,27 @@ describe('NativeBackupExport', () => {
     expect(mocks.runExport.mock.calls[0][0].aborted).toBe(true)
   })
 
+  it('reports a successful partial save without exposing source identifiers', async () => {
+    mocks.runExport.mockResolvedValue({
+      complete: false,
+      omitted: 2,
+      adjustedRelationships: 0,
+      localInventoryUnstable: false,
+      warnings: 1,
+    })
+    render(<NativeBackupExport available />)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create Tinfoil Backup' }),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'I understand, create backup' }),
+    )
+
+    expect(await screen.findByText(/saved with warnings/)).toHaveTextContent(
+      '2 source items could not be included',
+    )
+  })
+
   it('cancels an active export when availability is lost', async () => {
     mocks.runExport.mockImplementation(
       (signal: AbortSignal, onProgress: (value: 'collecting') => void) => {

@@ -1,5 +1,9 @@
 import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
-import { CloudStorageService } from '@/services/cloud/cloud-storage'
+import {
+  CloudBackupReadError,
+  CloudStorageService,
+} from '@/services/cloud/cloud-storage'
+import { SyncNetworkError } from '@/services/sync-enclave'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockGetAuthHeaders = vi.fn()
@@ -137,6 +141,116 @@ describe('CloudStorageService auth readiness', () => {
     await expect(
       storage.downloadChats(['chat-1'], { tolerateNotFound: true }),
     ).rejects.toThrow('incomplete chat batch')
+  })
+
+  it('preserves structured backup attachment failures instead of swallowing them', async () => {
+    const storage = new CloudStorageService()
+    const attachment = {
+      id: 'attachment',
+      type: 'image' as const,
+      fileName: 'image.png',
+      encryptionKey: 'key',
+    }
+    const network = new SyncNetworkError()
+    mockAttachmentGet.mockRejectedValueOnce(network)
+    await expect(storage.loadChatImageForBackup(attachment)).rejects.toBe(
+      network,
+    )
+
+    mockAttachmentGet.mockResolvedValueOnce(null)
+    const missing = await storage
+      .loadChatImageForBackup(attachment)
+      .catch((error: unknown) => error)
+    expect(missing).toBeInstanceOf(CloudBackupReadError)
+    expect(missing).toMatchObject({
+      category: 'item_unavailable',
+      reason: 'attachment_not_found',
+      omittable: true,
+    })
+
+    const locked = await storage
+      .loadChatImageForBackup({
+        id: 'missing-key',
+        type: 'image',
+        fileName: 'image.png',
+      })
+      .catch((error: unknown) => error)
+    expect(locked).toBeInstanceOf(CloudBackupReadError)
+    expect(locked).toMatchObject({
+      category: 'item_invalid',
+      reason: 'attachment_key_unavailable',
+      omittable: true,
+    })
+  })
+
+  it('omits only structured chat decode failures in the strict backup adapter', async () => {
+    const storage = new CloudStorageService()
+    mockEnclavePull.mockResolvedValue({
+      items: [
+        {
+          id: 'chat',
+          ok: true,
+          etag: '1',
+          plaintext: btoa('{'),
+        },
+      ],
+    })
+    const malformed = await storage
+      .downloadChatForBackup('chat')
+      .catch((error: unknown) => error)
+    expect(malformed).toBeInstanceOf(CloudBackupReadError)
+    expect(malformed).toMatchObject({
+      category: 'item_invalid',
+      reason: 'chat_payload_invalid',
+      omittable: true,
+    })
+
+    const runtimeFailure = new Error('unexpected JSON runtime failure')
+    const parse = vi.spyOn(JSON, 'parse').mockImplementationOnce(() => {
+      throw runtimeFailure
+    })
+    mockEnclavePull.mockResolvedValue({
+      items: [
+        {
+          id: 'chat',
+          ok: true,
+          etag: '1',
+          plaintext: btoa('{}'),
+        },
+      ],
+    })
+    try {
+      await expect(storage.downloadChatForBackup('chat')).rejects.toBe(
+        runtimeFailure,
+      )
+    } finally {
+      parse.mockRestore()
+    }
+  })
+
+  it('keeps unknown legacy attachment runtime failures fatal', async () => {
+    const runtimeFailure = new Error('unexpected response failure')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => {
+          throw runtimeFailure
+        },
+      }),
+    )
+
+    await expect(
+      new CloudStorageService().loadChatImageForBackup({
+        id: 'legacy',
+        type: 'image',
+        fileName: 'legacy.png',
+        key: 'AA==',
+      } as unknown as Parameters<
+        CloudStorageService['loadChatImageForBackup']
+      >[0]),
+    ).rejects.toBe(runtimeFailure)
   })
 
   it('preserves an explicit project delete on a single conflict pull', async () => {

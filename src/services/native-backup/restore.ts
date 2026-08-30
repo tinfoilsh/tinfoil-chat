@@ -11,9 +11,10 @@ import {
 } from '@zip.js/zip.js'
 import { NATIVE_BACKUP_ENTITY_KINDS, NATIVE_BACKUP_LIMITS } from './constants'
 import {
+  assertNativeBackupOmissionsConsistent,
   assertSemanticContent,
-  parseNativeBackupManifestV1,
-  type NativeBackupManifestV1,
+  parseNativeBackupManifest,
+  type NativeBackupManifest,
 } from './format'
 import { detectNativeBackupImageMimeType } from './image-mime'
 import {
@@ -50,9 +51,9 @@ export type NativeCloudUpload = { kind: 'blob'; blob: Blob; filename: string } |
 // prettier-ignore
 export type NativeBackupImageSource = { metadata: NativeBackupImage; source: { file: File; path: string; sizeBytes: number; sha256: string } }
 // prettier-ignore
-export type ValidatedNativeRestore = { backup: NativeBackupManifestV1; local: { chats: NativeBackupChat[]; images: NativeBackupImageSource[] }; cloud: { manifest: NativeCloudImportManifestV1; upload: NativeCloudUpload } | null }
+export type ValidatedNativeRestore = { backup: NativeBackupManifest; local: { chats: NativeBackupChat[]; images: NativeBackupImageSource[] }; cloud: { manifest: NativeCloudImportManifestV1; upload: NativeCloudUpload } | null }
 // prettier-ignore
-type ParsedBackup = { backup: NativeBackupManifestV1; projects: NativeBackupProject[]; documents: NativeBackupProjectDocument[]; cloudChats: NativeBackupChat[]; localChats: NativeBackupChat[]; relationships: NativeBackupRelationships; images: Array<{ metadata: NativeBackupImage; entry: NativeRestoreEntry; sha256: string }> }
+type ParsedBackup = { backup: NativeBackupManifest; projects: NativeBackupProject[]; documents: NativeBackupProjectDocument[]; cloudChats: NativeBackupChat[]; localChats: NativeBackupChat[]; relationships: NativeBackupRelationships; images: Array<{ metadata: NativeBackupImage; entry: NativeRestoreEntry; sha256: string }> }
 function fail(message: string): never {
   throw new Error(`Invalid native backup restore: ${message}`)
 }
@@ -142,11 +143,11 @@ async function parseArchive(
 ): Promise<ParsedBackup> {
   const manifestEntry = byPath.get(MANIFEST_PATH) ?? fail('manifest is missing')
   const manifestRead = await manifestEntry.read(signal)
-  let backup: NativeBackupManifestV1
+  let backup: NativeBackupManifest
   try {
     if (manifestRead.bytes.length !== manifestEntry.uncompressedSize)
       fail('manifest size mismatch')
-    backup = parseNativeBackupManifestV1(manifestRead.bytes)
+    backup = parseNativeBackupManifest(manifestRead.bytes)
   } finally {
     manifestRead.release()
   }
@@ -240,6 +241,16 @@ async function parseArchive(
     relationValue,
     images.map(({ metadata }) => metadata),
   )
+  if (backup.version === 2)
+    assertNativeBackupOmissionsConsistent(
+      backup.omissions,
+      projects,
+      documents,
+      cloudChats,
+      localChats,
+      relationValue,
+      images.map(({ metadata }) => metadata),
+    )
   // prettier-ignore
   const counts = {
     projects: projects.length, project_documents: documents.length, cloud_chats: cloudChats.length, local_chats: localChats.length, relationships: Object.values(relationValue).reduce((sum, values) => sum + values.length, 0), images: images.length, files: backup.files.length,

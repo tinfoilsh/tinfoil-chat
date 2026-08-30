@@ -70,6 +70,57 @@ function emptyReport(): NativeRestoreResult['report'] {
   }
 }
 
+function applySourceBackupWarnings(
+  validated: ValidatedNativeRestore,
+  report: NativeRestoreResult['report'],
+) {
+  if (validated.backup.version !== 2 || validated.backup.complete) return
+  const targets: Partial<
+    Record<
+      (typeof validated.backup.omissions)[number]['kind'],
+      NativeRestoreKind
+    >
+  > = {
+    project: 'projects',
+    project_document: 'project_documents',
+    cloud_chat: 'cloud_chats',
+    local_chat: 'local_chats',
+    attachment: 'attachments',
+  }
+  const counts = new Map<NativeRestoreKind, number>()
+  for (const omission of validated.backup.omissions) {
+    const target = targets[omission.kind]
+    if (!target) continue
+    counts.set(target, (counts.get(target) ?? 0) + 1)
+  }
+  const labels: Record<NativeRestoreKind, [string, string]> = {
+    projects: ['project', 'projects'],
+    project_documents: ['project document', 'project documents'],
+    cloud_chats: ['cloud chat', 'cloud chats'],
+    local_chats: ['local chat', 'local chats'],
+    attachments: ['attachment', 'attachments'],
+  }
+  for (const [kind, count] of counts)
+    report[kind].warnings.push(
+      `Source archive omitted ${count} ${labels[kind][count === 1 ? 0 : 1]}.`,
+    )
+  const adjusted = validated.backup.warnings
+    .filter(({ category }) => category === 'relationship_adjustment')
+    .reduce((sum, warning) => sum + warning.count, 0)
+  if (adjusted)
+    report.cloud_chats.warnings.push(
+      `Source archive adjusted ${adjusted} relationship${adjusted === 1 ? '' : 's'} to keep restored data valid.`,
+    )
+  if (
+    validated.backup.warnings.some(
+      ({ code }) => code === 'local_inventory_unstable',
+    )
+  )
+    report.local_chats.warnings.push(
+      'Local chats changed repeatedly during export; included local chats are a partial snapshot.',
+    )
+}
+
 // prettier-ignore
 function destinationChatId(ownerId: string, backupId: string, sourceId: string) {
   const input = new TextEncoder().encode(`${ownerId}\0${backupId}\0${sourceId}`)
@@ -236,6 +287,7 @@ export async function restoreNativeBackup(
   if (!ownerId.trim()) throw new Error('Sign in before restoring a backup')
   const report = emptyReport()
   const validated = await dependencies.validate(file, { signal })
+  applySourceBackupWarnings(validated, report)
   let status: ImportStatusResponse | null = null
   let jobId: string | undefined
   if (validated.cloud) {

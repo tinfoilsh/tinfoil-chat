@@ -1,3 +1,4 @@
+import { CloudBackupReadError } from '@/services/cloud/backup-read-error'
 import { ProjectStorageService } from '@/services/cloud/project-storage'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -90,6 +91,37 @@ describe('ProjectStorageService documents', () => {
     expect(documents.get('doc-1')?.sizeBytes).toBe(
       new TextEncoder().encode(content).length,
     )
+  })
+
+  it('strictly distinguishes malformed document data from runtime failures', async () => {
+    const storage = new ProjectStorageService()
+    mocks.enclavePull.mockResolvedValue({
+      items: [{ id: 'project-1/doc-1', ok: true, etag: '1' }],
+    })
+    mocks.pullItemPlaintext.mockReturnValue(new TextEncoder().encode('{'))
+
+    const malformed = await storage
+      .getDocumentForBackup('project-1', 'doc-1')
+      .catch((error: unknown) => error)
+    expect(malformed).toBeInstanceOf(CloudBackupReadError)
+    expect(malformed).toMatchObject({
+      category: 'item_invalid',
+      reason: 'document_payload_invalid',
+      omittable: true,
+    })
+
+    const runtimeFailure = new Error('unexpected JSON runtime failure')
+    const parse = vi.spyOn(JSON, 'parse').mockImplementationOnce(() => {
+      throw runtimeFailure
+    })
+    mocks.pullItemPlaintext.mockReturnValue(new TextEncoder().encode('{}'))
+    try {
+      await expect(
+        storage.getDocumentForBackup('project-1', 'doc-1'),
+      ).rejects.toBe(runtimeFailure)
+    } finally {
+      parse.mockRestore()
+    }
   })
 
   it('deduplicates documents listed on multiple pages', async () => {
