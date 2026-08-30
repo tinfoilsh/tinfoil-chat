@@ -1,5 +1,6 @@
 import { CloudSyncSetupModal } from '@/components/modals/cloud-sync-setup-modal'
 import { encryptionService } from '@/services/encryption/encryption-service'
+import { PasskeyTimeoutError, PrfNotSupportedError } from '@/services/passkey'
 import {
   isCloudSyncEnabled,
   setCloudSyncEnabled,
@@ -96,6 +97,46 @@ describe('CloudSyncSetupModal onboarding', () => {
     expect(
       await screen.findByRole('heading', { name: 'Setup Failed' }),
     ).toBeInTheDocument()
+  })
+
+  it('explains when the passkey provider does not support PRF', async () => {
+    const error = new PrfNotSupportedError()
+    render(
+      <CloudSyncSetupModal
+        {...baseProps}
+        prfSupported
+        onSetupWithPasskey={vi.fn().mockRejectedValue(error)}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Passkey Provider Not Supported',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(error.message)).toBeInTheDocument()
+    expect(mocks.logError).not.toHaveBeenCalled()
+  })
+
+  it('explains when passkey setup times out', async () => {
+    const error = new PasskeyTimeoutError()
+    render(
+      <CloudSyncSetupModal
+        {...baseProps}
+        prfSupported
+        onSetupWithPasskey={vi.fn().mockRejectedValue(error)}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'Passkey Setup Timed Out' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(error.message)).toBeInTheDocument()
+    expect(mocks.logError).not.toHaveBeenCalled()
   })
 
   it('shows the intro before manual key setup', async () => {

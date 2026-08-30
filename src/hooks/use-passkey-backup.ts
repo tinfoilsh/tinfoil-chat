@@ -347,7 +347,7 @@ export function usePasskeyBackup({
   /**
    * Create a PRF passkey and encrypt the given key bundle to the backend.
    * Returns true if the passkey was created and keys stored, false if the user
-   * cancelled or PRF wasn't supported, throws on unexpected errors.
+   * cancelled, and throws when setup cannot proceed or fails unexpectedly.
    */
   const createAndStorePasskeyBackup = async (
     userInfo: { userId: string; userName: string; displayName: string },
@@ -1403,7 +1403,8 @@ export function usePasskeyBackup({
    * generate a key in memory, create a passkey to back it up, and persist the
    * key only after passkey creation succeeds. Invoked from the first-time
    * confirmation modal — we intentionally do not auto-trigger the native
-   * passkey dialog on page load.
+   * passkey dialog on page load. Expected provider and timeout errors are
+   * rethrown so the modal can explain how the user can recover.
    */
   const setupFirstTimePasskey = useCallback(async (): Promise<boolean> => {
     setupWarningDismissedFlag.clear()
@@ -1518,6 +1519,12 @@ export function usePasskeyBackup({
         })
       }
       markFailedAndClosePrompt()
+      if (
+        error instanceof PrfNotSupportedError ||
+        error instanceof PasskeyTimeoutError
+      ) {
+        throw error
+      }
       return false
     }
   }, [applyRecoveredKeyBundle, generateKeyWithPasskeyBackup])
