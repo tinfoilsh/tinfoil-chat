@@ -6,6 +6,7 @@ import { importStatus,type ImportStatusResponse } from '@/services/sync-enclave/
 import { uint8ArrayToBase64 } from '@/utils/binary-codec'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
+import { NATIVE_BACKUP_VERSION_V2 } from './constants'
 import {
   forEachNativeBackupLocalImage,
   validateAndPackageNativeBackup,
@@ -74,7 +75,11 @@ function applySourceBackupWarnings(
   validated: ValidatedNativeRestore,
   report: NativeRestoreResult['report'],
 ) {
-  if (validated.backup.version !== 2 || validated.backup.complete) return
+  if (
+    validated.backup.version !== NATIVE_BACKUP_VERSION_V2 ||
+    validated.backup.complete
+  )
+    return
   const targets: Partial<
     Record<
       (typeof validated.backup.omissions)[number]['kind'],

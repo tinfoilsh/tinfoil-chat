@@ -43,6 +43,7 @@ import {
   type NativeBackupImageCandidate,
 } from './sanitize'
 const STABLE_READ_ATTEMPTS = 3
+const ATTACHMENT_DOWNLOAD_CONCURRENCY = 4
 const encoder = new TextEncoder()
 type CloudInventoryItem = BackupInventoryItem
 type DocumentItem = BackupInventoryItem & { project_id: string }
@@ -121,6 +122,17 @@ function failItem(
     true,
   )
 }
+function isOmittableCollectionError(
+  error: unknown,
+): error is NativeBackupCollectionError & {
+  category: NativeBackupOmission['category']
+} {
+  return (
+    error instanceof NativeBackupCollectionError &&
+    error.omittable &&
+    error.category !== 'systemic'
+  )
+}
 async function wait<T>(s: AbortSignal | undefined, read: () => Promise<T>) {
   s?.throwIfAborted()
   const value = await read()
@@ -176,6 +188,36 @@ function groupCloudInventory(
     else documents.push(item as DocumentItem)
   }
   return { chats, projects, documents, discovered: response.total_items }
+}
+async function mapLimitInOrder<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  fn: (value: T) => Promise<R>,
+  signal?: AbortSignal,
+): Promise<R[]> {
+  const output = new Array<R>(values.length)
+  let nextIndex = 0
+  let stopped = false
+  let firstError: unknown
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+      while (nextIndex < values.length && !stopped) {
+        const index = nextIndex++
+        try {
+          signal?.throwIfAborted()
+          output[index] = await fn(values[index])
+          signal?.throwIfAborted()
+        } catch (error) {
+          if (!stopped) {
+            stopped = true
+            firstError = error
+          }
+        }
+      }
+    }),
+  )
+  if (stopped) throw firstError
+  return output
 }
 type Pending = [number, number, number, number, number]
 const budgetLimits: Array<[string, number]> = [
@@ -289,10 +331,7 @@ async function readRecord<T>(
           error.category === 'snapshot_changed'
         )
           throw lastError
-      } else if (
-        error instanceof NativeBackupCollectionError &&
-        error.omittable
-      ) {
+      } else if (isOmittableCollectionError(error)) {
         lastError = error
       } else {
         throw error
@@ -367,7 +406,7 @@ function localInventoryToken(chats: StoredChat[], userId: string): string {
     try {
       return [[chat.id, localToken(chat)]]
     } catch (error) {
-      if (error instanceof NativeBackupCollectionError && error.omittable)
+      if (isOmittableCollectionError(error))
         return [[chat.id, error.category, error.reason]]
       throw error
     }
@@ -400,17 +439,19 @@ async function collectChat(
     candidate: NativeBackupImageCandidate
     failure: NativeBackupCollectionError
   }> = []
-  for (const candidate of candidates) {
-    try {
-      const attachment =
-        candidate.attachmentIndex === undefined
-          ? undefined
-          : chat.messages[candidate.messageIndex].attachments?.[
-              candidate.attachmentIndex
-            ]
-      const base64 = imagePayload(chat, candidate)
-      let bytes: Uint8Array | null = null
+  const results = await mapLimitInOrder(
+    candidates,
+    ATTACHMENT_DOWNLOAD_CONCURRENCY,
+    async (candidate) => {
       try {
+        const attachment =
+          candidate.attachmentIndex === undefined
+            ? undefined
+            : chat.messages[candidate.messageIndex].attachments?.[
+                candidate.attachmentIndex
+              ]
+        const base64 = imagePayload(chat, candidate)
+        let bytes: Uint8Array | null = null
         if (base64) {
           try {
             bytes = base64ToUint8Array(base64)
@@ -441,52 +482,51 @@ async function collectChat(
             },
           )
         }
+        if (!bytes)
+          failItem(
+            'image',
+            candidate.sourceKey,
+            'image bytes are missing',
+            'unavailable',
+            'attachment_not_found',
+          )
+        const mimeType =
+          detectNativeBackupImageMimeType(bytes) ??
+          failItem(
+            'image',
+            candidate.sourceKey,
+            'image type is unsupported',
+            'invalid',
+            'attachment_type_unsupported',
+          )
+        const metadata = valid('image', candidate.sourceKey, () =>
+          sanitizeNativeBackupImage({
+            ...candidate,
+            id: candidate.sourceKey,
+            mimeType,
+            sizeBytes: bytes.length,
+          }),
+        )
+        return { candidate, bytes, metadata, mimeType }
       } catch (error) {
-        signal?.throwIfAborted()
-        throwIfAuthenticationError(error)
-        throw error
+        if (!allowPartial || !isOmittableCollectionError(error)) throw error
+        return { candidate, failure: error }
       }
-      if (!bytes)
-        failItem(
-          'image',
-          candidate.sourceKey,
-          'image bytes are missing',
-          'unavailable',
-          'attachment_not_found',
-        )
-      const mimeType =
-        detectNativeBackupImageMimeType(bytes) ??
-        failItem(
-          'image',
-          candidate.sourceKey,
-          'image type is unsupported',
-          'invalid',
-          'attachment_type_unsupported',
-        )
-      if (candidate.legacyIndex !== undefined)
-        value.messages[candidate.messageIndex].imageData![
-          candidate.legacyIndex
-        ].mimeType = mimeType
-      const metadata = valid('image', candidate.sourceKey, () =>
-        sanitizeNativeBackupImage({
-          ...candidate,
-          id: candidate.sourceKey,
-          mimeType,
-          sizeBytes: bytes.length,
-        }),
-      )
-      if (allowPartial) budget.imageSize(bytes)
-      else budget.image(pending!, metadata, bytes)
-      images.push({ metadata, bytes })
-    } catch (error) {
-      if (
-        !allowPartial ||
-        !(error instanceof NativeBackupCollectionError) ||
-        !error.omittable
-      )
-        throw error
-      omitted.push({ candidate, failure: error })
+    },
+    signal,
+  )
+  for (const result of results) {
+    if (result.failure) {
+      omitted.push({ candidate: result.candidate, failure: result.failure })
+      continue
     }
+    const { candidate, bytes, metadata, mimeType } = result
+    if (candidate.legacyIndex !== undefined)
+      value.messages[candidate.messageIndex].imageData![
+        candidate.legacyIndex
+      ].mimeType = mimeType
+    if (!allowPartial) budget.image(pending!, metadata, bytes)
+    images.push({ metadata, bytes })
   }
   if (omitted.length) removeOmittedImageReferences(value, omitted, images)
   if (allowPartial) {
@@ -646,17 +686,12 @@ async function collectNativeBackupAttempt(
     error: unknown,
     parentSourceId?: string,
   ) => {
-    if (
-      !allowPartial ||
-      !(error instanceof NativeBackupCollectionError) ||
-      !error.omittable
-    )
-      throw error
+    if (!allowPartial || !isOmittableCollectionError(error)) throw error
     addOmission({
       kind,
       source_id: sourceId,
       ...(parentSourceId ? { parent_source_id: parentSourceId } : {}),
-      category: error.category as NativeBackupOmission['category'],
+      category: error.category,
       reason: error.reason,
     })
   }

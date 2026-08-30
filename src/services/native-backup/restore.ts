@@ -9,7 +9,11 @@ import {
   ZipReader,
   ZipWriter,
 } from '@zip.js/zip.js'
-import { NATIVE_BACKUP_ENTITY_KINDS, NATIVE_BACKUP_LIMITS } from './constants'
+import {
+  NATIVE_BACKUP_ENTITY_KINDS,
+  NATIVE_BACKUP_LIMITS,
+  NATIVE_BACKUP_VERSION_V2,
+} from './constants'
 import {
   assertNativeBackupOmissionsConsistent,
   assertSemanticContent,
@@ -241,7 +245,7 @@ async function parseArchive(
     relationValue,
     images.map(({ metadata }) => metadata),
   )
-  if (backup.version === 2)
+  if (backup.version === NATIVE_BACKUP_VERSION_V2)
     assertNativeBackupOmissionsConsistent(
       backup.omissions,
       projects,

@@ -2,6 +2,7 @@ import type { Attachment } from '@/components/chat/types'
 import { AuthTokenUnavailableError } from '@/services/auth'
 import { CloudBackupReadError } from '@/services/cloud/cloud-storage'
 import {
+  NativeBackupCollectionError,
   collectNativeBackupV2,
   formatNativeBackupV2,
   type NativeBackupCollectionDependencies,
@@ -297,6 +298,105 @@ describe('native backup collection', () => {
 
     expect(result.images).toHaveLength(1)
     expect(result.images[0].bytes).toEqual(png)
+  })
+
+  it('downloads attachments concurrently within a bounded ordered pool', async () => {
+    const attachmentIds = Array.from(
+      { length: 8 },
+      (_, index) => `image-${index}`,
+    )
+    const source = chat({
+      messages: [
+        {
+          role: 'user',
+          content: 'images',
+          timestamp: new Date(timestamp),
+          attachments: attachmentIds.map((id) => ({
+            id,
+            type: 'image' as const,
+            fileName: `${id}.png`,
+            encryptionKey: 'key',
+          })),
+        },
+      ],
+    })
+    let releaseDownloads!: () => void
+    const downloadGate = new Promise<void>((resolve) => {
+      releaseDownloads = resolve
+    })
+    let active = 0
+    let maxActive = 0
+    const getCloudImage = vi.fn(async () => {
+      active++
+      maxActive = Math.max(maxActive, active)
+      await downloadGate
+      active--
+      return png
+    })
+
+    const collection = collectNativeBackupV2(
+      dependencies({
+        getCloudInventory: async () =>
+          inventory([item('chat', 'chat', 'etag')]),
+        getCloudChat: async () => source,
+        getCloudImage,
+      }),
+    )
+    await vi.waitFor(() =>
+      expect(getCloudImage.mock.calls.length).toBeGreaterThan(1),
+    )
+    expect(getCloudImage.mock.calls.length).toBeLessThan(attachmentIds.length)
+    releaseDownloads()
+
+    const result = await collection
+    expect(maxActive).toBeGreaterThan(1)
+    expect(maxActive).toBeLessThan(attachmentIds.length)
+    expect(
+      result.relationships.chatImages.map(
+        ({ imageId }) => JSON.parse(imageId)[4],
+      ),
+    ).toEqual(attachmentIds)
+  })
+
+  it('keeps an explicitly omittable systemic attachment failure fatal', async () => {
+    const source = chat({
+      messages: [
+        {
+          role: 'user',
+          content: 'image',
+          timestamp: new Date(timestamp),
+          attachments: [
+            {
+              id: 'image',
+              type: 'image',
+              fileName: 'image.png',
+              encryptionKey: 'key',
+            },
+          ],
+        },
+      ],
+    })
+    const failure = new NativeBackupCollectionError(
+      'image',
+      'image',
+      'system unavailable',
+      'systemic',
+      'system_unavailable',
+      true,
+    )
+
+    await expect(
+      collectNativeBackupV2(
+        dependencies({
+          getCloudInventory: async () =>
+            inventory([item('chat', 'chat', 'etag')]),
+          getCloudChat: async () => source,
+          getCloudImage: async () => {
+            throw failure
+          },
+        }),
+      ),
+    ).rejects.toBe(failure)
   })
 
   it.each([

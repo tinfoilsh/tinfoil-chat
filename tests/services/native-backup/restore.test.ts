@@ -228,7 +228,26 @@ describe('native backup restore validation and cloud packaging', () => {
       await zip(formatted.manifestBytes, formatted.files),
     )
 
-    expect(result.backup).toMatchObject({ version: 2, complete: false })
+    expect(result.backup).toMatchObject({
+      version: 2,
+      complete: false,
+      omissions: [
+        {
+          kind: 'attachment',
+          source_id: 'missing-source-image',
+          parent_source_id: 'cloud-1',
+          category: 'unavailable',
+          reason: 'attachment_not_found',
+        },
+      ],
+      warnings: [
+        {
+          code: 'source_items_omitted',
+          category: 'source_coverage',
+          count: 1,
+        },
+      ],
+    })
   })
 
   it('rejects incomplete, tampered, unknown, and malformed archives', async () => {

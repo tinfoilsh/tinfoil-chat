@@ -1,7 +1,7 @@
 import * as auth from '@/services/auth'
 import { SyncEnclaveError } from '@/services/sync-enclave'
 import { collectNativeBackupV2, NativeBackupCollectionError } from './collect'
-import { formatNativeBackupV2 } from './format'
+import { formatNativeBackupV2, type NativeBackupWarning } from './format'
 import {
   NativeBackupWriterError,
   prepareNativeBackupArchiveDestination,
@@ -64,19 +64,17 @@ export async function runNativeBackupExport(
   const result = await dependencies.write(formatted, { signal, destination })
   if (result.kind === 'blob') signal.throwIfAborted()
   dependencies.download(result)
-  const omitted = collected.omissions.filter(
-    ({ kind }) => kind !== 'relationship' && kind !== 'local_inventory',
-  ).length
-  const adjustedRelationships = collected.omissions.filter(
-    ({ kind }) => kind === 'relationship',
-  ).length
+  const warningCount = (code: NativeBackupWarning['code']) =>
+    collected.warnings.find((warning) => warning.code === code)?.count ?? 0
+  const omitted = warningCount('source_items_omitted')
+  const adjustedRelationships = warningCount(
+    'chats_detached_from_omitted_projects',
+  )
   return {
     complete: collected.omissions.length === 0,
     omitted,
     adjustedRelationships,
-    localInventoryUnstable: collected.omissions.some(
-      ({ kind }) => kind === 'local_inventory',
-    ),
+    localInventoryUnstable: warningCount('local_inventory_unstable') > 0,
     warnings: collected.warnings.length,
   }
 }
