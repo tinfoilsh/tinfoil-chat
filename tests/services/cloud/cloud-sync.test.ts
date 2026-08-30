@@ -6,7 +6,6 @@ import {
   CloudSyncService,
   CROSS_TAB_SYNC_LOCK,
   CROSS_TAB_SYNC_LOCK_OPTIONS,
-  RemoteChatPageIncompleteError,
 } from '@/services/cloud/cloud-sync'
 import { SyncEnclaveError } from '@/services/sync-enclave/sync-enclave-client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -671,11 +670,21 @@ describe('CloudSyncService revision coordinator routing', () => {
     ).rejects.toThrow('Cloud account changed during synchronization')
   })
 
-  it('retries an incomplete page without advancing its cursor', async () => {
+  it('skips unavailable rows and continues into later history', async () => {
     listChats
       .mockResolvedValueOnce({
         conversations: [
-          { id: 'chat-1', syncVersion: 2, updatedAt: '2026-01-01T00:00:00Z' },
+          {
+            id: 'missing-chat',
+            syncVersion: 1,
+            updatedAt: '2026-01-03T00:00:00Z',
+          },
+          {
+            id: 'invalid-chat',
+            syncVersion: 2,
+            updatedAt: '2026-01-02T00:00:00Z',
+            content: 'invalid',
+          },
         ],
         hasMore: true,
         nextContinuationToken: 'page-3',
@@ -683,27 +692,28 @@ describe('CloudSyncService revision coordinator routing', () => {
       .mockResolvedValueOnce({
         conversations: [
           {
-            id: 'chat-1',
-            syncVersion: 2,
+            id: 'older-chat',
+            syncVersion: 3,
             updatedAt: '2026-01-01T00:00:00Z',
             content: '{}',
           },
         ],
-        hasMore: true,
-        nextContinuationToken: 'page-3',
+        hasMore: false,
       })
-    processRemoteChat.mockResolvedValue({
-      chat: { id: 'chat-1', syncVersion: 2, messages: [] },
-    })
+    processRemoteChat
+      .mockRejectedValueOnce(new Error('invalid ciphertext'))
+      .mockResolvedValueOnce({
+        chat: { id: 'older-chat', syncVersion: 3, messages: [] },
+      })
     getChat.mockResolvedValue(undefined)
 
     const service = new CloudSyncService()
     await expect(
       service.fetchAndStorePage({ limit: 20, continuationToken: 'page-2' }),
-    ).rejects.toBeInstanceOf(RemoteChatPageIncompleteError)
+    ).resolves.toEqual({ hasMore: true, nextToken: 'page-3', saved: 0 })
     await expect(
-      service.fetchAndStorePage({ limit: 20, continuationToken: 'page-2' }),
-    ).resolves.toEqual({ hasMore: true, nextToken: 'page-3', saved: 1 })
+      service.fetchAndStorePage({ limit: 20, continuationToken: 'page-3' }),
+    ).resolves.toEqual({ hasMore: false, nextToken: undefined, saved: 1 })
     expect(listChats).toHaveBeenNthCalledWith(1, {
       limit: 20,
       continuationToken: 'page-2',
@@ -711,12 +721,13 @@ describe('CloudSyncService revision coordinator routing', () => {
     })
     expect(listChats).toHaveBeenNthCalledWith(2, {
       limit: 20,
-      continuationToken: 'page-2',
+      continuationToken: 'page-3',
       includeContent: true,
     })
+    expect(applyRemoteChatIfFresh).toHaveBeenCalledOnce()
   })
 
-  it('rejects a page when storage fails', async () => {
+  it('retains the page cursor for retry when storage fails', async () => {
     listChats.mockResolvedValue({
       conversations: [
         {
@@ -732,14 +743,36 @@ describe('CloudSyncService revision coordinator routing', () => {
       chat: { id: 'chat-1', syncVersion: 2, messages: [] },
     })
     getChat.mockResolvedValue(undefined)
-    applyRemoteChatIfFresh.mockRejectedValueOnce(new Error('storage failed'))
+    applyRemoteChatIfFresh
+      .mockRejectedValueOnce(new Error('storage failed'))
+      .mockResolvedValueOnce({ applied: true })
 
+    const service = new CloudSyncService()
     await expect(
-      new CloudSyncService().fetchAndStorePage({ limit: 20 }),
+      service.fetchAndStorePage({
+        limit: 20,
+        continuationToken: 'page-2',
+      }),
     ).rejects.toMatchObject({
       code: 'REMOTE_CHAT_PAGE_INCOMPLETE',
       chatId: 'chat-1',
       stage: 'storage',
+    })
+    await expect(
+      service.fetchAndStorePage({
+        limit: 20,
+        continuationToken: 'page-2',
+      }),
+    ).resolves.toEqual({ hasMore: false, nextToken: undefined, saved: 1 })
+    expect(listChats).toHaveBeenNthCalledWith(1, {
+      limit: 20,
+      continuationToken: 'page-2',
+      includeContent: true,
+    })
+    expect(listChats).toHaveBeenNthCalledWith(2, {
+      limit: 20,
+      continuationToken: 'page-2',
+      includeContent: true,
     })
   })
 

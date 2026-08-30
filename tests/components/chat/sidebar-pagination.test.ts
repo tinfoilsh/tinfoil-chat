@@ -31,4 +31,15 @@ describe('getChatLoadMoreAction', () => {
       }),
     ).toBe('fetch-remote')
   })
+
+  it('does nothing when local and remote history are exhausted', () => {
+    expect(
+      getChatLoadMoreAction({
+        loadedChatCount: 20,
+        visibleChatCount: 20,
+        hasRemoteCursor: false,
+        canRetryRemoteInitialization: false,
+      }),
+    ).toBe('none')
+  })
 })
