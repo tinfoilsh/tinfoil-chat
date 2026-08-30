@@ -1829,7 +1829,6 @@ export function usePasskeyBackup({
         if (!wrappedKeys) return false
         await addWrappedKeyForCurrentKey({
           wrappedKeys,
-          keyBundle,
           cek: cekBytes,
           keyIdHex,
         })
