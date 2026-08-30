@@ -16,6 +16,11 @@ import {
   type StoredChat,
 } from '@/services/storage/indexed-db'
 import { SyncEnclaveError } from '@/services/sync-enclave'
+import {
+  backupInventory,
+  type BackupInventoryItem,
+  type BackupInventoryResponse,
+} from '@/services/sync-enclave/sync-api'
 import type { Project, ProjectDocument } from '@/types/project'
 import { base64ToUint8Array } from '@/utils/binary-codec'
 import { z } from 'zod'
@@ -37,25 +42,23 @@ import {
   sanitizeNativeBackupRelationships,
   type NativeBackupImageCandidate,
 } from './sanitize'
-const PAGE_SIZE = 500
-const CONCURRENCY = 4
 const STABLE_READ_ATTEMPTS = 3
 const encoder = new TextEncoder()
-type Listed = { id: string; syncVersion: number }
-type Timed = Listed & { createdAt: string; updatedAt: string }
-type DocumentItem = Timed & { projectId: string }
-type Page<T> = Promise<{ items: T[]; next?: string }>
+type CloudInventoryItem = BackupInventoryItem
+type DocumentItem = BackupInventoryItem & { project_id: string }
 export interface NativeBackupCollectionDependencies {
   isAuthenticated(): Promise<boolean>
   activeUserId(): string | null
   requireUnlockedCek(): void
-  listChats(token?: string): Page<Listed>
-  getCloudChat(id: string): Promise<StoredChat | null>
+  getCloudInventory(signal?: AbortSignal): Promise<BackupInventoryResponse>
+  getCloudChat(id: string, expectedEtag: string): Promise<StoredChat | null>
   getCloudImage(value: Attachment): Promise<Uint8Array | null>
-  listProjects(token?: string): Page<Timed>
-  getProject(id: string): Promise<Project | null>
-  listDocuments(projectId: string): Promise<DocumentItem[]>
-  getDocument(projectId: string, id: string): Promise<ProjectDocument | null>
+  getProject(id: string, expectedEtag: string): Promise<Project | null>
+  getDocument(
+    projectId: string,
+    id: string,
+    expectedEtag: string,
+  ): Promise<ProjectDocument | null>
   getLocalChats(): Promise<StoredChat[]>
   getLocalChat(id: string): Promise<StoredChat | null>
 }
@@ -88,27 +91,14 @@ const defaults: NativeBackupCollectionDependencies = {
   isAuthenticated: () => authTokenManager.isAuthenticated(),
   activeUserId,
   requireUnlockedCek: () => void requirePrimaryKeyB64(),
-  listChats: async (continuationToken) => {
-    const page = await cloudStorage.listChats({
-      limit: PAGE_SIZE,
-      continuationToken,
-    })
-    return { items: page.conversations, next: page.nextContinuationToken }
-  },
-  getCloudChat: (id) => cloudStorage.downloadChatForBackup(id),
+  getCloudInventory: backupInventory,
+  getCloudChat: (id, expectedEtag) =>
+    cloudStorage.downloadChatForBackup(id, expectedEtag),
   getCloudImage: (value) => cloudStorage.loadChatImageForBackup(value),
-  listProjects: async (continuationToken) => {
-    const page = await projectStorage.listProjects({
-      limit: PAGE_SIZE,
-      continuationToken,
-    })
-    return { items: page.projects, next: page.nextContinuationToken }
-  },
-  getProject: (id) => projectStorage.getProjectForBackup(id),
-  listDocuments: async (id) =>
-    (await projectStorage.listDocuments(id)).documents,
-  getDocument: (projectId, id) =>
-    projectStorage.getDocumentForBackup(projectId, id),
+  getProject: (id, expectedEtag) =>
+    projectStorage.getProjectForBackup(id, expectedEtag),
+  getDocument: (projectId, id, expectedEtag) =>
+    projectStorage.getDocumentForBackup(projectId, id, expectedEtag),
   getLocalChats: () => indexedDBStorage.getAllChats(),
   getLocalChat: (id) => indexedDBStorage.getChat(id),
 }
@@ -160,18 +150,6 @@ function valid<T>(kind: string, id: string, parse: () => T): T {
     )
   }
 }
-function unique<T extends Listed>(
-  values: T[],
-  key: (value: T) => string = ({ id }) => id,
-): T[] {
-  const byId = new Map<string, T>()
-  for (const value of values) {
-    const identity = key(value)
-    const old = byId.get(identity)
-    if (!old || value.syncVersion >= old.syncVersion) byId.set(identity, value)
-  }
-  return [...byId.values()]
-}
 function throwIfAuthenticationError(error: unknown) {
   if (
     error instanceof AuthTokenUnavailableError ||
@@ -180,111 +158,24 @@ function throwIfAuthenticationError(error: unknown) {
   )
     throw error
 }
-async function pages<T extends Listed>(
-  fn: (t?: string) => Page<T>,
-  s?: AbortSignal,
-  onDiscovered?: (count: number) => void,
-) {
-  const values: T[] = []
-  let token: string | undefined
-  do {
-    const page = await wait(s, () => fn(token))
-    onDiscovered?.(page.items.length)
-    values.push(...page.items)
-    token = page.next
-  } while (token)
-  return unique(values)
-}
 type CloudInventory = {
-  chats: Listed[]
-  projects: Timed[]
+  chats: CloudInventoryItem[]
+  projects: CloudInventoryItem[]
   documents: DocumentItem[]
   discovered: number
 }
-async function discoverCloudInventory(
-  deps: NativeBackupCollectionDependencies,
-  signal?: AbortSignal,
-): Promise<CloudInventory> {
-  let discovered = 0
-  const add = (count: number) => {
-    signal?.throwIfAborted()
-    discovered += count
-    if (discovered > NATIVE_BACKUP_LIMITS.discoveredRecords)
-      fail('limits', 'collection', 'discovered record limit exceeded')
+function groupCloudInventory(
+  response: BackupInventoryResponse,
+): CloudInventory {
+  const chats: CloudInventoryItem[] = []
+  const projects: CloudInventoryItem[] = []
+  const documents: DocumentItem[] = []
+  for (const item of response.items) {
+    if (item.scope === 'chat') chats.push(item)
+    else if (item.scope === 'project') projects.push(item)
+    else documents.push(item as DocumentItem)
   }
-  const [chats, projects] = await Promise.all([
-    pages(deps.listChats, signal, add),
-    pages(deps.listProjects, signal, add),
-  ])
-  const documents = unique(
-    (
-      await mapLimit(
-        projects,
-        async ({ id }) => {
-          const items = await deps.listDocuments(id)
-          add(items.length)
-          return items
-        },
-        signal,
-      )
-    ).flat(),
-    ({ projectId, id }) => JSON.stringify([projectId, id]),
-  )
-  return { chats, projects, documents, discovered }
-}
-function inventoryToken(inventory: CloudInventory): string {
-  const keys = [
-    ...inventory.chats.map(({ id, syncVersion }) => ['chat', id, syncVersion]),
-    ...inventory.projects.map(({ id, syncVersion }) => [
-      'project',
-      id,
-      syncVersion,
-    ]),
-    ...inventory.documents.map(({ projectId, id, syncVersion }) => [
-      'document',
-      projectId,
-      id,
-      syncVersion,
-    ]),
-  ]
-  keys.sort((left, right) => {
-    const a = JSON.stringify(left)
-    const b = JSON.stringify(right)
-    return a < b ? -1 : a > b ? 1 : 0
-  })
-  return JSON.stringify(keys)
-}
-async function refreshListed<T extends Listed>(
-  kind: string,
-  id: string,
-  refresh: () => Promise<T[]>,
-  signal?: AbortSignal,
-): Promise<T> {
-  for (let attempt = 0; attempt < STABLE_READ_ATTEMPTS; attempt++) {
-    const item = unique(await wait(signal, refresh)).find(
-      (candidate) => candidate.id === id,
-    )
-    if (item) return item
-  }
-  return failItem(kind, id, 'record was deleted', 'deleted', 'record_deleted')
-}
-async function mapLimit<T, R>(
-  v: T[],
-  fn: (v: T) => Promise<R>,
-  s?: AbortSignal,
-) {
-  const output = new Array<R>(v.length)
-  let next = 0
-  await Promise.all(
-    Array.from({ length: Math.min(CONCURRENCY, v.length) }, async () => {
-      while (next < v.length) {
-        s?.throwIfAborted()
-        const index = next++
-        output[index] = await wait(s, () => fn(v[index]))
-      }
-    }),
-  )
-  return output
+  return { chats, projects, documents, discovered: response.total_items }
 }
 type Pending = [number, number, number, number, number]
 const budgetLimits: Array<[string, number]> = [
@@ -372,11 +263,22 @@ async function readRecord<T>(
         lastError = new NativeBackupCollectionError(
           kind,
           id,
-          'record could not be decoded',
-          error.category === 'item_invalid' ? 'invalid' : 'unavailable',
+          'record could not be read at the captured version',
+          error.category === 'item_invalid'
+            ? 'invalid'
+            : error.category === 'snapshot_deleted'
+              ? 'deleted'
+              : error.category === 'snapshot_changed'
+                ? 'unstable'
+                : 'unavailable',
           error.reason,
           true,
         )
+        if (
+          error.category === 'snapshot_deleted' ||
+          error.category === 'snapshot_changed'
+        )
+          throw lastError
       } else if (
         error instanceof NativeBackupCollectionError &&
         error.omittable
@@ -389,42 +291,20 @@ async function readRecord<T>(
   }
   throw lastError!
 }
-async function stable<T extends { syncVersion?: number }, I extends Listed>(
+async function collectTimedInventoryItem<T, R>(
   kind: string,
-  initial: I,
+  item: CloudInventoryItem,
   read: () => Promise<T | null>,
-  refresh: () => Promise<I[]>,
-  signal?: AbortSignal,
-): Promise<{ value: T; item: I }> {
-  let item = initial
-  for (let attempt = 0; attempt < STABLE_READ_ATTEMPTS; attempt++) {
-    const value = await readRecord(kind, item.id, read, signal)
-    if (value.syncVersion === item.syncVersion) return { value, item }
-    item = await refreshListed(kind, item.id, refresh, signal)
-  }
-  return failItem(
-    kind,
-    item.id,
-    'version changed during collection',
-    'unstable',
-    'version_did_not_converge',
-  )
-}
-async function timed<T extends { syncVersion?: number }, I extends Timed, R>(
-  kind: string,
-  item: I,
-  read: () => Promise<T | null>,
-  refresh: () => Promise<I[]>,
   sanitize: (value: unknown) => R,
   budget: Budget,
   signal?: AbortSignal,
 ) {
-  const current = await stable(kind, item, read, refresh, signal)
+  const current = await readRecord(kind, item.id, read, signal)
   const value = valid(kind, item.id, () =>
     sanitize({
-      ...current.value,
-      createdAt: current.item.createdAt,
-      updatedAt: current.item.updatedAt,
+      ...current,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
     }),
   )
   budget.json(value, true)
@@ -693,8 +573,6 @@ async function collectNativeBackup(
   deps: NativeBackupCollectionDependencies = defaults,
   signal?: AbortSignal,
   allowPartial = false,
-  inventoryAttempt = 0,
-  localInventoryAttempt = 0,
 ): Promise<NativeBackupV2Input> {
   if (!(await wait(signal, () => deps.isAuthenticated())))
     fail('account', 'active', 'signed-in user is required')
@@ -705,10 +583,27 @@ async function collectNativeBackup(
   } catch {
     fail('account', userId, 'cloud encryption key is locked or unavailable')
   }
-  const [inventory, localSnapshots] = await Promise.all([
-    discoverCloudInventory(deps, signal),
-    wait(signal, () => deps.getLocalChats()),
-  ])
+  const response = await wait(signal, () => deps.getCloudInventory(signal))
+  if (response.total_items > NATIVE_BACKUP_LIMITS.discoveredRecords)
+    fail('limits', 'collection', 'discovered record limit exceeded')
+  return collectNativeBackupAttempt(
+    deps,
+    groupCloudInventory(response),
+    userId,
+    signal,
+    allowPartial,
+  )
+}
+
+async function collectNativeBackupAttempt(
+  deps: NativeBackupCollectionDependencies,
+  inventory: CloudInventory,
+  userId: string,
+  signal?: AbortSignal,
+  allowPartial = false,
+  localInventoryAttempt = 0,
+): Promise<NativeBackupV2Input> {
+  const localSnapshots = await wait(signal, () => deps.getLocalChats())
   if (
     inventory.discovered + localSnapshots.length >
     NATIVE_BACKUP_LIMITS.discoveredRecords
@@ -751,11 +646,10 @@ async function collectNativeBackup(
   for (const item of projectItems) {
     try {
       projects.push(
-        await timed(
+        await collectTimedInventoryItem(
           'project',
           item,
-          () => deps.getProject(item.id),
-          () => pages(deps.listProjects, signal),
+          () => deps.getProject(item.id, item.etag),
           sanitizeNativeBackupProject,
           budget,
           signal,
@@ -766,32 +660,31 @@ async function collectNativeBackup(
     }
   }
   const includedProjectIds = new Set(projects.map(({ id }) => id))
-  const documentItems = allDocumentItems.filter(({ projectId }) =>
-    includedProjectIds.has(projectId),
+  const documentItems = allDocumentItems.filter(({ project_id }) =>
+    includedProjectIds.has(project_id),
   )
   const projectDocuments = []
   for (const item of documentItems) {
     try {
       projectDocuments.push(
-        await timed(
+        await collectTimedInventoryItem(
           'project document',
           item,
-          () => deps.getDocument(item.projectId, item.id),
-          () => deps.listDocuments(item.projectId),
+          () => deps.getDocument(item.project_id, item.id, item.etag),
           sanitizeNativeBackupProjectDocument,
           budget,
           signal,
         ),
       )
     } catch (error) {
-      omit('project_document', item.id, error, item.projectId)
+      omit('project_document', item.id, error, item.project_id)
     }
   }
   for (const item of projectItems.filter(
     ({ id }) => !includedProjectIds.has(id),
   )) {
     for (const document of allDocumentItems.filter(
-      ({ projectId }) => projectId === item.id,
+      ({ project_id }) => project_id === item.id,
     ))
       addOmission({
         kind: 'project_document',
@@ -804,26 +697,27 @@ async function collectNativeBackup(
   const cloudResults = []
   for (const listed of chatItems) {
     try {
-      const result = await retryChat(
+      const chat = await readRecord(
         'cloud chat',
         listed.id,
-        listed.syncVersion,
-        () => deps.getCloudChat(listed.id),
-        ({ syncVersion }) => syncVersion,
-        (chat) => classifyNativeBackupChat(chat, 'cloud') !== null,
-        async () =>
-          (
-            await refreshListed(
-              'cloud chat',
-              listed.id,
-              () => pages(deps.listChats, signal),
-              signal,
-            )
-          ).syncVersion,
-        (chat) => collectChat(chat, true, deps, budget, signal, allowPartial),
+        () => deps.getCloudChat(listed.id, listed.etag),
         signal,
       )
-      if (!result) continue
+      const capturedChat = {
+        ...chat,
+        createdAt: listed.created_at,
+        updatedAt: listed.updated_at,
+        projectId: listed.project_id,
+      }
+      if (classifyNativeBackupChat(capturedChat, 'cloud') === null) continue
+      const result = await collectChat(
+        capturedChat,
+        true,
+        deps,
+        budget,
+        signal,
+        allowPartial,
+      )
       budget.commit(result.pending, true)
       cloudResults.push(result)
       for (const { failure } of result.omitted)
@@ -888,38 +782,23 @@ async function collectNativeBackup(
   })
   budget.json(relationships)
   signal?.throwIfAborted()
-  const [finalInventory, finalLocalSnapshots] = await Promise.all([
-    discoverCloudInventory(deps, signal),
-    wait(signal, () => deps.getLocalChats()),
-  ])
+  const finalLocalSnapshots = await wait(signal, () => deps.getLocalChats())
   if (
-    finalInventory.discovered + finalLocalSnapshots.length >
+    inventory.discovered + finalLocalSnapshots.length >
     NATIVE_BACKUP_LIMITS.discoveredRecords
   )
     fail('limits', 'collection', 'discovered record limit exceeded')
-  const cloudChanged =
-    inventoryToken(finalInventory) !== inventoryToken(inventory)
   const localChanged =
     localInventoryToken(finalLocalSnapshots, userId) !==
     initialLocalInventoryToken
-  if (cloudChanged) {
-    if (inventoryAttempt + 1 >= NATIVE_BACKUP_LIMITS.inventoryAttempts)
-      fail('inventory', 'cloud', 'cloud inventory did not converge')
-    return collectNativeBackup(
-      deps,
-      signal,
-      allowPartial,
-      inventoryAttempt + 1,
-      localChanged ? localInventoryAttempt + 1 : localInventoryAttempt,
-    )
-  }
   if (localChanged) {
-    if (localInventoryAttempt + 1 < NATIVE_BACKUP_LIMITS.inventoryAttempts)
-      return collectNativeBackup(
+    if (localInventoryAttempt + 1 < NATIVE_BACKUP_LIMITS.localInventoryAttempts)
+      return collectNativeBackupAttempt(
         deps,
+        inventory,
+        userId,
         signal,
         allowPartial,
-        inventoryAttempt,
         localInventoryAttempt + 1,
       )
     if (!allowPartial)

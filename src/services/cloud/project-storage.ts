@@ -22,7 +22,10 @@ import {
   SyncEnclaveError,
 } from '../sync-enclave/sync-api'
 import type { AccountOperationGuard } from './account-operation'
-import { CloudBackupReadError } from './backup-read-error'
+import {
+  CloudBackupReadError,
+  validateBackupPullItem,
+} from './backup-read-error'
 import { pullKey, requirePrimaryKeyB64 } from './cek-encoding'
 import { canWriteToCloud } from './cloud-key-authorization'
 import { ProjectDataSchema, ProjectDocumentPlaintextSchema } from './schemas'
@@ -217,7 +220,7 @@ export class ProjectStorageService {
 
   async getProject(
     projectId: string,
-    options: { strictBackupRead?: boolean } = {},
+    options: { strictBackupRead?: boolean; expectedEtag?: string } = {},
   ): Promise<Project | null> {
     try {
       const keys = pullKey()
@@ -236,7 +239,10 @@ export class ProjectStorageService {
         ids: [projectId],
         keys,
       })
-      const item = resp.items[0]
+      const item =
+        options.expectedEtag !== undefined
+          ? validateBackupPullItem(resp.items, projectId, options.expectedEtag)
+          : resp.items[0]
       if (!item || !item.ok) {
         if (item && item.code === 'NOT_FOUND') return null
         if (options.strictBackupRead)
@@ -317,8 +323,11 @@ export class ProjectStorageService {
     }
   }
 
-  getProjectForBackup(projectId: string): Promise<Project | null> {
-    return this.getProject(projectId, { strictBackupRead: true })
+  getProjectForBackup(
+    projectId: string,
+    expectedEtag: string,
+  ): Promise<Project | null> {
+    return this.getProject(projectId, { strictBackupRead: true, expectedEtag })
   }
 
   // Batch variant of getProject: pulls every requested project in a
@@ -587,7 +596,7 @@ export class ProjectStorageService {
   async getDocument(
     projectId: string,
     documentId: string,
-    options: { strictBackupRead?: boolean } = {},
+    options: { strictBackupRead?: boolean; expectedEtag?: string } = {},
   ): Promise<ProjectDocument | null> {
     try {
       const keys = pullKey()
@@ -606,7 +615,11 @@ export class ProjectStorageService {
         ids: [projectDocumentId(projectId, documentId)],
         keys,
       })
-      const item = resp.items[0]
+      const wireId = projectDocumentId(projectId, documentId)
+      const item =
+        options.expectedEtag !== undefined
+          ? validateBackupPullItem(resp.items, wireId, options.expectedEtag)
+          : resp.items[0]
       if (!item || !item.ok) {
         if (item && item.code === 'NOT_FOUND') return null
         if (options.strictBackupRead)
@@ -688,8 +701,12 @@ export class ProjectStorageService {
   getDocumentForBackup(
     projectId: string,
     documentId: string,
+    expectedEtag: string,
   ): Promise<ProjectDocument | null> {
-    return this.getDocument(projectId, documentId, { strictBackupRead: true })
+    return this.getDocument(projectId, documentId, {
+      strictBackupRead: true,
+      expectedEtag,
+    })
   }
 
   // Batch variant of getDocument: pulls every requested document for a

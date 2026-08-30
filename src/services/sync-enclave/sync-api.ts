@@ -21,6 +21,7 @@
  */
 
 import { base64ToUint8Array, uint8ArrayToBase64 } from '@/utils/binary-codec'
+import { z } from 'zod'
 import { SyncEnclaveError, getSyncEnclaveClient } from './sync-enclave-client'
 
 export type Scope = 'profile' | 'chat' | 'project' | 'project_document'
@@ -90,6 +91,8 @@ export interface PullItem {
   plaintext?: string
   key_id?: string
   etag?: string
+  /** ETag replaced by a successful lazy rewrap during this pull. */
+  previous_etag?: string
   project_id_set?: boolean
   project_id?: string | null
   needs_rewrap?: boolean
@@ -101,6 +104,44 @@ export interface PullItem {
 export interface PullResponse {
   items: PullItem[]
   next_cursor?: string
+}
+
+export type BackupInventoryScope = 'chat' | 'project' | 'project_document'
+
+export interface BackupInventoryItem {
+  scope: BackupInventoryScope
+  id: string
+  etag: string
+  project_id?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface BackupInventoryResponse {
+  captured_at: string
+  total_items: number
+  items: BackupInventoryItem[]
+}
+
+export type BackupInventoryProtocolErrorCode =
+  | 'malformed_response'
+  | 'invalid_total'
+  | 'invalid_timestamp'
+  | 'unsupported_scope'
+  | 'duplicate_item'
+  | 'invalid_order'
+  | 'invalid_relationship'
+  | 'missing_id'
+  | 'missing_etag'
+
+export class BackupInventoryProtocolError extends Error {
+  constructor(
+    public readonly code: BackupInventoryProtocolErrorCode,
+    public readonly itemIndex?: number,
+  ) {
+    super('Sync enclave returned an invalid backup inventory')
+    this.name = 'BackupInventoryProtocolError'
+  }
 }
 
 export interface ListStatusRequest {
@@ -594,6 +635,169 @@ export async function pull(req: PullRequest): Promise<PullResponse> {
   // downstream `for (const item of resp.items)` consumer. Force a
   // stable [] at the boundary so callers can iterate without guards.
   return { ...resp, items: resp.items ?? [] }
+}
+
+const BACKUP_INVENTORY_SCOPES: readonly BackupInventoryScope[] = [
+  'chat',
+  'project',
+  'project_document',
+]
+const BACKUP_INVENTORY_RESPONSE_FIELDS = [
+  'captured_at',
+  'total_items',
+  'items',
+] as const
+const BACKUP_INVENTORY_ITEM_FIELDS = [
+  'scope',
+  'id',
+  'etag',
+  'project_id',
+  'created_at',
+  'updated_at',
+] as const
+const BACKUP_INVENTORY_TIMESTAMP_SCHEMA = z.string().datetime({ offset: true })
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function hasExactFields(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+  required: readonly string[],
+): boolean {
+  const keys = Object.keys(value)
+  return (
+    keys.every((key) => allowed.includes(key)) &&
+    required.every((key) => Object.hasOwn(value, key))
+  )
+}
+
+function parseInventoryTimestamp(
+  value: unknown,
+  itemIndex?: number,
+): { value: string; milliseconds: number } {
+  if (
+    typeof value !== 'string' ||
+    !BACKUP_INVENTORY_TIMESTAMP_SCHEMA.safeParse(value).success
+  )
+    throw new BackupInventoryProtocolError('invalid_timestamp', itemIndex)
+  const milliseconds = Date.parse(value)
+  if (!Number.isFinite(milliseconds))
+    throw new BackupInventoryProtocolError('invalid_timestamp', itemIndex)
+  return { value, milliseconds }
+}
+
+function validateBackupInventory(value: unknown): BackupInventoryResponse {
+  if (
+    !isObject(value) ||
+    !hasExactFields(
+      value,
+      BACKUP_INVENTORY_RESPONSE_FIELDS,
+      BACKUP_INVENTORY_RESPONSE_FIELDS,
+    ) ||
+    !Array.isArray(value.items)
+  )
+    throw new BackupInventoryProtocolError('malformed_response')
+  if (
+    typeof value.total_items !== 'number' ||
+    !Number.isSafeInteger(value.total_items) ||
+    value.total_items < 0 ||
+    value.total_items !== value.items.length
+  )
+    throw new BackupInventoryProtocolError('invalid_total')
+
+  const captured = parseInventoryTimestamp(value.captured_at)
+  const seen = new Set<string>()
+  let previousOrderKey: string | undefined
+  const items = value.items.map((candidate, itemIndex): BackupInventoryItem => {
+    if (
+      !isObject(candidate) ||
+      !hasExactFields(candidate, BACKUP_INVENTORY_ITEM_FIELDS, [
+        'scope',
+        'id',
+        'etag',
+        'created_at',
+        'updated_at',
+      ])
+    )
+      throw new BackupInventoryProtocolError('malformed_response', itemIndex)
+    if (
+      typeof candidate.scope !== 'string' ||
+      !BACKUP_INVENTORY_SCOPES.includes(candidate.scope as BackupInventoryScope)
+    )
+      throw new BackupInventoryProtocolError('unsupported_scope', itemIndex)
+    const scope = candidate.scope as BackupInventoryScope
+    if (typeof candidate.id !== 'string' || candidate.id.trim().length === 0)
+      throw new BackupInventoryProtocolError('missing_id', itemIndex)
+    if (
+      typeof candidate.etag !== 'string' ||
+      candidate.etag.trim().length === 0
+    )
+      throw new BackupInventoryProtocolError('missing_etag', itemIndex)
+    const hasProjectId = Object.hasOwn(candidate, 'project_id')
+    if (
+      (hasProjectId &&
+        (typeof candidate.project_id !== 'string' ||
+          candidate.project_id.trim().length === 0)) ||
+      (scope === 'project_document' && !hasProjectId) ||
+      (scope === 'project' && hasProjectId)
+    )
+      throw new BackupInventoryProtocolError('invalid_relationship', itemIndex)
+
+    const created = parseInventoryTimestamp(candidate.created_at, itemIndex)
+    const updated = parseInventoryTimestamp(candidate.updated_at, itemIndex)
+    if (
+      created.milliseconds > updated.milliseconds ||
+      updated.milliseconds > captured.milliseconds
+    )
+      throw new BackupInventoryProtocolError('invalid_order', itemIndex)
+
+    const identity = `${scope}\u0000${candidate.project_id ?? ''}\u0000${candidate.id}`
+    if (seen.has(identity))
+      throw new BackupInventoryProtocolError('duplicate_item', itemIndex)
+    seen.add(identity)
+    const orderKey = `${String(BACKUP_INVENTORY_SCOPES.indexOf(scope)).padStart(2, '0')}\u0000${candidate.id}\u0000${candidate.project_id ?? ''}`
+    if (previousOrderKey !== undefined && orderKey <= previousOrderKey)
+      throw new BackupInventoryProtocolError('invalid_order', itemIndex)
+    previousOrderKey = orderKey
+
+    return {
+      scope,
+      id: candidate.id,
+      etag: candidate.etag,
+      ...(hasProjectId ? { project_id: candidate.project_id as string } : {}),
+      created_at: created.value,
+      updated_at: updated.value,
+    }
+  })
+  const projectIds = new Set(
+    items.filter(({ scope }) => scope === 'project').map(({ id }) => id),
+  )
+  items.forEach((item, itemIndex) => {
+    if (item.project_id && !projectIds.has(item.project_id))
+      throw new BackupInventoryProtocolError('invalid_relationship', itemIndex)
+  })
+  return {
+    captured_at: captured.value,
+    total_items: value.total_items,
+    items,
+  }
+}
+
+export async function backupInventory(
+  signal?: AbortSignal,
+): Promise<BackupInventoryResponse> {
+  signal?.throwIfAborted()
+  const client = await getSyncEnclaveClient(signal)
+  const response = await client.post<unknown>(
+    '/v1/sync/backup-inventory',
+    {},
+    undefined,
+    { signal, requestScope: 'cloud-sync' },
+  )
+  signal?.throwIfAborted()
+  return validateBackupInventory(response)
 }
 
 export async function pullOne(

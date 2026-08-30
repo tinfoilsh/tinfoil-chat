@@ -22,14 +22,20 @@ vi.mock('@/services/cloud/cek-encoding', () => ({
   requirePrimaryKeyB64: () => 'primary-key',
 }))
 
-vi.mock('@/services/sync-enclave/sync-api', () => ({
-  deleteRow: vi.fn(),
-  listStatus: mocks.enclaveListStatus,
-  pull: mocks.enclavePull,
-  push: mocks.enclavePush,
-  newIdempotencyKey: () => 'idempotency-key',
-  pullItemPlaintext: mocks.pullItemPlaintext,
-}))
+vi.mock('@/services/sync-enclave/sync-api', async () => {
+  const actual = await vi.importActual<
+    typeof import('@/services/sync-enclave/sync-api')
+  >('@/services/sync-enclave/sync-api')
+  return {
+    ...actual,
+    deleteRow: vi.fn(),
+    listStatus: mocks.enclaveListStatus,
+    pull: mocks.enclavePull,
+    push: mocks.enclavePush,
+    newIdempotencyKey: () => 'idempotency-key',
+    pullItemPlaintext: mocks.pullItemPlaintext,
+  }
+})
 
 vi.mock('@/utils/error-handling', () => ({
   logError: vi.fn(),
@@ -101,7 +107,7 @@ describe('ProjectStorageService documents', () => {
     mocks.pullItemPlaintext.mockReturnValue(new TextEncoder().encode('{'))
 
     const malformed = await storage
-      .getDocumentForBackup('project-1', 'doc-1')
+      .getDocumentForBackup('project-1', 'doc-1', '1')
       .catch((error: unknown) => error)
     expect(malformed).toBeInstanceOf(CloudBackupReadError)
     expect(malformed).toMatchObject({
@@ -117,11 +123,69 @@ describe('ProjectStorageService documents', () => {
     mocks.pullItemPlaintext.mockReturnValue(new TextEncoder().encode('{}'))
     try {
       await expect(
-        storage.getDocumentForBackup('project-1', 'doc-1'),
+        storage.getDocumentForBackup('project-1', 'doc-1', '1'),
       ).rejects.toBe(runtimeFailure)
     } finally {
       parse.mockRestore()
     }
+  })
+
+  it('enforces captured document identity and opaque ETag for backup reads', async () => {
+    const storage = new ProjectStorageService()
+    mocks.enclavePull.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'project-1/doc-1',
+          ok: true,
+          etag: 'new-etag',
+          plaintext: 'ignored',
+        },
+      ],
+    })
+    await expect(
+      storage.getDocumentForBackup('project-1', 'doc-1', 'captured-etag'),
+    ).rejects.toMatchObject({
+      category: 'snapshot_changed',
+      reason: 'record_changed_after_snapshot',
+    })
+
+    mocks.enclavePull.mockResolvedValueOnce({
+      items: [{ id: 'doc-1', ok: true, etag: 'captured-etag' }],
+    })
+    await expect(
+      storage.getDocumentForBackup('project-1', 'doc-1', 'captured-etag'),
+    ).rejects.toMatchObject({ code: 'unexpected_item' })
+  })
+
+  it('accepts a document lazily rewrapped from the captured ETag', async () => {
+    const storage = new ProjectStorageService()
+    mocks.enclavePull.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'project-1/doc-1',
+          ok: true,
+          etag: 'rewrapped-etag',
+          previous_etag: 'captured-etag',
+        },
+      ],
+    })
+    mocks.pullItemPlaintext.mockReturnValue(
+      new TextEncoder().encode(
+        JSON.stringify({
+          filename: 'notes.txt',
+          contentType: 'text/plain',
+          content: 'rewrapped content',
+        }),
+      ),
+    )
+
+    await expect(
+      storage.getDocumentForBackup('project-1', 'doc-1', 'captured-etag'),
+    ).resolves.toMatchObject({
+      id: 'doc-1',
+      projectId: 'project-1',
+      content: 'rewrapped content',
+    })
   })
 
   it('deduplicates documents listed on multiple pages', async () => {

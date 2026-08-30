@@ -3,7 +3,7 @@ import {
   CloudBackupReadError,
   CloudStorageService,
 } from '@/services/cloud/cloud-storage'
-import { SyncNetworkError } from '@/services/sync-enclave'
+import { SyncEnclaveError, SyncNetworkError } from '@/services/sync-enclave'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockGetAuthHeaders = vi.fn()
@@ -183,6 +183,54 @@ describe('CloudStorageService auth readiness', () => {
     })
   })
 
+  it('translates only structured modern attachment not-found errors', async () => {
+    const storage = new CloudStorageService()
+    const attachment = {
+      id: 'attachment',
+      type: 'image' as const,
+      fileName: 'image.png',
+      encryptionKey: 'key',
+    }
+    const missingByStatus = new SyncEnclaveError(
+      'Attachment missing',
+      404,
+      'ATTACHMENT_MISSING',
+    )
+    mockAttachmentGet.mockRejectedValueOnce(missingByStatus)
+    await expect(
+      storage.loadChatImageForBackup(attachment),
+    ).rejects.toMatchObject({
+      category: 'item_unavailable',
+      reason: 'attachment_not_found',
+      cause: missingByStatus,
+    })
+
+    const missingByCode = new SyncEnclaveError(
+      'Attachment missing',
+      undefined,
+      'NOT_FOUND',
+    )
+    mockAttachmentGet.mockRejectedValueOnce(missingByCode)
+    await expect(
+      storage.loadChatImageForBackup(attachment),
+    ).rejects.toMatchObject({
+      category: 'item_unavailable',
+      reason: 'attachment_not_found',
+      cause: missingByCode,
+    })
+
+    for (const fatal of [
+      new SyncEnclaveError('Server failed', 500, 'INTERNAL'),
+      new SyncEnclaveError('Unauthorized', 401, 'UNAUTHORIZED'),
+      new Error('Unexpected attachment failure'),
+    ]) {
+      mockAttachmentGet.mockRejectedValueOnce(fatal)
+      await expect(storage.loadChatImageForBackup(attachment)).rejects.toBe(
+        fatal,
+      )
+    }
+  })
+
   it('omits only structured chat decode failures in the strict backup adapter', async () => {
     const storage = new CloudStorageService()
     mockEnclavePull.mockResolvedValue({
@@ -196,7 +244,7 @@ describe('CloudStorageService auth readiness', () => {
       ],
     })
     const malformed = await storage
-      .downloadChatForBackup('chat')
+      .downloadChatForBackup('chat', '1')
       .catch((error: unknown) => error)
     expect(malformed).toBeInstanceOf(CloudBackupReadError)
     expect(malformed).toMatchObject({
@@ -220,12 +268,150 @@ describe('CloudStorageService auth readiness', () => {
       ],
     })
     try {
-      await expect(storage.downloadChatForBackup('chat')).rejects.toBe(
+      await expect(storage.downloadChatForBackup('chat', '1')).rejects.toBe(
         runtimeFailure,
       )
     } finally {
       parse.mockRestore()
     }
+  })
+
+  it('requires the captured opaque ETag and exact item identity for backup reads', async () => {
+    const storage = new CloudStorageService()
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [
+        { id: 'chat', ok: true, etag: 'new-etag', plaintext: btoa('{}') },
+      ],
+    })
+    await expect(
+      storage.downloadChatForBackup('chat', 'captured-etag'),
+    ).rejects.toMatchObject({
+      category: 'snapshot_changed',
+      reason: 'record_changed_after_snapshot',
+      omittable: true,
+    })
+
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [{ id: 'other-chat', ok: true, etag: 'captured-etag' }],
+    })
+    await expect(
+      storage.downloadChatForBackup('chat', 'captured-etag'),
+    ).rejects.toMatchObject({ code: 'unexpected_item' })
+
+    mockEnclavePull.mockResolvedValueOnce({ items: [] })
+    await expect(
+      storage.downloadChatForBackup('chat', 'captured-etag'),
+    ).rejects.toMatchObject({ code: 'missing_item' })
+
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [{ id: 'chat', ok: true, plaintext: btoa('{}') }],
+    })
+    await expect(
+      storage.downloadChatForBackup('chat', 'captured-etag'),
+    ).rejects.toMatchObject({ code: 'missing_etag' })
+
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'chat',
+          ok: false,
+          code: 'UNKNOWN_KEY',
+          etag: 'captured-etag',
+          previous_etag: 7,
+        },
+      ],
+    })
+    await expect(
+      storage.downloadChatForBackup('chat', 'captured-etag'),
+    ).rejects.toMatchObject({ code: 'invalid_previous_etag' })
+
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [{ id: 'chat', ok: false, code: 'NOT_FOUND' }],
+    })
+    await expect(
+      storage.downloadChatForBackup('chat', 'captured-etag'),
+    ).rejects.toMatchObject({
+      category: 'snapshot_deleted',
+      reason: 'record_deleted_after_snapshot',
+    })
+  })
+
+  it('accepts a successful lazy rewrap only through a valid previous ETag', async () => {
+    const storage = new CloudStorageService()
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'chat',
+          ok: true,
+          etag: 'rewrapped-etag',
+          previous_etag: 'captured-etag',
+          plaintext: btoa('{"title":"Rewrapped","messages":[]}'),
+        },
+      ],
+    })
+
+    await expect(
+      storage.downloadChatForBackup('chat', 'captured-etag'),
+    ).resolves.toMatchObject({ id: 'chat', title: 'Rewrapped' })
+
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'chat',
+          ok: true,
+          etag: 'captured-etag',
+          previous_etag: '',
+          plaintext: btoa('{}'),
+        },
+      ],
+    })
+    await expect(
+      storage.downloadChatForBackup('chat', 'captured-etag'),
+    ).rejects.toMatchObject({ code: 'invalid_previous_etag' })
+  })
+
+  it('checks failed pull versions before preserving key failures', async () => {
+    const storage = new CloudStorageService()
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [{ id: 'chat', ok: false, code: 'UNKNOWN_KEY', etag: 'new-etag' }],
+    })
+    await expect(
+      storage.downloadChatForBackup('chat', 'captured-etag'),
+    ).rejects.toMatchObject({
+      category: 'snapshot_changed',
+      reason: 'record_changed_after_snapshot',
+    })
+
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'chat',
+          ok: false,
+          code: 'UNKNOWN_KEY',
+          etag: 'rewrapped-etag',
+          previous_etag: 'captured-etag',
+        },
+      ],
+    })
+    const matchingKeyFailure = await storage
+      .downloadChatForBackup('chat', 'captured-etag')
+      .catch((error: unknown) => error)
+    expect(matchingKeyFailure).toBeInstanceOf(SyncEnclaveError)
+    expect(matchingKeyFailure).toMatchObject({ code: 'UNKNOWN_KEY' })
+
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [{ id: 'chat', ok: false, code: 'UNKNOWN_KEY' }],
+    })
+    await expect(
+      storage.downloadChatForBackup('chat', 'captured-etag'),
+    ).rejects.toMatchObject({ code: 'missing_etag' })
+
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [{ id: 'chat', ok: false, code: 'NOT_FOUND', etag: 'new-etag' }],
+    })
+    await expect(
+      storage.downloadChatForBackup('chat', 'captured-etag'),
+    ).rejects.toMatchObject({ category: 'snapshot_changed' })
   })
 
   it('keeps unknown legacy attachment runtime failures fatal', async () => {

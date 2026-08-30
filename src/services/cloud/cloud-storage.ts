@@ -26,7 +26,10 @@ import {
 } from '../sync-enclave/sync-enclave-client'
 import { RESTORE_DELETED_HEADERS } from '../sync-enclave/wire-contract'
 import type { AccountOperationGuard } from './account-operation'
-import { CloudBackupReadError } from './backup-read-error'
+import {
+  CloudBackupReadError,
+  validateBackupPullItem,
+} from './backup-read-error'
 import { pullKey, requirePrimaryKeyB64 } from './cek-encoding'
 import {
   processRemoteChat,
@@ -40,6 +43,7 @@ const AUTH_INIT_WAIT_MS = 3000
 const RESTORE_DELETED_CHAT_HEADER = RESTORE_DELETED_HEADERS.Chat
 const ENCLAVE_CHAT_LIST_LIMIT = 100
 const PROJECT_CHAT_LIST_LIMIT = 500
+const ATTACHMENT_NOT_FOUND_STATUS = 404
 const LEGACY_ATTACHMENT_GONE_STATUS = 410
 const ATTACHMENT_IDEMPOTENCY_KEY_BYTES = 16
 
@@ -431,7 +435,7 @@ export class CloudStorageService {
    */
   async fetchRawChatContent(
     chatId: string,
-    options: { strictBackupRead?: boolean } = {},
+    options: { strictBackupRead?: boolean; expectedEtag?: string } = {},
   ): Promise<RawChatContent | null> {
     const keys = pullKey()
     if (keys.length === 0) {
@@ -449,7 +453,10 @@ export class CloudStorageService {
       ids: [chatId],
       keys,
     })
-    const item = resp.items[0]
+    const item =
+      options.expectedEtag !== undefined
+        ? validateBackupPullItem(resp.items, chatId, options.expectedEtag)
+        : resp.items[0]
     if (!item || !item.ok) {
       if (item && item.code === 'NOT_FOUND') return null
       if (options.strictBackupRead)
@@ -509,9 +516,13 @@ export class CloudStorageService {
     }
   }
 
-  async downloadChatForBackup(chatId: string): Promise<StoredChat | null> {
+  async downloadChatForBackup(
+    chatId: string,
+    expectedEtag: string,
+  ): Promise<StoredChat | null> {
     const raw = await this.fetchRawChatContent(chatId, {
       strictBackupRead: true,
+      expectedEtag,
     })
     if (raw === null) return null
     try {
@@ -650,10 +661,26 @@ export class CloudStorageService {
       )
     }
     if (keyB64) {
-      const plaintext = await enclaveAttachmentGet({
-        id: value.id,
-        attKeyB64: keyB64,
-      })
+      let plaintext: Uint8Array
+      try {
+        plaintext = await enclaveAttachmentGet({
+          id: value.id,
+          attKeyB64: keyB64,
+        })
+      } catch (error) {
+        if (
+          error instanceof SyncEnclaveError &&
+          (error.status === ATTACHMENT_NOT_FOUND_STATUS ||
+            error.code === 'NOT_FOUND')
+        )
+          throw new CloudBackupReadError(
+            'item_unavailable',
+            'attachment_not_found',
+            true,
+            { cause: error },
+          )
+        throw error
+      }
       if (!plaintext) {
         throw new CloudBackupReadError(
           'item_unavailable',
@@ -684,7 +711,7 @@ export class CloudStorageService {
       throw error
     }
     if (
-      response.status === 404 ||
+      response.status === ATTACHMENT_NOT_FOUND_STATUS ||
       response.status === LEGACY_ATTACHMENT_GONE_STATUS
     )
       throw new CloudBackupReadError(

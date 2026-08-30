@@ -8,7 +8,7 @@ export const NATIVE_BACKUP_LIMITS = {
   entities: 100_000,
   discoveredRecords: 100_000,
   omissions: 100_000,
-  inventoryAttempts: 3,
+  localInventoryAttempts: 3,
   messages: 2_000_000,
   attachments: 100_000,
   imageBytes: 32 * 1024 * 1024,

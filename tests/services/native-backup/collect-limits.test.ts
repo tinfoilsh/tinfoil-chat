@@ -1,6 +1,7 @@
 import { CloudBackupReadError } from '@/services/cloud/backup-read-error'
 import type { NativeBackupCollectionDependencies } from '@/services/native-backup/collect'
 import type { StoredChat } from '@/services/storage/indexed-db'
+import type { BackupInventoryItem } from '@/services/sync-enclave/sync-api'
 
 vi.mock('@/services/native-backup/constants', async (importOriginal) => {
   const actual =
@@ -17,23 +18,11 @@ vi.mock('@/services/native-backup/constants', async (importOriginal) => {
 })
 
 const timestamp = '2026-08-20T12:00:00.000Z'
-const localChat: StoredChat = {
-  id: 'local',
-  title: 'Local',
+const cloudChat: StoredChat = {
+  id: 'chat',
+  title: 'Chat',
   messages: [
-    {
-      role: 'user',
-      content: 'one',
-      timestamp: new Date(timestamp),
-      attachments: [
-        {
-          id: 'image',
-          type: 'image',
-          fileName: 'image.png',
-          encryptionKey: 'key',
-        },
-      ],
-    },
+    { role: 'user', content: 'one', timestamp: new Date(timestamp) },
     { role: 'assistant', content: 'two', timestamp: new Date(timestamp) },
   ],
   createdAt: timestamp,
@@ -42,61 +31,77 @@ const localChat: StoredChat = {
   syncVersion: 1,
 }
 
+function item(id: string): BackupInventoryItem {
+  return {
+    scope: 'chat',
+    id,
+    etag: 'opaque-etag',
+    created_at: timestamp,
+    updated_at: timestamp,
+  }
+}
+
+function dependencies(
+  overrides: Partial<NativeBackupCollectionDependencies> = {},
+): NativeBackupCollectionDependencies {
+  return {
+    isAuthenticated: async () => true,
+    activeUserId: () => 'user',
+    requireUnlockedCek: () => {},
+    getCloudInventory: async () => ({
+      captured_at: timestamp,
+      total_items: 0,
+      items: [],
+    }),
+    getCloudChat: async () => null,
+    getCloudImage: async () => null,
+    getProject: async () => null,
+    getDocument: async () => null,
+    getLocalChats: async () => [],
+    getLocalChat: async () => null,
+    ...overrides,
+  }
+}
+
 describe('native backup collection limits', () => {
   it('guards message counts before reading attachments', async () => {
-    const { collectNativeBackupV1 } =
+    const { collectNativeBackupV2 } =
       await import('@/services/native-backup/collect')
-    const getCloudImage = vi.fn().mockResolvedValue(new Uint8Array([1]))
-    const dependencies: NativeBackupCollectionDependencies = {
-      isAuthenticated: async () => true,
-      activeUserId: () => 'user',
-      requireUnlockedCek: () => {},
-      listChats: async () => ({
-        items: [{ id: localChat.id, syncVersion: 1 }],
-      }),
-      getCloudChat: async () => localChat,
-      getCloudImage,
-      listProjects: async () => ({ items: [] }),
-      getProject: async () => null,
-      listDocuments: async () => [],
-      getDocument: async () => null,
-      getLocalChats: async () => [],
-      getLocalChat: async () => null,
-    }
+    const getCloudImage = vi.fn()
 
-    await expect(collectNativeBackupV1(dependencies)).rejects.toThrow(
-      'message limit exceeded',
-    )
+    await expect(
+      collectNativeBackupV2(
+        dependencies({
+          getCloudInventory: async () => ({
+            captured_at: timestamp,
+            total_items: 1,
+            items: [item('chat')],
+          }),
+          getCloudChat: async () => cloudChat,
+          getCloudImage,
+        }),
+      ),
+    ).rejects.toThrow('message limit exceeded')
     expect(getCloudImage).not.toHaveBeenCalled()
   })
 
-  it('bounds discovered records before reading record contents', async () => {
+  it('bounds captured inventory before reading record contents', async () => {
     const { collectNativeBackupV2 } =
       await import('@/services/native-backup/collect')
     const getCloudChat = vi.fn()
-    const dependencies: NativeBackupCollectionDependencies = {
-      isAuthenticated: async () => true,
-      activeUserId: () => 'user',
-      requireUnlockedCek: () => {},
-      listChats: async () => ({
-        items: [1, 2, 3].map((index) => ({
-          id: `chat-${index}`,
-          syncVersion: 1,
-        })),
-      }),
-      getCloudChat,
-      getCloudImage: async () => null,
-      listProjects: async () => ({ items: [] }),
-      getProject: async () => null,
-      listDocuments: async () => [],
-      getDocument: async () => null,
-      getLocalChats: async () => [],
-      getLocalChat: async () => null,
-    }
 
-    await expect(collectNativeBackupV2(dependencies)).rejects.toThrow(
-      'discovered record limit exceeded',
-    )
+    await expect(
+      collectNativeBackupV2(
+        dependencies({
+          getCloudInventory: async () => ({
+            captured_at: timestamp,
+            total_items: 3,
+            items: [item('chat-1'), item('chat-2'), item('chat-3')],
+          }),
+          getCloudChat,
+        }),
+      ),
+    ).rejects.toThrow('discovered record limit exceeded')
     expect(getCloudChat).not.toHaveBeenCalled()
   })
 
@@ -110,29 +115,19 @@ describe('native backup collection limits', () => {
         true,
       )
     })
-    const dependencies: NativeBackupCollectionDependencies = {
-      isAuthenticated: async () => true,
-      activeUserId: () => 'user',
-      requireUnlockedCek: () => {},
-      listChats: async () => ({
-        items: [
-          { id: 'chat-1', syncVersion: 1 },
-          { id: 'chat-2', syncVersion: 1 },
-        ],
-      }),
-      getCloudChat,
-      getCloudImage: async () => null,
-      listProjects: async () => ({ items: [] }),
-      getProject: async () => null,
-      listDocuments: async () => [],
-      getDocument: async () => null,
-      getLocalChats: async () => [],
-      getLocalChat: async () => null,
-    }
 
-    await expect(collectNativeBackupV2(dependencies)).rejects.toThrow(
-      'omission limit exceeded',
-    )
+    await expect(
+      collectNativeBackupV2(
+        dependencies({
+          getCloudInventory: async () => ({
+            captured_at: timestamp,
+            total_items: 2,
+            items: [item('chat-1'), item('chat-2')],
+          }),
+          getCloudChat,
+        }),
+      ),
+    ).rejects.toThrow('omission limit exceeded')
     expect(getCloudChat).toHaveBeenCalledTimes(6)
   })
 })

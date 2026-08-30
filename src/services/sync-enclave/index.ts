@@ -29,6 +29,10 @@ export type { RetryConfig, RetryScheduler } from './retry-policy'
 export * as syncApi from './sync-api'
 export type {
   AddBundleRequest,
+  BackupInventoryItem,
+  BackupInventoryProtocolErrorCode,
+  BackupInventoryResponse,
+  BackupInventoryScope,
   DeleteRequest,
   KeyCurrentBundle,
   KeyCurrentResponse,

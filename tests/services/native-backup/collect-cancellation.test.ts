@@ -11,12 +11,14 @@ function dependencies(
     isAuthenticated: async () => true,
     activeUserId: () => 'user',
     requireUnlockedCek: () => {},
-    listChats: async () => ({ items: [] }),
+    getCloudInventory: async () => ({
+      captured_at: timestamp,
+      total_items: 0,
+      items: [],
+    }),
     getCloudChat: async () => null,
     getCloudImage: async () => null,
-    listProjects: async () => ({ items: [] }),
     getProject: async () => null,
-    listDocuments: async () => [],
     getDocument: async () => null,
     getLocalChats: async () => [],
     getLocalChat: async () => null,
@@ -64,53 +66,55 @@ describe('native backup collection cancellation', () => {
     expect(isAuthenticated).not.toHaveBeenCalled()
   })
 
-  it('stops pagination immediately after an awaited page aborts', async () => {
+  it('stops immediately when the one-shot inventory request aborts', async () => {
     const controller = new AbortController()
     const reason = new DOMException('Canceled', 'AbortError')
     const getCloudChat = vi.fn()
-    const listChats = vi.fn().mockImplementation(async () => {
+    const getCloudInventory = vi.fn().mockImplementation(async () => {
       controller.abort(reason)
-      return { items: [], next: 'another-page' }
+      return { captured_at: timestamp, total_items: 0, items: [] }
     })
 
     await expect(
       collectNativeBackupV1(
-        dependencies({ listChats, getCloudChat }),
+        dependencies({ getCloudInventory, getCloudChat }),
         controller.signal,
       ),
     ).rejects.toBe(reason)
-    expect(listChats).toHaveBeenCalledTimes(1)
+    expect(getCloudInventory).toHaveBeenCalledTimes(1)
     expect(getCloudChat).not.toHaveBeenCalled()
   })
 
-  it('does not schedule more bounded document workers after abort', async () => {
+  it('does not read later projects after a project read aborts', async () => {
     const controller = new AbortController()
     const reason = new DOMException('Canceled', 'AbortError')
-    const getProject = vi.fn()
-    const listDocuments = vi.fn().mockImplementation(async () => {
+    const getProject = vi.fn().mockImplementation(async () => {
       controller.abort(reason)
-      return []
+      return null
     })
     const projects = Array.from({ length: 8 }, (_, index) => ({
       id: `project-${index}`,
-      syncVersion: 1,
-      createdAt: timestamp,
-      updatedAt: timestamp,
+      scope: 'project' as const,
+      etag: 'etag',
+      created_at: timestamp,
+      updated_at: timestamp,
     }))
 
     await expect(
       collectNativeBackupV1(
         dependencies({
-          listProjects: async () => ({ items: projects }),
-          listDocuments,
+          getCloudInventory: async () => ({
+            captured_at: timestamp,
+            total_items: projects.length,
+            items: projects,
+          }),
           getProject,
         }),
         controller.signal,
       ),
     ).rejects.toBe(reason)
-    expect(listDocuments).toHaveBeenCalledTimes(1)
-    expect(listDocuments).toHaveBeenCalledWith('project-0')
-    expect(getProject).not.toHaveBeenCalled()
+    expect(getProject).toHaveBeenCalledTimes(1)
+    expect(getProject).toHaveBeenCalledWith('project-0', 'etag')
   })
 
   it('stops image reads and never returns partial input after abort', async () => {
@@ -126,8 +130,18 @@ describe('native backup collection cancellation', () => {
     await expect(
       collectNativeBackupV1(
         dependencies({
-          listChats: async () => ({
-            items: [{ id: chat.id, syncVersion: 1 }],
+          getCloudInventory: async () => ({
+            captured_at: timestamp,
+            total_items: 1,
+            items: [
+              {
+                scope: 'chat',
+                id: chat.id,
+                etag: 'etag',
+                created_at: timestamp,
+                updated_at: timestamp,
+              },
+            ],
           }),
           getCloudChat,
           getCloudImage,
