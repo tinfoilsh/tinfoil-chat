@@ -11,7 +11,6 @@ interface UseCloudPaginationOptions {
   isSignedIn: boolean
   userId?: string
   pageSize?: number
-  initialToken?: string
   isInitialPageReady?: boolean
 }
 
@@ -20,6 +19,7 @@ interface UseCloudPaginationReturn {
   isLoading: boolean
   hasAttempted: boolean
   isInitialized: boolean
+  canRetryInitialization: boolean
   loadMore: () => Promise<
     | {
         hasMore: boolean
@@ -37,7 +37,6 @@ export function useCloudPagination(
     isSignedIn,
     userId,
     pageSize = PAGINATION.CHATS_PER_PAGE,
-    initialToken,
     isInitialPageReady = false,
   } = options
 
@@ -46,6 +45,7 @@ export function useCloudPagination(
   const [isLoading, setIsLoading] = useState(false)
   const [hasAttempted, setHasAttempted] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
+  const [canRetryInitialization, setCanRetryInitialization] = useState(false)
   const loadingGenerationRef = useRef<number | null>(null)
   const requestGenerationRef = useRef(0)
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(isCloudSyncEnabled())
@@ -72,15 +72,35 @@ export function useCloudPagination(
     }
   }, [])
 
-  const initialize = useCallback(async () => {
-    requestGenerationRef.current += 1
+  const initializeCursor = useCallback(async (requestGeneration: number) => {
+    try {
+      const result = await cloudSync.initializeChatPaginationCursor()
+      if (requestGeneration !== requestGenerationRef.current) return
+      setNextToken(result.nextToken)
+      setHasMore(result.hasMore && Boolean(result.nextToken))
+      setIsInitialized(true)
+      setCanRetryInitialization(false)
+      return result
+    } catch (error) {
+      if (requestGeneration !== requestGenerationRef.current) return
+      setCanRetryInitialization(true)
+      logError('Failed to initialize chat pagination', error, {
+        component: 'useCloudPagination',
+        action: 'initialize',
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    const requestGeneration = ++requestGenerationRef.current
     loadingGenerationRef.current = null
     setIsLoading(false)
+    setNextToken(undefined)
+    setHasMore(false)
+    setHasAttempted(false)
+    setIsInitialized(false)
+    setCanRetryInitialization(false)
     if (!isSignedIn || !userId || !cloudSyncEnabled || !isInitialPageReady) {
-      setNextToken(undefined)
-      setHasMore(false)
-      setHasAttempted(false)
-      setIsInitialized(false)
       return
     }
 
@@ -88,17 +108,19 @@ export function useCloudPagination(
     // IndexedDB can hold gigabytes of data, so keeping all synced chats
     // locally provides better offline access. Users can fetch older chats
     // from the cloud on demand via loadMore().
-
-    setNextToken(initialToken)
-    setHasMore(Boolean(initialToken))
-    setHasAttempted(false)
-    setIsInitialized(true)
-    return {
-      hasMore: Boolean(initialToken),
-      nextToken: initialToken,
-      deletedIds: [], // Never delete local chats
-    }
-  }, [isSignedIn, userId, cloudSyncEnabled, isInitialPageReady, initialToken])
+    loadingGenerationRef.current = requestGeneration
+    void initializeCursor(requestGeneration).finally(() => {
+      if (loadingGenerationRef.current === requestGeneration) {
+        loadingGenerationRef.current = null
+      }
+    })
+  }, [
+    isSignedIn,
+    userId,
+    cloudSyncEnabled,
+    isInitialPageReady,
+    initializeCursor,
+  ])
 
   const loadMore = useCallback(async () => {
     if (
@@ -106,7 +128,7 @@ export function useCloudPagination(
       !userId ||
       isLoading ||
       !cloudSyncEnabled ||
-      !isInitialized ||
+      (!isInitialized && !canRetryInitialization) ||
       loadingGenerationRef.current !== null
     )
       return
@@ -114,14 +136,29 @@ export function useCloudPagination(
     const requestGeneration = requestGenerationRef.current
     loadingGenerationRef.current = requestGeneration
     // Save current state in case we need to rollback
-    const previousToken = nextToken
-    const previousHasMore = hasMore
+    let token = nextToken
+    let previousToken = token
+    let previousHasMore = hasMore
 
     setIsLoading(true)
     setHasAttempted(true)
 
     try {
-      if (!nextToken) {
+      if (!isInitialized) {
+        setCanRetryInitialization(false)
+        const initialized = await initializeCursor(requestGeneration)
+        if (
+          requestGeneration !== requestGenerationRef.current ||
+          !initialized
+        ) {
+          return
+        }
+        token = initialized.nextToken
+        previousToken = token
+        previousHasMore = initialized.hasMore && Boolean(token)
+      }
+
+      if (!token) {
         if (requestGeneration === requestGenerationRef.current) {
           setHasMore(false)
         }
@@ -130,7 +167,7 @@ export function useCloudPagination(
 
       const result = await cloudSync.fetchAndStorePage({
         limit: pageSize,
-        continuationToken: nextToken,
+        continuationToken: token,
       })
       if (requestGeneration !== requestGenerationRef.current) return
 
@@ -169,25 +206,16 @@ export function useCloudPagination(
     hasMore,
     cloudSyncEnabled,
     isInitialized,
+    canRetryInitialization,
+    initializeCursor,
   ])
-
-  // Initialize when user changes (only if cloud sync is enabled)
-  useEffect(() => {
-    if (isSignedIn && userId && cloudSyncEnabled) {
-      void initialize()
-    } else {
-      setNextToken(undefined)
-      setHasMore(false)
-      setHasAttempted(false)
-      setIsInitialized(false)
-    }
-  }, [isSignedIn, userId, cloudSyncEnabled, initialize])
 
   return {
     hasMore,
     isLoading,
     hasAttempted,
     isInitialized,
+    canRetryInitialization,
     loadMore,
   }
 }

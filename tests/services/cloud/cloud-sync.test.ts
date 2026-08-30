@@ -6,6 +6,7 @@ import {
   CloudSyncService,
   CROSS_TAB_SYNC_LOCK,
   CROSS_TAB_SYNC_LOCK_OPTIONS,
+  RemoteChatPageIncompleteError,
 } from '@/services/cloud/cloud-sync'
 import { SyncEnclaveError } from '@/services/sync-enclave/sync-enclave-client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -18,6 +19,7 @@ const {
   canWriteToCloud,
   uploadChat,
   downloadChat,
+  downloadChats,
   finalizeUpload,
   getPendingUploadChats,
   applyRemoteChatIfFresh,
@@ -34,6 +36,7 @@ const {
   canWriteToCloud: vi.fn(),
   uploadChat: vi.fn(),
   downloadChat: vi.fn(),
+  downloadChats: vi.fn(),
   finalizeUpload: vi.fn(),
   getPendingUploadChats: vi.fn(),
   applyRemoteChatIfFresh: vi.fn(),
@@ -45,6 +48,7 @@ const {
 }))
 
 vi.mock('@/services/cloud/chat-revision-sync', () => ({
+  BOOTSTRAP_RECENT_CONTENT_LIMIT: 50,
   drainChatRevisionSync,
 }))
 vi.mock('@/services/cloud/cloud-storage', () => ({
@@ -52,6 +56,7 @@ vi.mock('@/services/cloud/cloud-storage', () => ({
     isAuthenticated,
     uploadChat,
     downloadChat,
+    downloadChats,
     listChats,
   },
 }))
@@ -70,6 +75,9 @@ vi.mock('@/services/storage/indexed-db', () => ({
 }))
 vi.mock('@/services/cloud/cloud-key-authorization', () => ({
   canWriteToCloud,
+}))
+vi.mock('@/services/cloud/ensure-current-key', () => ({
+  adoptLocalKeyForMigration: vi.fn(),
 }))
 vi.mock('@/services/cloud/chat-codec', () => ({ processRemoteChat }))
 vi.mock('@/services/storage/deleted-chats-tracker', () => ({
@@ -394,6 +402,345 @@ describe('CloudSyncService revision coordinator routing', () => {
       new CloudSyncService().fetchAndStorePage({ limit: 10 }),
     ).rejects.toThrow('Cloud account changed during synchronization')
     expect(applyRemoteChatIfFresh).not.toHaveBeenCalled()
+  })
+
+  it('initializes pagination metadata at the hydration boundary', async () => {
+    const conversations = Array.from({ length: 50 }, (_, index) => ({
+      id: `chat-${index}`,
+      syncVersion: index + 1,
+      updatedAt: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00Z`,
+    }))
+    listChats
+      .mockResolvedValueOnce({
+        conversations,
+        hasMore: true,
+        nextContinuationToken: 'page-2',
+      })
+      .mockResolvedValueOnce({
+        conversations: [
+          {
+            id: 'uncached-chat',
+            syncVersion: 51,
+            updatedAt: '2025-12-31T00:00:00Z',
+          },
+        ],
+        hasMore: false,
+      })
+    getChat.mockImplementation(async (id: string) => {
+      const entry = conversations.find((chat) => chat.id === id)!
+      return {
+        ...entry,
+        syncUserId: 'user-1',
+        messages: [],
+      }
+    })
+
+    await expect(
+      new CloudSyncService().initializeChatPaginationCursor(),
+    ).resolves.toEqual({ hasMore: true, nextToken: 'page-2' })
+    expect(listChats).toHaveBeenCalledWith({
+      limit: 50,
+      includeContent: false,
+    })
+    expect(downloadChats).not.toHaveBeenCalled()
+    expect(processRemoteChat).not.toHaveBeenCalled()
+  })
+
+  it('hydrates missing and stale chats before returning the boundary cursor', async () => {
+    const metadata = [
+      {
+        id: 'current-chat',
+        syncVersion: 1,
+        updatedAt: '2026-01-03T00:00:00Z',
+      },
+      {
+        id: 'missing-chat',
+        syncVersion: 2,
+        updatedAt: '2026-01-02T00:00:00Z',
+      },
+      {
+        id: 'stale-chat',
+        syncVersion: 3,
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ]
+    const localChats = new Map<string, Record<string, unknown>>([
+      ['current-chat', { ...metadata[0], syncUserId: 'user-1', messages: [] }],
+      [
+        'stale-chat',
+        { ...metadata[2], syncVersion: 2, syncUserId: 'user-1', messages: [] },
+      ],
+    ])
+    listChats
+      .mockResolvedValueOnce({
+        conversations: metadata,
+        hasMore: true,
+        nextContinuationToken: 'page-2',
+      })
+      .mockResolvedValueOnce({
+        conversations: [
+          {
+            id: 'uncached-chat',
+            syncVersion: 4,
+            updatedAt: '2025-12-31T00:00:00Z',
+          },
+        ],
+        hasMore: false,
+      })
+    downloadChats.mockResolvedValue([
+      { ...metadata[1], content: '{"id":"missing-chat"}' },
+      { ...metadata[2], content: '{"id":"stale-chat"}' },
+    ])
+    getChat.mockImplementation(async (id: string) => localChats.get(id))
+    processRemoteChat.mockImplementation(async ({ id, syncVersion }) => ({
+      chat: { id, syncVersion, syncUserId: 'user-1', messages: [] },
+    }))
+    applyRemoteChatIfFresh.mockImplementation(async ({ chat }) => {
+      localChats.set(chat.id, chat)
+      return { applied: true }
+    })
+
+    await expect(
+      new CloudSyncService().initializeChatPaginationCursor(),
+    ).resolves.toEqual({ hasMore: true, nextToken: 'page-2' })
+    expect(downloadChats).toHaveBeenCalledWith(['missing-chat', 'stale-chat'])
+    expect(processRemoteChat).toHaveBeenCalledTimes(2)
+  })
+
+  it('skips fully cached metadata pages before fetching unseen history', async () => {
+    const cachedChats = new Map<string, Record<string, unknown>>()
+    const boundary = Array.from({ length: 50 }, (_, index) => ({
+      id: `boundary-${index}`,
+      syncVersion: index + 1,
+      updatedAt: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00Z`,
+    }))
+    const cachedPage = Array.from({ length: 20 }, (_, index) => ({
+      id: `cached-history-${index}`,
+      syncVersion: index + 51,
+      updatedAt: `2025-12-${String(index + 1).padStart(2, '0')}T00:00:00Z`,
+    }))
+    for (const entry of [...boundary, ...cachedPage]) {
+      cachedChats.set(entry.id, {
+        ...entry,
+        syncUserId: 'user-1',
+        messages: [],
+      })
+    }
+    const unseen = {
+      id: 'first-unseen-chat',
+      syncVersion: 71,
+      updatedAt: '2025-11-30T00:00:00Z',
+    }
+    listChats
+      .mockResolvedValueOnce({
+        conversations: boundary,
+        hasMore: true,
+        nextContinuationToken: 'cached-page',
+      })
+      .mockResolvedValueOnce({
+        conversations: cachedPage,
+        hasMore: true,
+        nextContinuationToken: 'unseen-page',
+      })
+      .mockResolvedValueOnce({
+        conversations: [unseen],
+        hasMore: false,
+      })
+      .mockResolvedValueOnce({
+        conversations: [{ ...unseen, content: '{}' }],
+        hasMore: false,
+      })
+    getChat.mockImplementation(async (id: string) => cachedChats.get(id))
+    processRemoteChat.mockResolvedValue({
+      chat: { ...unseen, syncUserId: 'user-1', messages: [] },
+    })
+
+    const service = new CloudSyncService()
+    await expect(service.initializeChatPaginationCursor()).resolves.toEqual({
+      hasMore: true,
+      nextToken: 'unseen-page',
+    })
+    await service.fetchAndStorePage({
+      limit: 20,
+      continuationToken: 'unseen-page',
+    })
+
+    expect(downloadChats).not.toHaveBeenCalled()
+    expect(listChats).toHaveBeenNthCalledWith(2, {
+      limit: 20,
+      continuationToken: 'cached-page',
+      includeContent: false,
+    })
+    expect(listChats).toHaveBeenNthCalledWith(3, {
+      limit: 20,
+      continuationToken: 'unseen-page',
+      includeContent: false,
+    })
+    expect(listChats).toHaveBeenNthCalledWith(4, {
+      limit: 20,
+      continuationToken: 'unseen-page',
+      includeContent: true,
+    })
+  })
+
+  it('rejects a non-advancing metadata cursor', async () => {
+    const boundary = [
+      {
+        id: 'boundary-chat',
+        syncVersion: 1,
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ]
+    const cachedPage = [
+      {
+        id: 'cached-chat',
+        syncVersion: 2,
+        updatedAt: '2025-12-31T00:00:00Z',
+      },
+    ]
+    listChats
+      .mockResolvedValueOnce({
+        conversations: boundary,
+        hasMore: true,
+        nextContinuationToken: 'repeated-page',
+      })
+      .mockResolvedValueOnce({
+        conversations: cachedPage,
+        hasMore: true,
+        nextContinuationToken: 'repeated-page',
+      })
+    getChat.mockImplementation(async (id: string) => ({
+      ...(id === 'boundary-chat' ? boundary[0] : cachedPage[0]),
+      syncUserId: 'user-1',
+      messages: [],
+    }))
+
+    await expect(
+      new CloudSyncService().initializeChatPaginationCursor(),
+    ).rejects.toThrow('Cloud pagination cursor did not advance')
+    expect(listChats).toHaveBeenCalledTimes(2)
+  })
+
+  it('withholds a cursor when a boundary mutation is not fully stored', async () => {
+    listChats.mockResolvedValue({
+      conversations: [
+        {
+          id: 'new-boundary-chat',
+          syncVersion: 2,
+          updatedAt: '2026-01-02T00:00:00Z',
+        },
+      ],
+      hasMore: true,
+      nextContinuationToken: 'page-2',
+    })
+    getChat.mockResolvedValue(undefined)
+    downloadChats.mockResolvedValue([
+      {
+        id: 'new-boundary-chat',
+        syncVersion: 2,
+        updatedAt: '',
+        content: '{}',
+      },
+    ])
+    processRemoteChat.mockResolvedValue({
+      chat: { id: 'new-boundary-chat', syncVersion: 2, messages: [] },
+    })
+    applyRemoteChatIfFresh.mockResolvedValue({ applied: false })
+
+    await expect(
+      new CloudSyncService().initializeChatPaginationCursor(),
+    ).rejects.toMatchObject({
+      code: 'REMOTE_CHAT_PAGE_INCOMPLETE',
+      chatId: 'new-boundary-chat',
+      stage: 'boundary',
+    })
+  })
+
+  it('rejects a pagination cursor from a previous account', async () => {
+    listChats.mockImplementationOnce(async () => {
+      localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-2')
+      return {
+        conversations: [],
+        hasMore: true,
+        nextContinuationToken: 'stale-page-2',
+      }
+    })
+
+    await expect(
+      new CloudSyncService().initializeChatPaginationCursor(),
+    ).rejects.toThrow('Cloud account changed during synchronization')
+  })
+
+  it('retries an incomplete page without advancing its cursor', async () => {
+    listChats
+      .mockResolvedValueOnce({
+        conversations: [
+          { id: 'chat-1', syncVersion: 2, updatedAt: '2026-01-01T00:00:00Z' },
+        ],
+        hasMore: true,
+        nextContinuationToken: 'page-3',
+      })
+      .mockResolvedValueOnce({
+        conversations: [
+          {
+            id: 'chat-1',
+            syncVersion: 2,
+            updatedAt: '2026-01-01T00:00:00Z',
+            content: '{}',
+          },
+        ],
+        hasMore: true,
+        nextContinuationToken: 'page-3',
+      })
+    processRemoteChat.mockResolvedValue({
+      chat: { id: 'chat-1', syncVersion: 2, messages: [] },
+    })
+    getChat.mockResolvedValue(undefined)
+
+    const service = new CloudSyncService()
+    await expect(
+      service.fetchAndStorePage({ limit: 20, continuationToken: 'page-2' }),
+    ).rejects.toBeInstanceOf(RemoteChatPageIncompleteError)
+    await expect(
+      service.fetchAndStorePage({ limit: 20, continuationToken: 'page-2' }),
+    ).resolves.toEqual({ hasMore: true, nextToken: 'page-3', saved: 1 })
+    expect(listChats).toHaveBeenNthCalledWith(1, {
+      limit: 20,
+      continuationToken: 'page-2',
+      includeContent: true,
+    })
+    expect(listChats).toHaveBeenNthCalledWith(2, {
+      limit: 20,
+      continuationToken: 'page-2',
+      includeContent: true,
+    })
+  })
+
+  it('rejects a page when storage fails', async () => {
+    listChats.mockResolvedValue({
+      conversations: [
+        {
+          id: 'chat-1',
+          syncVersion: 2,
+          updatedAt: '2026-01-01T00:00:00Z',
+          content: '{}',
+        },
+      ],
+      hasMore: false,
+    })
+    processRemoteChat.mockResolvedValue({
+      chat: { id: 'chat-1', syncVersion: 2, messages: [] },
+    })
+    getChat.mockResolvedValue(undefined)
+    applyRemoteChatIfFresh.mockRejectedValueOnce(new Error('storage failed'))
+
+    await expect(
+      new CloudSyncService().fetchAndStorePage({ limit: 20 }),
+    ).rejects.toMatchObject({
+      code: 'REMOTE_CHAT_PAGE_INCOMPLETE',
+      chatId: 'chat-1',
+      stage: 'storage',
+    })
   })
 
   it('rejects an incomplete export page instead of falling back locally', async () => {
