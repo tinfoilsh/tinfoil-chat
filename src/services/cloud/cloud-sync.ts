@@ -1027,7 +1027,7 @@ export class CloudSyncService {
       visitedTokens.add(nextToken)
       const pageStartToken = nextToken
       const page = await cloudStorage.listChats({
-        limit: PAGINATION.CHATS_PER_PAGE,
+        limit: PAGINATION.CURSOR_SCAN_PAGE_SIZE,
         continuationToken: pageStartToken,
         includeContent: false,
       })

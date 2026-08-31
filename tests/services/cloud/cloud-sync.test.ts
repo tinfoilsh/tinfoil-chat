@@ -1,3 +1,4 @@
+import { PAGINATION } from '@/config'
 import {
   AUTH_ACTIVE_USER_ID,
   SETTINGS_CLOUD_SYNC_ENABLED,
@@ -566,12 +567,12 @@ describe('CloudSyncService revision coordinator routing', () => {
 
     expect(downloadChats).not.toHaveBeenCalled()
     expect(listChats).toHaveBeenNthCalledWith(2, {
-      limit: 20,
+      limit: PAGINATION.CURSOR_SCAN_PAGE_SIZE,
       continuationToken: 'cached-page',
       includeContent: false,
     })
     expect(listChats).toHaveBeenNthCalledWith(3, {
-      limit: 20,
+      limit: PAGINATION.CURSOR_SCAN_PAGE_SIZE,
       continuationToken: 'unseen-page',
       includeContent: false,
     })
