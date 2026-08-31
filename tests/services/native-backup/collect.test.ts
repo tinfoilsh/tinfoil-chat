@@ -326,10 +326,10 @@ describe('native backup collection', () => {
     })
     let active = 0
     let maxActive = 0
-    const getCloudImage = vi.fn(async () => {
+    const getCloudImage = vi.fn(async ({ id }: { id: string }) => {
       active++
       maxActive = Math.max(maxActive, active)
-      await downloadGate
+      if (id === 'image-0') await downloadGate
       active--
       return png
     })
@@ -343,9 +343,8 @@ describe('native backup collection', () => {
       }),
     )
     await vi.waitFor(() =>
-      expect(getCloudImage.mock.calls.length).toBeGreaterThan(1),
+      expect(getCloudImage).toHaveBeenCalledTimes(attachmentIds.length),
     )
-    expect(getCloudImage.mock.calls.length).toBeLessThan(attachmentIds.length)
     releaseDownloads()
 
     const result = await collection

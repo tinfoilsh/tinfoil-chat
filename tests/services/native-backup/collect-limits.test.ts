@@ -220,9 +220,8 @@ describe('native backup collection limits', () => {
       'image budget exceeded',
     )
     const getCloudImage = vi.fn(({ id }: { id: string }) => {
-      if (id === 'image-0') return earlier
       if (id === 'image-1') return later
-      return Promise.resolve(png)
+      return earlier
     })
 
     const collection = collectNativeBackupV2(
