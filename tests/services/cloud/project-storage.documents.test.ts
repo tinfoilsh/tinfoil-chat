@@ -1,3 +1,7 @@
+import {
+  CloudBackupReadError,
+  unwrapBackupPullResult,
+} from '@/services/cloud/backup-read-error'
 import { ProjectStorageService } from '@/services/cloud/project-storage'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -21,18 +25,35 @@ vi.mock('@/services/cloud/cek-encoding', () => ({
   requirePrimaryKeyB64: () => 'primary-key',
 }))
 
-vi.mock('@/services/sync-enclave/sync-api', () => ({
-  deleteRow: vi.fn(),
-  listStatus: mocks.enclaveListStatus,
-  pull: mocks.enclavePull,
-  push: mocks.enclavePush,
-  newIdempotencyKey: () => 'idempotency-key',
-  pullItemPlaintext: mocks.pullItemPlaintext,
-}))
+vi.mock('@/services/sync-enclave/sync-api', async () => {
+  const actual = await vi.importActual<
+    typeof import('@/services/sync-enclave/sync-api')
+  >('@/services/sync-enclave/sync-api')
+  return {
+    ...actual,
+    deleteRow: vi.fn(),
+    listStatus: mocks.enclaveListStatus,
+    pull: mocks.enclavePull,
+    push: mocks.enclavePush,
+    newIdempotencyKey: () => 'idempotency-key',
+    pullItemPlaintext: mocks.pullItemPlaintext,
+  }
+})
 
 vi.mock('@/utils/error-handling', () => ({
   logError: vi.fn(),
 }))
+
+async function getDocumentForBackup(
+  storage: ProjectStorageService,
+  projectId: string,
+  id: string,
+  expectedEtag: string,
+) {
+  return unwrapBackupPullResult(
+    (await storage.getDocumentsForBackup([{ projectId, id, expectedEtag }]))[0],
+  )
+}
 
 describe('ProjectStorageService documents', () => {
   beforeEach(() => {
@@ -90,6 +111,98 @@ describe('ProjectStorageService documents', () => {
     expect(documents.get('doc-1')?.sizeBytes).toBe(
       new TextEncoder().encode(content).length,
     )
+  })
+
+  it('strictly distinguishes malformed document data from runtime failures', async () => {
+    const storage = new ProjectStorageService()
+    mocks.enclavePull.mockResolvedValue({
+      items: [{ id: 'project-1/doc-1', ok: true, etag: '1' }],
+    })
+    mocks.pullItemPlaintext.mockReturnValue(new TextEncoder().encode('{'))
+
+    const malformed = await getDocumentForBackup(
+      storage,
+      'project-1',
+      'doc-1',
+      '1',
+    ).catch((error: unknown) => error)
+    expect(malformed).toBeInstanceOf(CloudBackupReadError)
+    expect(malformed).toMatchObject({
+      category: 'item_invalid',
+      reason: 'document_payload_invalid',
+      omittable: true,
+    })
+
+    const runtimeFailure = new Error('unexpected JSON runtime failure')
+    const parse = vi.spyOn(JSON, 'parse').mockImplementationOnce(() => {
+      throw runtimeFailure
+    })
+    mocks.pullItemPlaintext.mockReturnValue(new TextEncoder().encode('{}'))
+    try {
+      await expect(
+        getDocumentForBackup(storage, 'project-1', 'doc-1', '1'),
+      ).rejects.toBe(runtimeFailure)
+    } finally {
+      parse.mockRestore()
+    }
+  })
+
+  it('enforces captured document identity and opaque ETag for backup reads', async () => {
+    const storage = new ProjectStorageService()
+    mocks.enclavePull.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'project-1/doc-1',
+          ok: true,
+          etag: 'new-etag',
+          plaintext: 'ignored',
+        },
+      ],
+    })
+    await expect(
+      getDocumentForBackup(storage, 'project-1', 'doc-1', 'captured-etag'),
+    ).rejects.toMatchObject({
+      category: 'snapshot_changed',
+      reason: 'record_changed_after_snapshot',
+    })
+
+    mocks.enclavePull.mockResolvedValueOnce({
+      items: [{ id: 'doc-1', ok: true, etag: 'captured-etag' }],
+    })
+    await expect(
+      getDocumentForBackup(storage, 'project-1', 'doc-1', 'captured-etag'),
+    ).rejects.toMatchObject({ code: 'unexpected_item' })
+  })
+
+  it('accepts a document lazily rewrapped from the captured ETag', async () => {
+    const storage = new ProjectStorageService()
+    mocks.enclavePull.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'project-1/doc-1',
+          ok: true,
+          etag: 'rewrapped-etag',
+          previous_etag: 'captured-etag',
+        },
+      ],
+    })
+    mocks.pullItemPlaintext.mockReturnValue(
+      new TextEncoder().encode(
+        JSON.stringify({
+          filename: 'notes.txt',
+          contentType: 'text/plain',
+          content: 'rewrapped content',
+        }),
+      ),
+    )
+
+    await expect(
+      getDocumentForBackup(storage, 'project-1', 'doc-1', 'captured-etag'),
+    ).resolves.toMatchObject({
+      id: 'doc-1',
+      projectId: 'project-1',
+      content: 'rewrapped content',
+    })
   })
 
   it('deduplicates documents listed on multiple pages', async () => {

@@ -131,6 +131,169 @@ describe('sync-api (enclave JSON-RPC)', () => {
     })
   })
 
+  it('preserves lazy-rewrap metadata without applying backup rules to general pulls', async () => {
+    const api = await import('@/services/sync-enclave/sync-api')
+    mockFetch.mockResolvedValueOnce(
+      ok({
+        items: [
+          {
+            id: 'chat-1',
+            ok: true,
+            etag: 'rewrapped-etag',
+            previous_etag: 'previous-etag',
+            plaintext: '',
+          },
+        ],
+      }),
+    )
+
+    const response = await api.pull({
+      scope: 'chat',
+      ids: ['chat-1'],
+      keys: [{ key: 'key-1' }],
+    })
+
+    expect(response.items[0]).toMatchObject({
+      etag: 'rewrapped-etag',
+      previous_etag: 'previous-etag',
+    })
+  })
+
+  it('validates and returns a strict one-shot backup inventory', async () => {
+    const api = await import('@/services/sync-enclave/sync-api')
+    const response = {
+      captured_at: '2026-08-20T12:00:03.000Z',
+      total_items: 3,
+      items: [
+        {
+          scope: 'chat',
+          id: 'chat-1',
+          etag: 'opaque/chat-etag',
+          project_id: 'project-1',
+          created_at: '2026-08-20T12:00:00.000Z',
+          updated_at: '2026-08-20T12:00:01.000Z',
+        },
+        {
+          scope: 'project',
+          id: 'project-1',
+          etag: 'opaque-project-etag',
+          created_at: '2026-08-20T12:00:00.000Z',
+          updated_at: '2026-08-20T12:00:01.000Z',
+        },
+        {
+          scope: 'project_document',
+          id: 'document-1',
+          etag: 'opaque-document-etag',
+          project_id: 'project-1',
+          created_at: '2026-08-20T12:00:00.000Z',
+          updated_at: '2026-08-20T12:00:02.000Z',
+        },
+      ],
+    }
+    mockFetch.mockResolvedValueOnce(ok(response))
+
+    await expect(api.backupInventory()).resolves.toEqual(response)
+    expect(lastRequest()[0]).toBe('/v1/sync/backup-inventory')
+    expect(lastBody()).toEqual({})
+  })
+
+  it.each([
+    ['invalid_total', { total_items: 2 }],
+    ['invalid_timestamp', { captured_at: 'not-a-timestamp' }],
+    ['malformed_response', { unexpected: true }],
+  ] as const)(
+    'rejects backup inventory root contract violations as %s',
+    async (code, replacement) => {
+      const api = await import('@/services/sync-enclave/sync-api')
+      mockFetch.mockResolvedValueOnce(
+        ok({
+          captured_at: '2026-08-20T12:00:00.000Z',
+          total_items: 0,
+          items: [],
+          ...replacement,
+        }),
+      )
+
+      await expect(api.backupInventory()).rejects.toMatchObject({ code })
+    },
+  )
+
+  it.each([
+    ['unsupported_scope', { scope: 'profile' }],
+    ['missing_id', { id: '' }],
+    ['missing_etag', { etag: '' }],
+    ['invalid_timestamp', { updated_at: 'yesterday' }],
+    ['invalid_relationship', { scope: 'project_document' }],
+    ['invalid_relationship', { scope: 'project', project_id: 'project-1' }],
+    ['invalid_relationship', { project_id: 'missing-project' }],
+  ] as const)(
+    'rejects backup inventory item contract violations as %s',
+    async (code, replacement) => {
+      const api = await import('@/services/sync-enclave/sync-api')
+      const candidate: Record<string, unknown> = {
+        scope: 'chat',
+        id: 'chat-1',
+        etag: 'opaque-etag',
+        created_at: '2026-08-20T12:00:00.000Z',
+        updated_at: '2026-08-20T12:00:00.000Z',
+        ...replacement,
+      }
+      if ('scope' in replacement && replacement.scope === 'project_document') {
+        delete candidate.project_id
+      }
+      mockFetch.mockResolvedValueOnce(
+        ok({
+          captured_at: '2026-08-20T12:00:00.000Z',
+          total_items: 1,
+          items: [candidate],
+        }),
+      )
+
+      await expect(api.backupInventory()).rejects.toMatchObject({
+        code,
+        itemIndex: 0,
+      })
+    },
+  )
+
+  it.each([
+    [
+      'duplicate_item',
+      [
+        { scope: 'chat', id: 'chat-1' },
+        { scope: 'chat', id: 'chat-1' },
+      ],
+    ],
+    [
+      'invalid_order',
+      [
+        { scope: 'project', id: 'project-1' },
+        { scope: 'chat', id: 'chat-1' },
+      ],
+    ],
+  ] as const)(
+    'rejects inventory sequence violations as %s',
+    async (code, identities) => {
+      const api = await import('@/services/sync-enclave/sync-api')
+      const items = identities.map(({ scope, id }) => ({
+        scope,
+        id,
+        etag: 'opaque-etag',
+        created_at: '2026-08-20T12:00:00.000Z',
+        updated_at: '2026-08-20T12:00:00.000Z',
+      }))
+      mockFetch.mockResolvedValueOnce(
+        ok({
+          captured_at: '2026-08-20T12:00:00.000Z',
+          total_items: items.length,
+          items,
+        }),
+      )
+
+      await expect(api.backupInventory()).rejects.toMatchObject({ code })
+    },
+  )
+
   it('listStatus posts /v1/sync/list-status with scope and project filter', async () => {
     const api = await import('@/services/sync-enclave/sync-api')
     mockFetch.mockResolvedValueOnce(ok({ updates: [], deletes: [] }))

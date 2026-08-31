@@ -8,16 +8,16 @@ import {
 } from '@/services/native-backup/write'
 import { expect, it, vi } from 'vitest'
 
-const collectNativeBackupV1 = vi.hoisted(() => vi.fn())
+const collectNativeBackupV2 = vi.hoisted(() => vi.fn())
 
 vi.mock('@/services/native-backup/collect', async (importOriginal) => ({
   ...(await importOriginal()),
-  collectNativeBackupV1,
+  collectNativeBackupV2,
 }))
 
 it('propagates cancellation into the default collector', async () => {
   const controller = new AbortController()
-  collectNativeBackupV1.mockImplementation(
+  collectNativeBackupV2.mockImplementation(
     (_dependencies: unknown, signal: AbortSignal) =>
       new Promise((_resolve, reject) =>
         signal.addEventListener('abort', () => reject(signal.reason), {
@@ -27,11 +27,11 @@ it('propagates cancellation into the default collector', async () => {
   )
 
   const result = runNativeBackupExport(controller.signal, vi.fn())
-  await vi.waitFor(() => expect(collectNativeBackupV1).toHaveBeenCalled())
+  await vi.waitFor(() => expect(collectNativeBackupV2).toHaveBeenCalled())
   controller.abort()
 
   await expect(result).rejects.toMatchObject({ name: 'AbortError' })
-  expect(collectNativeBackupV1).toHaveBeenCalledWith(
+  expect(collectNativeBackupV2).toHaveBeenCalledWith(
     undefined,
     controller.signal,
   )
@@ -62,7 +62,7 @@ it('reports success when cancellation occurs during file close', async () => {
   }
   const download = vi.fn()
   const dependencies = {
-    collect: async () => ({}),
+    collect: async () => ({ omissions: [], warnings: [] }),
     format: () => ({
       manifestBytes: new TextEncoder().encode(
         '{"created_at":"2026-08-20T12:00:00.000Z"}',
@@ -76,7 +76,13 @@ it('reports success when cancellation occurs during file close', async () => {
 
   await expect(
     runNativeBackupExport(controller.signal, vi.fn(), dependencies),
-  ).resolves.toBeUndefined()
+  ).resolves.toEqual({
+    complete: true,
+    omitted: 0,
+    adjustedRelationships: 0,
+    localInventoryUnstable: false,
+    warnings: 0,
+  })
   expect(controller.signal.aborted).toBe(true)
   expect(download).toHaveBeenCalledWith({
     kind: 'file',

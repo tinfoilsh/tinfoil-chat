@@ -6,6 +6,7 @@ import {
   NATIVE_BACKUP_FORMAT,
   NATIVE_BACKUP_LIMITS,
   NATIVE_BACKUP_VERSION,
+  NATIVE_BACKUP_VERSION_V2,
   type NativeBackupEntityKind,
 } from './constants'
 import {
@@ -49,6 +50,49 @@ export interface NativeBackupFormatInput {
   images: readonly NativeBackupImageInput[]
 }
 
+export const NATIVE_BACKUP_OMISSION_KINDS = [
+  'project',
+  'project_document',
+  'cloud_chat',
+  'local_chat',
+  'attachment',
+  'relationship',
+  'local_inventory',
+] as const
+export const NATIVE_BACKUP_FAILURE_CATEGORIES = [
+  'deleted',
+  'unavailable',
+  'invalid',
+  'unstable',
+] as const
+export type NativeBackupOmission = {
+  kind: (typeof NATIVE_BACKUP_OMISSION_KINDS)[number]
+  source_id: string
+  parent_source_id?: string
+  category: (typeof NATIVE_BACKUP_FAILURE_CATEGORIES)[number]
+  reason: string
+}
+export type NativeBackupWarning =
+  | {
+      code: 'source_items_omitted'
+      category: 'source_coverage'
+      count: number
+    }
+  | {
+      code: 'chats_detached_from_omitted_projects'
+      category: 'relationship_adjustment'
+      count: number
+    }
+  | {
+      code: 'local_inventory_unstable'
+      category: 'source_coverage'
+      count: number
+    }
+export interface NativeBackupV2Input extends NativeBackupFormatInput {
+  omissions: readonly NativeBackupOmission[]
+  warnings: readonly NativeBackupWarning[]
+}
+
 export interface NativeBackupManifestV1 {
   format: typeof NATIVE_BACKUP_FORMAT
   version: typeof NATIVE_BACKUP_VERSION
@@ -65,9 +109,22 @@ export interface NativeBackupManifestV1 {
   }>
 }
 
+export interface NativeBackupManifestV2 extends Omit<
+  NativeBackupManifestV1,
+  'version' | 'complete'
+> {
+  version: typeof NATIVE_BACKUP_VERSION_V2
+  complete: boolean
+  omissions: NativeBackupOmission[]
+  warnings: NativeBackupWarning[]
+}
+
+export type NativeBackupManifest =
+  NativeBackupManifestV1 | NativeBackupManifestV2
+
 export type NativeBackupV1Input = NativeBackupFormatInput
 
-const manifestSchema: z.ZodType<NativeBackupManifestV1> = strict({
+const manifestSchema = strict({
   format: z.literal(NATIVE_BACKUP_FORMAT),
   version: z.literal(NATIVE_BACKUP_VERSION),
   backup_id: z.string().uuid(),
@@ -96,8 +153,50 @@ const manifestSchema: z.ZodType<NativeBackupManifestV1> = strict({
   ),
 })
 
+const omissionSchema = strict({
+  kind: z.enum(NATIVE_BACKUP_OMISSION_KINDS),
+  source_id: z.string().min(1).max(2048),
+  parent_source_id: z.string().min(1).max(2048).optional(),
+  category: z.enum(NATIVE_BACKUP_FAILURE_CATEGORIES),
+  reason: z.string().min(1).max(128),
+})
+const warningSchema = z.discriminatedUnion('code', [
+  strict({
+    code: z.literal('source_items_omitted'),
+    category: z.literal('source_coverage'),
+    count: countSchema,
+  }),
+  strict({
+    code: z.literal('chats_detached_from_omitted_projects'),
+    category: z.literal('relationship_adjustment'),
+    count: countSchema,
+  }),
+  strict({
+    code: z.literal('local_inventory_unstable'),
+    category: z.literal('source_coverage'),
+    count: countSchema,
+  }),
+])
+const manifestV2Schema: z.ZodType<NativeBackupManifestV2> = manifestSchema
+  .omit({ version: true, complete: true })
+  .extend({
+    version: z.literal(NATIVE_BACKUP_VERSION_V2),
+    complete: z.boolean(),
+    omissions: z.array(omissionSchema),
+    warnings: z.array(warningSchema),
+  })
+  .strict()
+
 export const parseNativeBackupManifestV1 = (bytes: Uint8Array) =>
   manifestSchema.parse(parseJson(bytes, MANIFEST_PATH))
+
+export const parseNativeBackupManifest = (bytes: Uint8Array) => {
+  const value = parseJson(bytes, MANIFEST_PATH)
+  const manifest = z.union([manifestSchema, manifestV2Schema]).parse(value)
+  if (manifest.version === NATIVE_BACKUP_VERSION_V2)
+    assertNativeBackupV2Metadata(manifest)
+  return manifest
+}
 
 function fail(message: string): never {
   throw new Error(`Invalid native backup: ${message}`)
@@ -119,6 +218,176 @@ const relationshipCount = (value: NativeBackupRelationships) =>
   value.projectChats.length +
   value.projectDocuments.length +
   value.chatImages.length
+
+const omissionIdentity = (omission: NativeBackupOmission) =>
+  JSON.stringify([
+    omission.kind,
+    omission.source_id,
+    omission.parent_source_id ?? null,
+  ])
+
+export function deriveNativeBackupWarnings(
+  omissions: readonly NativeBackupOmission[],
+): NativeBackupWarning[] {
+  const omittedItems = omissions.filter(
+    ({ kind }) => kind !== 'relationship' && kind !== 'local_inventory',
+  ).length
+  const relationshipAdjustments = omissions.filter(
+    ({ kind }) => kind === 'relationship',
+  ).length
+  const unstableLocalInventories = omissions.filter(
+    ({ kind }) => kind === 'local_inventory',
+  ).length
+  return [
+    ...(omittedItems
+      ? [
+          {
+            code: 'source_items_omitted' as const,
+            category: 'source_coverage' as const,
+            count: omittedItems,
+          },
+        ]
+      : []),
+    ...(relationshipAdjustments
+      ? [
+          {
+            code: 'chats_detached_from_omitted_projects' as const,
+            category: 'relationship_adjustment' as const,
+            count: relationshipAdjustments,
+          },
+        ]
+      : []),
+    ...(unstableLocalInventories
+      ? [
+          {
+            code: 'local_inventory_unstable' as const,
+            category: 'source_coverage' as const,
+            count: unstableLocalInventories,
+          },
+        ]
+      : []),
+  ]
+}
+
+function assertNativeBackupV2Metadata(manifest: NativeBackupManifestV2) {
+  if (manifest.omissions.length > NATIVE_BACKUP_LIMITS.omissions)
+    fail('V2 omission limit exceeded')
+  if (manifest.complete !== (manifest.omissions.length === 0))
+    fail('V2 completeness does not match omissions')
+  const identities = new Set<string>()
+  for (const omission of manifest.omissions) {
+    const identity = omissionIdentity(omission)
+    if (identities.has(identity)) fail('duplicate or contradictory V2 omission')
+    identities.add(identity)
+    if (
+      omission.kind === 'relationship' &&
+      (!omission.parent_source_id ||
+        omission.category !== 'unavailable' ||
+        omission.reason !== 'project_reference_unavailable')
+    )
+      fail('invalid V2 relationship adjustment')
+    if (omission.kind === 'project_document' && !omission.parent_source_id)
+      fail('invalid V2 project document omission')
+    if (omission.kind === 'attachment' && !omission.parent_source_id)
+      fail('invalid V2 attachment omission')
+    if (
+      (omission.kind === 'project' ||
+        omission.kind === 'cloud_chat' ||
+        omission.kind === 'local_chat') &&
+      omission.parent_source_id
+    )
+      fail('invalid V2 entity omission')
+    if (
+      omission.kind === 'local_inventory' &&
+      (omission.source_id !== 'eligible_local_chats' ||
+        omission.parent_source_id ||
+        omission.category !== 'unstable' ||
+        omission.reason !== 'inventory_did_not_converge')
+    )
+      fail('invalid V2 local inventory omission')
+  }
+  const expected = deriveNativeBackupWarnings(manifest.omissions)
+  if (JSON.stringify(manifest.warnings) !== JSON.stringify(expected))
+    fail('V2 warnings do not match omissions')
+}
+
+export function assertNativeBackupOmissionsConsistent(
+  omissions: readonly NativeBackupOmission[],
+  projects: readonly NativeBackupProject[],
+  documents: readonly NativeBackupProjectDocument[],
+  cloudChats: readonly NativeBackupChat[],
+  localChats: readonly NativeBackupChat[],
+  relationships: NativeBackupRelationships,
+  images: readonly NativeBackupImage[],
+) {
+  const projectIds = new Set(projects.map(({ id }) => id))
+  const documentIds = new Set(
+    documents.map(({ projectId, id }) => relationKey(projectId, id)),
+  )
+  const cloudChatIds = new Set(cloudChats.map(({ id }) => id))
+  const localChatIds = new Set(localChats.map(({ id }) => id))
+  const chats = [...cloudChats, ...localChats]
+  const chatById = new Map(chats.map((chat) => [chat.id, chat]))
+  const imageIds = new Set(images.map(({ id }) => id))
+  const referencedImageIds = new Set(
+    chats.flatMap(({ messages }) =>
+      messages.flatMap((message) => [
+        ...(message.attachments ?? []).flatMap((attachment) =>
+          attachment.type === 'image'
+            ? [attachment.imageId]
+            : (attachment.pages ?? []).flatMap(({ imageId }) =>
+                imageId ? [imageId] : [],
+              ),
+        ),
+        ...(message.imageData ?? []).map(({ imageId }) => imageId),
+      ]),
+    ),
+  )
+  const projectChatRelations = new Set(
+    relationships.projectChats.map(({ projectId, chatId }) =>
+      relationKey(projectId, chatId),
+    ),
+  )
+  for (const omission of omissions) {
+    if (omission.kind === 'project' && projectIds.has(omission.source_id))
+      fail('project omission conflicts with included entity')
+    if (
+      omission.kind === 'project_document' &&
+      omission.parent_source_id &&
+      documentIds.has(
+        relationKey(omission.parent_source_id, omission.source_id),
+      )
+    )
+      fail('project document omission conflicts with included entity')
+    if (omission.kind === 'cloud_chat' && cloudChatIds.has(omission.source_id))
+      fail('cloud chat omission conflicts with included entity')
+    if (omission.kind === 'local_chat' && localChatIds.has(omission.source_id))
+      fail('local chat omission conflicts with included entity')
+    if (
+      omission.kind === 'attachment' &&
+      (!omission.parent_source_id || !chatById.has(omission.parent_source_id))
+    )
+      fail('attachment omission does not identify an included chat')
+    if (
+      omission.kind === 'attachment' &&
+      (imageIds.has(omission.source_id) ||
+        referencedImageIds.has(omission.source_id))
+    )
+      fail('attachment omission conflicts with included image reference')
+    if (omission.kind === 'relationship') {
+      const chat = chatById.get(omission.source_id)
+      if (
+        !chat ||
+        (chat.projectId !== undefined && chat.projectId !== null) ||
+        projectIds.has(omission.parent_source_id!) ||
+        projectChatRelations.has(
+          relationKey(omission.parent_source_id!, omission.source_id),
+        )
+      )
+        fail('relationship adjustment conflicts with included relation')
+    }
+  }
+}
 
 function expectedPathKind(path: string): NativeBackupEntityKind | null {
   if (path === 'relationships.json') return 'relationships'
@@ -318,6 +587,40 @@ export function formatNativeBackupV1(input: NativeBackupFormatInput): {
     files.map(({ path, bytes }) => ({ path, sizeBytes: bytes.length })),
   )
   return { manifestBytes, files }
+}
+
+export function formatNativeBackupV2(input: NativeBackupV2Input): {
+  manifestBytes: Uint8Array
+  files: NativeBackupFileEntry[]
+} {
+  assertNativeBackupOmissionsConsistent(
+    input.omissions,
+    input.projects,
+    input.projectDocuments,
+    input.cloudChats,
+    input.localChats,
+    input.relationships,
+    input.images.map(({ metadata }) => metadata),
+  )
+  const formatted = formatNativeBackupV1(input)
+  const v1 = parseNativeBackupManifestV1(formatted.manifestBytes)
+  const manifest: NativeBackupManifestV2 = manifestV2Schema.parse({
+    ...v1,
+    version: NATIVE_BACKUP_VERSION_V2,
+    complete: input.omissions.length === 0,
+    omissions: input.omissions,
+    warnings: input.warnings,
+  })
+  assertNativeBackupV2Metadata(manifest)
+  const manifestBytes = jsonBytes(manifest)
+  assertNativeBackupSizeLimits(
+    manifestBytes.length,
+    formatted.files.map(({ path, bytes }) => ({
+      path,
+      sizeBytes: bytes.length,
+    })),
+  )
+  return { manifestBytes, files: formatted.files }
 }
 
 function exactRelations(values: string[], wanted: Set<string>, name: string) {
@@ -539,4 +842,68 @@ export function assertValidNativeBackupV1(
   if (entities > NATIVE_BACKUP_LIMITS.entities) fail('entity limit exceeded')
   assertSemanticContent(projects, documents, chats, relationships[0], images)
   return manifest as NativeBackupManifestV1
+}
+
+function contentFromValidatedFiles(files: readonly NativeBackupFileEntry[]) {
+  const projects: NativeBackupProject[] = []
+  const documents: NativeBackupProjectDocument[] = []
+  const cloudChats: NativeBackupChat[] = []
+  const localChats: NativeBackupChat[] = []
+  const images: NativeBackupImage[] = []
+  let relationships: NativeBackupRelationships | undefined
+  for (const file of files) {
+    if (file.path.endsWith('.bin')) continue
+    const value = parseJson(file.bytes, file.path)
+    if (file.kind === 'projects')
+      projects.push(NativeBackupProjectSchema.parse(value))
+    if (file.kind === 'project_documents')
+      documents.push(NativeBackupProjectDocumentSchema.parse(value))
+    if (file.kind === 'cloud_chats')
+      cloudChats.push(NativeBackupChatSchema.parse(value))
+    if (file.kind === 'local_chats')
+      localChats.push(NativeBackupChatSchema.parse(value))
+    if (file.kind === 'images' && file.path.endsWith('.json'))
+      images.push(NativeBackupImageSchema.parse(value))
+    if (file.kind === 'relationships')
+      relationships = NativeBackupRelationshipsSchema.parse(value)
+  }
+  return {
+    projects,
+    documents,
+    cloudChats,
+    localChats,
+    images,
+    relationships: relationships!,
+  }
+}
+
+export function assertValidNativeBackupV2(
+  manifestBytes: Uint8Array,
+  files: readonly NativeBackupFileEntry[],
+): NativeBackupManifestV2 {
+  const manifest = parseNativeBackupManifest(manifestBytes)
+  if (manifest.version !== NATIVE_BACKUP_VERSION_V2)
+    fail('V2 manifest is required')
+  const v1Bytes = jsonBytes({
+    ...manifest,
+    version: NATIVE_BACKUP_VERSION,
+    complete: true,
+    omissions: undefined,
+    warnings: undefined,
+  })
+  const v1 = JSON.parse(decoder.decode(v1Bytes)) as Record<string, unknown>
+  delete v1.omissions
+  delete v1.warnings
+  assertValidNativeBackupV1(jsonBytes(v1), files)
+  const content = contentFromValidatedFiles(files)
+  assertNativeBackupOmissionsConsistent(
+    manifest.omissions,
+    content.projects,
+    content.documents,
+    content.cloudChats,
+    content.localChats,
+    content.relationships,
+    content.images,
+  )
+  return manifest
 }

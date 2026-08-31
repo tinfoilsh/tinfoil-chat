@@ -43,11 +43,30 @@ export function NativeBackupExport({ available }: { available: boolean }) {
     controller.current = current
     const isCurrent = () => controller.current === current
     try {
-      await runNativeBackupExport(current.signal, (value) => {
+      const result = await runNativeBackupExport(current.signal, (value) => {
         if (isCurrent()) setProgress(value)
       })
       if (!isCurrent() || !availableRef.current) return
-      setMessage('Backup saved successfully.')
+      const warningDetails = result
+        ? [
+            result.omitted
+              ? `${result.omitted} source item${result.omitted === 1 ? '' : 's'} could not be included.`
+              : '',
+            result.adjustedRelationships
+              ? `${result.adjustedRelationships} relationship${result.adjustedRelationships === 1 ? ' was' : 's were'} adjusted to keep the archive valid.`
+              : '',
+            result.localInventoryUnstable
+              ? 'Local chats changed repeatedly; included local chats are a partial snapshot.'
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' ')
+        : ''
+      setMessage(
+        result && !result.complete
+          ? `Backup saved with warnings. ${warningDetails}`
+          : 'Backup saved successfully.',
+      )
     } catch (error) {
       if (!isCurrent()) return
       setFailed(true)

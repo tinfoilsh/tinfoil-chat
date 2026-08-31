@@ -1,5 +1,17 @@
 const AES_GCM = 'AES-GCM'
 const IV_LENGTH = 12
+const AES_GCM_TAG_LENGTH = 16
+const AES_256_KEY_LENGTH = 32
+
+export type EncryptedAttachmentValidationErrorCode =
+  'ciphertext_too_short' | 'invalid_key_length'
+
+export class EncryptedAttachmentValidationError extends Error {
+  constructor(public readonly code: EncryptedAttachmentValidationErrorCode) {
+    super('Encrypted attachment structure is invalid')
+    this.name = 'EncryptedAttachmentValidationError'
+  }
+}
 
 /** Get a safe ArrayBuffer copy from a Uint8Array subview. */
 function toBuffer(view: Uint8Array): ArrayBuffer {
@@ -18,12 +30,12 @@ function packIvCiphertext(iv: Uint8Array, ciphertext: ArrayBuffer): Uint8Array {
 }
 
 /** Split IV(12) || ciphertext, validating minimum length. */
-function unpackIvCiphertext(
-  data: Uint8Array,
-  errorMsg: string,
-): { iv: Uint8Array; ciphertext: Uint8Array } {
-  if (data.length <= IV_LENGTH) {
-    throw new Error(errorMsg)
+function unpackIvCiphertext(data: Uint8Array): {
+  iv: Uint8Array
+  ciphertext: Uint8Array
+} {
+  if (data.length < IV_LENGTH + AES_GCM_TAG_LENGTH) {
+    throw new EncryptedAttachmentValidationError('ciphertext_too_short')
   }
   return {
     iv: data.subarray(0, IV_LENGTH),
@@ -116,10 +128,9 @@ export async function decryptAttachment(
   encryptedData: Uint8Array,
   key: Uint8Array,
 ): Promise<Uint8Array> {
-  const { iv, ciphertext } = unpackIvCiphertext(
-    encryptedData,
-    'Encrypted attachment too short',
-  )
+  if (key.length !== AES_256_KEY_LENGTH)
+    throw new EncryptedAttachmentValidationError('invalid_key_length')
+  const { iv, ciphertext } = unpackIvCiphertext(encryptedData)
 
   const cryptoKey = await crypto.subtle.importKey(
     'raw',

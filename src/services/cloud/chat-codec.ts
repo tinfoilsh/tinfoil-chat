@@ -38,6 +38,16 @@ export interface ProcessRemoteChatOptions {
   projectId?: string | null
 }
 
+export class RemoteChatDecodeError extends Error {
+  constructor(
+    public readonly reason: 'invalid_json' | 'invalid_shape',
+    options?: ErrorOptions,
+  ) {
+    super(`v2_plaintext_invalid: ${reason}`, options)
+    this.name = 'RemoteChatDecodeError'
+  }
+}
+
 /**
  * Decode a plaintext v2 row coming back from the enclave into a
  * `StoredChat`. Failure modes:
@@ -86,16 +96,16 @@ export async function processRemoteChat(
   try {
     parsed = JSON.parse(remote.plaintext)
   } catch (parseErr) {
-    throw new Error(
-      `v2_plaintext_invalid: ${
-        parseErr instanceof Error ? parseErr.message : String(parseErr)
-      }`,
-    )
+    if (parseErr instanceof SyntaxError)
+      throw new RemoteChatDecodeError('invalid_json', { cause: parseErr })
+    throw parseErr
   }
 
   const validation = RemoteChatPlaintextSchema.safeParse(parsed)
   if (!validation.success) {
-    throw new Error(`v2_plaintext_invalid: ${validation.error.message}`)
+    throw new RemoteChatDecodeError('invalid_shape', {
+      cause: validation.error,
+    })
   }
   const decrypted = validation.data
 

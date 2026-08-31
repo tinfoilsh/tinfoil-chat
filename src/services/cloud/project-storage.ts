@@ -19,8 +19,16 @@ import {
   push as enclavePush,
   newIdempotencyKey,
   pullItemPlaintext,
+  SyncEnclaveError,
+  type PullItem,
 } from '../sync-enclave/sync-api'
 import type { AccountOperationGuard } from './account-operation'
+import {
+  CloudBackupReadError,
+  groupBackupPullItems,
+  validateBackupPullItem,
+  type BackupPullResult,
+} from './backup-read-error'
 import { pullKey, requirePrimaryKeyB64 } from './cek-encoding'
 import { canWriteToCloud } from './cloud-key-authorization'
 import { ProjectDataSchema, ProjectDocumentPlaintextSchema } from './schemas'
@@ -213,10 +221,21 @@ export class ProjectStorageService {
     }
   }
 
-  async getProject(projectId: string): Promise<Project | null> {
+  async getProject(
+    projectId: string,
+    options: { strictBackupRead?: boolean } = {},
+  ): Promise<Project | null> {
     try {
       const keys = pullKey()
-      if (keys.length === 0) return null
+      if (keys.length === 0) {
+        if (options.strictBackupRead)
+          throw new CloudBackupReadError(
+            'key_unavailable',
+            'cloud_key_unavailable',
+            false,
+          )
+        return null
+      }
 
       const resp = await enclavePull({
         scope: PROJECT_SCOPE,
@@ -226,14 +245,47 @@ export class ProjectStorageService {
       const item = resp.items[0]
       if (!item || !item.ok) {
         if (item && item.code === 'NOT_FOUND') return null
+        if (options.strictBackupRead)
+          throw new SyncEnclaveError(
+            'Project pull returned an invalid item',
+            undefined,
+            item?.code,
+          )
         return null
       }
       const plaintextBytes = pullItemPlaintext(item)
-      if (!plaintextBytes) return null
+      if (!plaintextBytes) {
+        if (options.strictBackupRead)
+          throw new CloudBackupReadError(
+            'item_invalid',
+            'project_payload_unavailable',
+            true,
+          )
+        return null
+      }
 
-      const parsed = JSON.parse(new TextDecoder().decode(plaintextBytes))
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(new TextDecoder().decode(plaintextBytes))
+      } catch (error) {
+        if (options.strictBackupRead && error instanceof SyntaxError)
+          throw new CloudBackupReadError(
+            'item_invalid',
+            'project_payload_invalid',
+            true,
+            { cause: error },
+          )
+        throw error
+      }
       const projectValidation = ProjectDataSchema.safeParse(parsed)
       if (!projectValidation.success) {
+        if (options.strictBackupRead)
+          throw new CloudBackupReadError(
+            'item_invalid',
+            'project_payload_invalid',
+            true,
+            { cause: projectValidation.error },
+          )
         logError('Discarding project with invalid shape', undefined, {
           component: 'ProjectStorage',
           action: 'getProject',
@@ -261,12 +313,125 @@ export class ProjectStorageService {
         syncVersion: etagToSyncVersion(item.etag),
       }
     } catch (error) {
+      if (options.strictBackupRead) throw error
       logError(`Failed to get project ${projectId}`, error, {
         component: 'ProjectStorage',
         action: 'getProject',
         metadata: { projectId },
       })
       return null
+    }
+  }
+
+  /**
+   * Batched strict backup read for projects: one enclave round trip,
+   * each item validated against its captured inventory ETag. Results
+   * align positionally with `requests` and settle per record.
+   */
+  async getProjectsForBackup(
+    requests: ReadonlyArray<{ id: string; expectedEtag: string }>,
+  ): Promise<BackupPullResult<Project | null>[]> {
+    return this.pullBatchForBackup(
+      PROJECT_SCOPE,
+      requests.map(({ id, expectedEtag }) => ({
+        wireId: id,
+        expectedEtag,
+      })),
+      (item, index) => this.decodeProjectBackupItem(item, requests[index].id),
+    )
+  }
+
+  private async pullBatchForBackup<T>(
+    scope: typeof PROJECT_SCOPE | typeof PROJECT_DOCUMENT_SCOPE,
+    requests: ReadonlyArray<{ wireId: string; expectedEtag: string }>,
+    decode: (item: PullItem, index: number) => T | null,
+  ): Promise<BackupPullResult<T | null>[]> {
+    if (requests.length === 0) return []
+    const keys = pullKey()
+    if (keys.length === 0)
+      throw new CloudBackupReadError(
+        'key_unavailable',
+        'cloud_key_unavailable',
+        false,
+      )
+    const resp = await enclavePull({
+      scope,
+      ids: requests.map(({ wireId }) => wireId),
+      keys,
+    })
+    const grouped = groupBackupPullItems(
+      resp.items,
+      requests.map(({ wireId }) => wireId),
+    )
+    return requests.map(({ wireId, expectedEtag }, index) => {
+      try {
+        const item = validateBackupPullItem(
+          grouped.get(wireId) ?? [],
+          wireId,
+          expectedEtag,
+        )
+        // validateBackupPullItem throws for NOT_FOUND, so any failed
+        // item that survives it carries an unexpected error code.
+        if (!item.ok)
+          throw new SyncEnclaveError(
+            'Backup pull returned an invalid item',
+            undefined,
+            item.code,
+          )
+        return { ok: true as const, value: decode(item, index) }
+      } catch (error) {
+        return { ok: false as const, error }
+      }
+    })
+  }
+
+  private decodeProjectBackupItem(
+    item: PullItem,
+    projectId: string,
+  ): Project | null {
+    const plaintextBytes = pullItemPlaintext(item)
+    if (!plaintextBytes)
+      throw new CloudBackupReadError(
+        'item_invalid',
+        'project_payload_unavailable',
+        true,
+      )
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(new TextDecoder().decode(plaintextBytes))
+    } catch (error) {
+      if (error instanceof SyntaxError)
+        throw new CloudBackupReadError(
+          'item_invalid',
+          'project_payload_invalid',
+          true,
+          { cause: error },
+        )
+      throw error
+    }
+    const projectValidation = ProjectDataSchema.safeParse(parsed)
+    if (!projectValidation.success)
+      throw new CloudBackupReadError(
+        'item_invalid',
+        'project_payload_invalid',
+        true,
+        { cause: projectValidation.error },
+      )
+    const decoded = parsed as ProjectData
+
+    // Same timestamp-synthesis rationale as getProject: the
+    // controlplane listing path owns the authoritative values.
+    const now = new Date().toISOString()
+    return {
+      id: projectId,
+      name: decoded.name,
+      description: decoded.description,
+      systemInstructions: decoded.systemInstructions,
+      color: decoded.color,
+      memory: decoded.memory || [],
+      createdAt: now,
+      updatedAt: now,
+      syncVersion: etagToSyncVersion(item.etag),
     }
   }
 
@@ -536,10 +701,19 @@ export class ProjectStorageService {
   async getDocument(
     projectId: string,
     documentId: string,
+    options: { strictBackupRead?: boolean } = {},
   ): Promise<ProjectDocument | null> {
     try {
       const keys = pullKey()
-      if (keys.length === 0) return null
+      if (keys.length === 0) {
+        if (options.strictBackupRead)
+          throw new CloudBackupReadError(
+            'key_unavailable',
+            'cloud_key_unavailable',
+            false,
+          )
+        return null
+      }
 
       const resp = await enclavePull({
         scope: PROJECT_DOCUMENT_SCOPE,
@@ -549,15 +723,48 @@ export class ProjectStorageService {
       const item = resp.items[0]
       if (!item || !item.ok) {
         if (item && item.code === 'NOT_FOUND') return null
+        if (options.strictBackupRead)
+          throw new SyncEnclaveError(
+            'Project document pull returned an invalid item',
+            undefined,
+            item?.code,
+          )
         return null
       }
       const plaintextBytes = pullItemPlaintext(item)
-      if (!plaintextBytes) return null
+      if (!plaintextBytes) {
+        if (options.strictBackupRead)
+          throw new CloudBackupReadError(
+            'item_invalid',
+            'document_payload_unavailable',
+            true,
+          )
+        return null
+      }
 
-      const documentValidation = ProjectDocumentPlaintextSchema.safeParse(
-        JSON.parse(new TextDecoder().decode(plaintextBytes)),
-      )
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(new TextDecoder().decode(plaintextBytes))
+      } catch (error) {
+        if (options.strictBackupRead && error instanceof SyntaxError)
+          throw new CloudBackupReadError(
+            'item_invalid',
+            'document_payload_invalid',
+            true,
+            { cause: error },
+          )
+        throw error
+      }
+      const documentValidation =
+        ProjectDocumentPlaintextSchema.safeParse(parsed)
       if (!documentValidation.success) {
+        if (options.strictBackupRead)
+          throw new CloudBackupReadError(
+            'item_invalid',
+            'document_payload_invalid',
+            true,
+            { cause: documentValidation.error },
+          )
         logError('Discarding document with invalid shape', undefined, {
           component: 'ProjectStorage',
           action: 'getDocument',
@@ -582,12 +789,91 @@ export class ProjectStorageService {
         content: decoded.content,
       }
     } catch (error) {
+      if (options.strictBackupRead) throw error
       logError(`Failed to get document ${documentId}`, error, {
         component: 'ProjectStorage',
         action: 'getDocument',
         metadata: { projectId, documentId },
       })
       return null
+    }
+  }
+
+  /**
+   * Batched strict backup read for project documents: one enclave
+   * round trip, each item validated against its captured inventory
+   * ETag. Results align positionally with `requests`.
+   */
+  async getDocumentsForBackup(
+    requests: ReadonlyArray<{
+      projectId: string
+      id: string
+      expectedEtag: string
+    }>,
+  ): Promise<BackupPullResult<ProjectDocument | null>[]> {
+    return this.pullBatchForBackup(
+      PROJECT_DOCUMENT_SCOPE,
+      requests.map(({ projectId, id, expectedEtag }) => ({
+        wireId: projectDocumentId(projectId, id),
+        expectedEtag,
+      })),
+      (item, index) =>
+        this.decodeDocumentBackupItem(
+          item,
+          requests[index].projectId,
+          requests[index].id,
+        ),
+    )
+  }
+
+  private decodeDocumentBackupItem(
+    item: PullItem,
+    projectId: string,
+    documentId: string,
+  ): ProjectDocument | null {
+    const plaintextBytes = pullItemPlaintext(item)
+    if (!plaintextBytes)
+      throw new CloudBackupReadError(
+        'item_invalid',
+        'document_payload_unavailable',
+        true,
+      )
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(new TextDecoder().decode(plaintextBytes))
+    } catch (error) {
+      if (error instanceof SyntaxError)
+        throw new CloudBackupReadError(
+          'item_invalid',
+          'document_payload_invalid',
+          true,
+          { cause: error },
+        )
+      throw error
+    }
+    const documentValidation = ProjectDocumentPlaintextSchema.safeParse(parsed)
+    if (!documentValidation.success)
+      throw new CloudBackupReadError(
+        'item_invalid',
+        'document_payload_invalid',
+        true,
+        { cause: documentValidation.error },
+      )
+    const decoded = documentValidation.data
+
+    // Same timestamp-synthesis rationale as getProject: the
+    // controlplane listing path owns the authoritative values.
+    const now = new Date().toISOString()
+    return {
+      id: documentId,
+      projectId,
+      filename: decoded.filename || '',
+      contentType: decoded.contentType || '',
+      sizeBytes: resolveDocumentSizeBytes(decoded.content, decoded.sizeBytes),
+      syncVersion: etagToSyncVersion(item.etag),
+      createdAt: now,
+      updatedAt: now,
+      content: decoded.content,
     }
   }
 

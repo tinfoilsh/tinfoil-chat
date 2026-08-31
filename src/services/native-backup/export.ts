@@ -1,7 +1,7 @@
 import * as auth from '@/services/auth'
 import { SyncEnclaveError } from '@/services/sync-enclave'
-import { collectNativeBackupV1, NativeBackupCollectionError } from './collect'
-import { formatNativeBackupV1 } from './format'
+import { collectNativeBackupV2, NativeBackupCollectionError } from './collect'
+import { formatNativeBackupV2, type NativeBackupWarning } from './format'
 import {
   NativeBackupWriterError,
   prepareNativeBackupArchiveDestination,
@@ -10,11 +10,18 @@ import {
 } from './write'
 
 export type NativeBackupExportProgress = 'collecting' | 'formatting' | 'writing'
+export type NativeBackupExportResult = {
+  complete: boolean
+  omitted: number
+  adjustedRelationships: number
+  localInventoryUnstable: boolean
+  warnings: number
+}
 
 export interface NativeBackupExportDependencies {
   prepare?: typeof prepareNativeBackupArchiveDestination
-  collect: (signal: AbortSignal) => ReturnType<typeof collectNativeBackupV1>
-  format: typeof formatNativeBackupV1
+  collect: (signal: AbortSignal) => ReturnType<typeof collectNativeBackupV2>
+  format: typeof formatNativeBackupV2
   write: typeof writeNativeBackupArchive
   download: (result: NativeBackupArchiveResult) => void
 }
@@ -33,8 +40,8 @@ const download = (result: NativeBackupArchiveResult) => {
 
 const defaults: NativeBackupExportDependencies = {
   prepare: prepareNativeBackupArchiveDestination,
-  collect: (signal) => collectNativeBackupV1(undefined, signal),
-  format: formatNativeBackupV1,
+  collect: (signal) => collectNativeBackupV2(undefined, signal),
+  format: formatNativeBackupV2,
   write: writeNativeBackupArchive,
   download,
 }
@@ -43,7 +50,7 @@ export async function runNativeBackupExport(
   signal: AbortSignal,
   onProgress: (progress: NativeBackupExportProgress) => void,
   dependencies: NativeBackupExportDependencies = defaults,
-): Promise<void> {
+): Promise<NativeBackupExportResult> {
   signal.throwIfAborted()
   const destination = await dependencies.prepare?.()
   signal.throwIfAborted()
@@ -57,6 +64,19 @@ export async function runNativeBackupExport(
   const result = await dependencies.write(formatted, { signal, destination })
   if (result.kind === 'blob') signal.throwIfAborted()
   dependencies.download(result)
+  const warningCount = (code: NativeBackupWarning['code']) =>
+    collected.warnings.find((warning) => warning.code === code)?.count ?? 0
+  const omitted = warningCount('source_items_omitted')
+  const adjustedRelationships = warningCount(
+    'chats_detached_from_omitted_projects',
+  )
+  return {
+    complete: collected.omissions.length === 0,
+    omitted,
+    adjustedRelationships,
+    localInventoryUnstable: warningCount('local_inventory_unstable') > 0,
+    warnings: collected.warnings.length,
+  }
 }
 
 export function nativeBackupExportError(error: unknown): string {

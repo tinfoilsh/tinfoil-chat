@@ -19,7 +19,7 @@ describe('native backup export orchestration', () => {
       }),
       collect: vi.fn(async () => {
         order.push('collect')
-        return { value: true }
+        return { omissions: [], warnings: [] }
       }),
       format: vi.fn(() => {
         order.push('format')
@@ -62,6 +62,55 @@ describe('native backup export orchestration', () => {
     ).rejects.toMatchObject({ name: 'AbortError' })
     expect(dependencies.format).not.toHaveBeenCalled()
     expect(dependencies.download).not.toHaveBeenCalled()
+  })
+
+  it('reports partial counts from canonical collection warnings', async () => {
+    const dependencies = {
+      prepare: vi.fn(async () => undefined),
+      collect: vi.fn(async () => ({
+        omissions: [{ kind: 'relationship' }],
+        warnings: [
+          {
+            code: 'source_items_omitted',
+            category: 'source_coverage',
+            count: 3,
+          },
+          {
+            code: 'chats_detached_from_omitted_projects',
+            category: 'relationship_adjustment',
+            count: 2,
+          },
+          {
+            code: 'local_inventory_unstable',
+            category: 'source_coverage',
+            count: 1,
+          },
+        ],
+      })),
+      format: vi.fn(() => ({ manifestBytes: new Uint8Array(), files: [] })),
+      write: vi.fn(
+        async () =>
+          ({
+            kind: 'file',
+            filename: 'backup.zip',
+          }) as const,
+      ),
+      download: vi.fn(),
+    } as unknown as NativeBackupExportDependencies
+
+    await expect(
+      runNativeBackupExport(
+        new AbortController().signal,
+        vi.fn(),
+        dependencies,
+      ),
+    ).resolves.toEqual({
+      complete: false,
+      omitted: 3,
+      adjustedRelationships: 2,
+      localInventoryUnstable: true,
+      warnings: 3,
+    })
   })
 
   it('returns actionable errors for expected failures', () => {

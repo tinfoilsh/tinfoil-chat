@@ -1,19 +1,58 @@
 import type { Attachment } from '@/components/chat/types'
 import { AuthTokenUnavailableError } from '@/services/auth'
+import type { BackupPullResult } from '@/services/cloud/backup-read-error'
+import { CloudBackupReadError } from '@/services/cloud/cloud-storage'
 import {
-  NATIVE_BACKUP_LIMITS,
   NativeBackupCollectionError,
-  collectNativeBackupV1,
-  formatNativeBackupV1,
+  collectNativeBackupV2,
+  formatNativeBackupV2,
   type NativeBackupCollectionDependencies,
 } from '@/services/native-backup'
+import { CLOUD_PULL_BATCH_SIZE } from '@/services/native-backup/collect'
 import type { StoredChat } from '@/services/storage/indexed-db'
+import type {
+  BackupInventoryItem,
+  BackupInventoryResponse,
+} from '@/services/sync-enclave/sync-api'
+import { SyncNetworkError } from '@/services/sync-enclave/sync-enclave-client'
 import type { Project, ProjectDocument } from '@/types/project'
+
+async function settle<T>(read: () => Promise<T>): Promise<BackupPullResult<T>> {
+  try {
+    return { ok: true, value: await read() }
+  } catch (error) {
+    return { ok: false, error }
+  }
+}
+
+function batchReads<T>(fn: (id: string, expectedEtag: string) => Promise<T>) {
+  return (requests: ReadonlyArray<{ id: string; expectedEtag: string }>) =>
+    Promise.all(
+      requests.map(({ id, expectedEtag }) =>
+        settle(() => fn(id, expectedEtag)),
+      ),
+    )
+}
+
+function batchDocumentReads<T>(
+  fn: (projectId: string, id: string, expectedEtag: string) => Promise<T>,
+) {
+  return (
+    requests: ReadonlyArray<{
+      projectId: string
+      id: string
+      expectedEtag: string
+    }>,
+  ) =>
+    Promise.all(
+      requests.map(({ projectId, id, expectedEtag }) =>
+        settle(() => fn(projectId, id, expectedEtag)),
+      ),
+    )
+}
 
 const timestamp = '2026-08-20T12:00:00.000Z'
 const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
-const pngBase64 = (suffix?: number) =>
-  btoa(String.fromCharCode(...png, ...(suffix === undefined ? [] : [suffix])))
 
 function chat(overrides: Partial<StoredChat> = {}): StoredChat {
   return {
@@ -35,15 +74,7 @@ function project(overrides: Partial<Project> = {}): Project {
     description: '',
     systemInstructions: 'Be concise',
     color: 'blue',
-    memory: [
-      {
-        id: 'fact',
-        fact: 'Likes tea',
-        category: 'preference',
-        confidence: 1,
-        date: timestamp,
-      },
-    ],
+    memory: [],
     createdAt: timestamp,
     updatedAt: timestamp,
     syncVersion: 1,
@@ -66,6 +97,26 @@ function document(overrides: Partial<ProjectDocument> = {}): ProjectDocument {
   }
 }
 
+function item(
+  scope: BackupInventoryItem['scope'],
+  id: string,
+  etag: string,
+  projectId?: string,
+): BackupInventoryItem {
+  return {
+    scope,
+    id,
+    etag,
+    ...(projectId ? { project_id: projectId } : {}),
+    created_at: timestamp,
+    updated_at: timestamp,
+  }
+}
+
+function inventory(items: BackupInventoryItem[] = []): BackupInventoryResponse {
+  return { captured_at: timestamp, total_items: items.length, items }
+}
+
 function dependencies(
   overrides: Partial<NativeBackupCollectionDependencies> = {},
 ): NativeBackupCollectionDependencies {
@@ -73,13 +124,11 @@ function dependencies(
     isAuthenticated: async () => true,
     activeUserId: () => 'user',
     requireUnlockedCek: () => {},
-    listChats: async () => ({ items: [] }),
-    getCloudChat: async () => null,
+    getCloudInventory: async () => inventory(),
+    getCloudChats: batchReads(async () => null),
     getCloudImage: async () => null,
-    listProjects: async () => ({ items: [] }),
-    getProject: async () => null,
-    listDocuments: async () => [],
-    getDocument: async () => null,
+    getProjects: batchReads(async () => null),
+    getDocuments: batchDocumentReads(async () => null),
     getLocalChats: async () => [],
     getLocalChat: async () => null,
     ...overrides,
@@ -87,536 +136,368 @@ function dependencies(
 }
 
 describe('native backup collection', () => {
-  it('paginates all cloud chats and projects', async () => {
-    const firstChat = chat({ id: 'chat-1' })
-    const secondChat = chat({ id: 'chat-2' })
-    const firstProject = project({ id: 'project-1' })
-    const secondProject = project({ id: 'project-2' })
-    const listChats = vi
+  it('uses one captured inventory and passes opaque ETags to grouped reads', async () => {
+    const getCloudInventory = vi
       .fn()
-      .mockResolvedValueOnce({
-        items: [{ id: firstChat.id, syncVersion: 1 }],
-        next: 'chat-page-2',
-      })
-      .mockResolvedValueOnce({
-        items: [{ id: secondChat.id, syncVersion: 1 }],
-      })
-    const listProjects = vi
+      .mockResolvedValue(
+        inventory([
+          item('chat', 'chat', 'chat-etag', 'project'),
+          item('project', 'project', 'project-etag'),
+          item('project_document', 'document', 'document-etag', 'project'),
+        ]),
+      )
+    const getCloudChat = vi
       .fn()
-      .mockResolvedValueOnce({
-        items: [
-          {
-            id: firstProject.id,
-            syncVersion: 1,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          },
-        ],
-        next: 'project-page-2',
-      })
-      .mockResolvedValueOnce({
-        items: [
-          {
-            id: secondProject.id,
-            syncVersion: 1,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          },
-        ],
-      })
+      .mockResolvedValue(chat({ projectId: 'project' }))
+    const getProject = vi.fn().mockResolvedValue(project())
+    const getDocument = vi.fn().mockResolvedValue(document())
 
-    const result = await collectNativeBackupV1(
+    const result = await collectNativeBackupV2(
       dependencies({
-        listChats,
-        listProjects,
-        getCloudChat: async (id) =>
-          id === firstChat.id ? firstChat : secondChat,
-        getProject: async (id) =>
-          id === firstProject.id ? firstProject : secondProject,
+        getCloudInventory,
+        getCloudChats: batchReads(getCloudChat),
+        getProjects: batchReads(getProject),
+        getDocuments: batchDocumentReads(getDocument),
       }),
     )
 
-    expect(listChats).toHaveBeenNthCalledWith(2, 'chat-page-2')
-    expect(listProjects).toHaveBeenNthCalledWith(2, 'project-page-2')
-    expect(result.cloudChats.map(({ id }) => id)).toEqual(['chat-1', 'chat-2'])
-    expect(result.projects.map(({ id }) => id)).toEqual([
-      'project-1',
-      'project-2',
-    ])
-  })
-
-  it('includes only signed-in-owner local-only chats', async () => {
-    const included = chat({
-      id: 'included',
-      isLocalOnly: true,
-      syncUserId: 'user',
-    })
-    const cloudCache = chat({ id: 'cloud-cache', syncUserId: 'user' })
-    const anonymous = chat({ id: 'anonymous', isLocalOnly: true })
-    const otherOwner = chat({
-      id: 'other-owner',
-      isLocalOnly: true,
-      syncUserId: 'other',
-    })
-    const temporary = chat({
-      id: 'temporary',
-      isLocalOnly: true,
-      syncUserId: 'user',
-      isTemporary: true,
-    })
-    const blank = chat({
-      id: 'blank',
-      isLocalOnly: true,
-      syncUserId: 'user',
-      isBlankChat: true,
-    })
-    const values = [
-      included,
-      cloudCache,
-      anonymous,
-      otherOwner,
-      temporary,
-      blank,
-    ]
-
-    const result = await collectNativeBackupV1(
-      dependencies({
-        getLocalChats: async () => values,
-        getLocalChat: async (id) => values.find((value) => value.id === id)!,
-      }),
+    expect(getCloudInventory).toHaveBeenCalledOnce()
+    expect(getCloudChat).toHaveBeenCalledWith('chat', 'chat-etag')
+    expect(getProject).toHaveBeenCalledWith('project', 'project-etag')
+    expect(getDocument).toHaveBeenCalledWith(
+      'project',
+      'document',
+      'document-etag',
     )
-
-    expect(result.localChats.map(({ id }) => id)).toEqual(['included'])
-  })
-
-  it('retrieves document content and cloud and local images with relationships', async () => {
-    const imageAttachment: Attachment = {
-      id: 'cloud-image',
-      type: 'image',
-      fileName: 'cloud.png',
-      mimeType: 'image/png',
-      encryptionKey: 'key',
-    }
-    const cloudChat = chat({
-      id: 'cloud-chat',
-      projectId: 'project',
-      messages: [
-        {
-          role: 'user',
-          content: 'cloud',
-          timestamp: new Date(timestamp),
-          attachments: [imageAttachment],
-        },
-      ],
-    })
-    const localChat = chat({
-      id: 'local-chat',
-      isLocalOnly: true,
-      syncUserId: 'user',
-      messages: [
-        {
-          role: 'user',
-          content: 'local',
-          timestamp: new Date(timestamp),
-          imageData: [{ base64: pngBase64(), mimeType: 'image/png' }],
-        },
-      ],
-    })
-    const doc = document()
-
-    const result = await collectNativeBackupV1(
-      dependencies({
-        listChats: async () => ({
-          items: [{ id: cloudChat.id, syncVersion: 1 }],
-        }),
-        getCloudChat: async () => cloudChat,
-        getCloudImage: async () => png,
-        listProjects: async () => ({
-          items: [
-            {
-              id: 'project',
-              syncVersion: 1,
-              createdAt: timestamp,
-              updatedAt: timestamp,
-            },
-          ],
-        }),
-        getProject: async () => project(),
-        listDocuments: async () => [
-          {
-            id: doc.id,
-            projectId: doc.projectId,
-            syncVersion: 1,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          },
-        ],
-        getDocument: async () => doc,
-        getLocalChats: async () => [localChat],
-        getLocalChat: async () => localChat,
-      }),
-    )
-
-    expect(result.projectDocuments[0].extractedText).toBe('text')
     expect(result.projects[0]).toMatchObject({
-      color: 'blue',
-      memory: project().memory,
-    })
-    expect(result.images.map(({ bytes }) => [...bytes])).toEqual([
-      [...png],
-      [...png],
-    ])
-    expect(result.relationships).toEqual({
-      projectChats: [{ projectId: 'project', chatId: 'cloud-chat' }],
-      projectDocuments: [{ projectId: 'project', documentId: 'document' }],
-      chatImages: [
-        {
-          chatId: 'cloud-chat',
-          imageId: '["attachment","cloud-chat",0,0,"cloud-image"]',
-        },
-        {
-          chatId: 'local-chat',
-          imageId: 'legacy:local-chat:0:0',
-        },
-      ],
-    })
-    expect(() => formatNativeBackupV1(result)).not.toThrow()
-  })
-
-  it('keeps documents with the same id in different projects', async () => {
-    const projects = [
-      project({ id: 'project-1' }),
-      project({ id: 'project-2' }),
-    ]
-    const documents = projects.map(({ id: projectId }) =>
-      document({ id: 'shared-document', projectId }),
-    )
-
-    const result = await collectNativeBackupV1(
-      dependencies({
-        listProjects: async () => ({
-          items: projects.map(({ id, syncVersion, createdAt, updatedAt }) => ({
-            id,
-            syncVersion,
-            createdAt,
-            updatedAt,
-          })),
-        }),
-        getProject: async (id) => projects.find((value) => value.id === id)!,
-        listDocuments: async (projectId) =>
-          documents
-            .filter((value) => value.projectId === projectId)
-            .map(({ id, projectId, syncVersion, createdAt, updatedAt }) => ({
-              id,
-              projectId,
-              syncVersion,
-              createdAt,
-              updatedAt,
-            })),
-        getDocument: async (projectId, id) =>
-          documents.find(
-            (value) => value.projectId === projectId && value.id === id,
-          )!,
-      }),
-    )
-
-    expect(result.projectDocuments).toHaveLength(2)
-  })
-
-  it('retries one changed record and fails a persistently changing record', async () => {
-    const stable = chat({ syncVersion: 2 })
-    const getStable = vi.fn().mockResolvedValue(stable)
-    const listStable = vi
-      .fn()
-      .mockResolvedValueOnce({ items: [{ id: stable.id, syncVersion: 1 }] })
-      .mockResolvedValue({ items: [{ id: stable.id, syncVersion: 2 }] })
-    await collectNativeBackupV1(
-      dependencies({
-        listChats: listStable,
-        getCloudChat: getStable,
-      }),
-    )
-    expect(getStable).toHaveBeenCalledTimes(3)
-
-    let version = 1
-    await expect(
-      collectNativeBackupV1(
-        dependencies({
-          listChats: async () => ({ items: [{ id: 'chat', syncVersion: 1 }] }),
-          getCloudChat: async () => chat({ syncVersion: version++ }),
-        }),
-      ),
-    ).rejects.toThrow('cloud chat chat: version changed during collection')
-  })
-
-  it('revalidates local ownership and eligibility after a changed read', async () => {
-    const eligible = chat({ isLocalOnly: true, syncUserId: 'user' })
-    const ineligible = chat({
-      isLocalOnly: true,
-      syncUserId: 'other-user',
-    })
-    const getLocalChat = vi
-      .fn()
-      .mockResolvedValueOnce(eligible)
-      .mockResolvedValue(ineligible)
-
-    const result = await collectNativeBackupV1(
-      dependencies({
-        getLocalChats: async () => [eligible],
-        getLocalChat,
-      }),
-    )
-
-    expect(result.localChats).toEqual([])
-    expect(getLocalChat).toHaveBeenCalledTimes(3)
-  })
-
-  it('detects local image changes during collection', async () => {
-    const local = (base64: string) =>
-      chat({
-        isLocalOnly: true,
-        syncUserId: 'user',
-        messages: [
-          {
-            role: 'user',
-            content: 'image',
-            timestamp: new Date(timestamp),
-            attachments: [
-              {
-                id: 'image',
-                type: 'image',
-                fileName: 'image.png',
-                mimeType: 'image/png',
-                base64,
-              },
-            ],
-          },
-        ],
-      })
-    const getLocalChat = vi
-      .fn()
-      .mockResolvedValueOnce(local(pngBase64(1)))
-      .mockResolvedValueOnce(local(pngBase64(2)))
-      .mockResolvedValueOnce(local(pngBase64(3)))
-      .mockResolvedValueOnce(local(pngBase64(4)))
-
-    await expect(
-      collectNativeBackupV1(
-        dependencies({
-          getLocalChats: async () => [local(pngBase64(1))],
-          getLocalChat,
-        }),
-      ),
-    ).rejects.toThrow('local chat chat: version changed during collection')
-  })
-
-  it('adds record context to malformed local chat errors', async () => {
-    const malformed = chat({
-      isLocalOnly: true,
-      syncUserId: 'user',
-      createdAt: null as unknown as string,
-    })
-
-    await expect(
-      collectNativeBackupV1(
-        dependencies({
-          getLocalChats: async () => [malformed],
-          getLocalChat: async () => malformed,
-        }),
-      ),
-    ).rejects.toThrow(
-      'local chat chat: record is invalid: Invalid backup timestamp',
-    )
-  })
-
-  it('refreshes authoritative timestamps when a listed version changes', async () => {
-    const oldTimestamp = '2026-08-19T12:00:00.000Z'
-    const listProjects = vi
-      .fn()
-      .mockResolvedValueOnce({
-        items: [
-          {
-            id: 'project',
-            syncVersion: 1,
-            createdAt: oldTimestamp,
-            updatedAt: oldTimestamp,
-          },
-        ],
-      })
-      .mockResolvedValue({
-        items: [
-          {
-            id: 'project',
-            syncVersion: 2,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          },
-        ],
-      })
-
-    const result = await collectNativeBackupV1(
-      dependencies({
-        listProjects,
-        getProject: async () => project({ syncVersion: 2 }),
-      }),
-    )
-
-    expect(result.projects[0]).toMatchObject({
+      id: 'project',
       createdAt: timestamp,
       updatedAt: timestamp,
     })
-    expect(listProjects).toHaveBeenCalledTimes(2)
+    expect(result.relationships).toMatchObject({
+      projectChats: [{ projectId: 'project', chatId: 'chat' }],
+      projectDocuments: [{ projectId: 'project', documentId: 'document' }],
+    })
+    expect(() => formatNativeBackupV2(result)).not.toThrow()
   })
 
-  it('deduplicates mutable paginated rows at their latest versions', async () => {
-    const listChats = vi
-      .fn()
-      .mockResolvedValueOnce({
-        items: [{ id: 'chat', syncVersion: 1 }],
-        next: 'next',
-      })
-      .mockResolvedValueOnce({ items: [{ id: 'chat', syncVersion: 2 }] })
-    const listProjects = vi
-      .fn()
-      .mockResolvedValueOnce({
-        items: [
-          {
-            id: 'project',
-            syncVersion: 1,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          },
-        ],
-        next: 'next',
-      })
-      .mockResolvedValueOnce({
-        items: [
-          {
-            id: 'project',
-            syncVersion: 2,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          },
-        ],
-      })
-    const getCloudChat = vi.fn().mockResolvedValue(chat({ syncVersion: 2 }))
-    const getProject = vi.fn().mockResolvedValue(project({ syncVersion: 2 }))
-    const listDocuments = vi.fn().mockResolvedValue([])
+  it('pulls inventory records in batches and isolates per-record failures', async () => {
+    const items = Array.from(
+      { length: CLOUD_PULL_BATCH_SIZE + 5 },
+      (_, index) => item('chat', `chat-${index}`, `etag-${index}`),
+    )
+    const getCloudChats = vi.fn(
+      async (requests: ReadonlyArray<{ id: string; expectedEtag: string }>) =>
+        requests.map(({ id }) =>
+          id === 'chat-3'
+            ? {
+                ok: false as const,
+                error: new CloudBackupReadError(
+                  'snapshot_deleted',
+                  'record_deleted_after_snapshot',
+                  true,
+                ),
+              }
+            : { ok: true as const, value: chat({ id }) },
+        ),
+    )
 
-    const result = await collectNativeBackupV1(
+    const result = await collectNativeBackupV2(
       dependencies({
-        listChats,
-        listProjects,
-        getCloudChat,
-        getProject,
-        listDocuments,
+        getCloudInventory: async () => inventory(items),
+        getCloudChats,
       }),
     )
 
-    expect(result.cloudChats).toHaveLength(1)
-    expect(result.projects).toHaveLength(1)
-    expect(getCloudChat).toHaveBeenCalledTimes(2)
-    expect(getProject).toHaveBeenCalledTimes(1)
-    expect(listDocuments).toHaveBeenCalledTimes(1)
+    expect(getCloudChats).toHaveBeenCalledTimes(2)
+    expect(getCloudChats.mock.calls[0][0]).toHaveLength(CLOUD_PULL_BATCH_SIZE)
+    expect(getCloudChats.mock.calls[1][0]).toHaveLength(5)
+    expect(getCloudChats.mock.calls[0][0][0]).toEqual({
+      id: 'chat-0',
+      expectedEtag: 'etag-0',
+    })
+    expect(result.cloudChats).toHaveLength(items.length - 1)
+    expect(result.omissions).toEqual([
+      {
+        kind: 'cloud_chat',
+        source_id: 'chat-3',
+        category: 'deleted',
+        reason: 'record_deleted_after_snapshot',
+      },
+    ])
   })
 
-  it('fails the whole collection with missing record and image details', async () => {
-    await expect(
-      collectNativeBackupV1(
-        dependencies({
-          listProjects: async () => ({
-            items: [
-              {
-                id: 'missing-project',
-                syncVersion: 1,
-                createdAt: timestamp,
-                updatedAt: timestamp,
-              },
-            ],
-          }),
-        }),
-      ),
-    ).rejects.toMatchObject({
-      kind: 'project',
-      recordId: 'missing-project',
-    } satisfies Partial<NativeBackupCollectionError>)
+  it('reuses the captured cloud inventory while local inventory converges', async () => {
+    const local = chat({
+      id: 'local',
+      isLocalOnly: true,
+      syncUserId: 'user',
+    })
+    const getCloudInventory = vi.fn().mockResolvedValue(inventory())
+    const getLocalChats = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([local])
+      .mockResolvedValue([local])
+    const getLocalChat = vi.fn().mockResolvedValue(local)
 
-    const missingImage = chat({
+    const result = await collectNativeBackupV2(
+      dependencies({ getCloudInventory, getLocalChats, getLocalChat }),
+    )
+
+    expect(getCloudInventory).toHaveBeenCalledOnce()
+    expect(result.localChats.map(({ id }) => id)).toEqual(['local'])
+  })
+
+  it.each([
+    ['snapshot_deleted', 'deleted', 'record_deleted_after_snapshot'],
+    ['snapshot_changed', 'unstable', 'record_changed_after_snapshot'],
+  ] as const)(
+    'omits a cloud item reported as %s after capture',
+    async (readCategory, omissionCategory, reason) => {
+      const getCloudChat = vi.fn(async () => {
+        throw new CloudBackupReadError(readCategory, reason, true)
+      })
+
+      const result = await collectNativeBackupV2(
+        dependencies({
+          getCloudInventory: async () =>
+            inventory([item('chat', 'chat', 'opaque-etag')]),
+          getCloudChats: batchReads(getCloudChat),
+        }),
+      )
+
+      expect(getCloudChat).toHaveBeenCalledOnce()
+      expect(result.cloudChats).toEqual([])
+      expect(result.omissions).toContainEqual({
+        kind: 'cloud_chat',
+        source_id: 'chat',
+        category: omissionCategory,
+        reason,
+      })
+    },
+  )
+
+  it('omits dependent documents and repairs relationships for an omitted project', async () => {
+    const cloudChat = chat({ projectId: 'project' })
+    const result = await collectNativeBackupV2(
+      dependencies({
+        getCloudInventory: async () =>
+          inventory([
+            item('chat', 'chat', 'chat-etag', 'project'),
+            item('project', 'project', 'project-etag'),
+            item('project_document', 'document', 'doc-etag', 'project'),
+          ]),
+        getCloudChats: batchReads(async () => cloudChat),
+        getProjects: batchReads(async () => {
+          throw new CloudBackupReadError(
+            'item_invalid',
+            'project_payload_invalid',
+            true,
+          )
+        }),
+      }),
+    )
+
+    expect(result.projects).toEqual([])
+    expect(result.projectDocuments).toEqual([])
+    expect(result.cloudChats[0].projectId).toBeUndefined()
+    expect(result.omissions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'project', source_id: 'project' }),
+        expect.objectContaining({
+          kind: 'project_document',
+          source_id: 'document',
+          reason: 'parent_project_omitted',
+        }),
+        expect.objectContaining({ kind: 'relationship', source_id: 'chat' }),
+      ]),
+    )
+  })
+
+  it('keeps owner local chats and omits unavailable attachments', async () => {
+    const attachment: Attachment = {
+      id: 'image',
+      type: 'image',
+      fileName: 'image.png',
+      encryptionKey: 'key',
+    }
+    const source = chat({
+      id: 'local',
+      isLocalOnly: true,
+      syncUserId: 'user',
       messages: [
         {
           role: 'user',
-          content: '',
+          content: 'image',
+          timestamp: new Date(timestamp),
+          attachments: [attachment],
+        },
+      ],
+    })
+    const result = await collectNativeBackupV2(
+      dependencies({
+        getLocalChats: async () => [source],
+        getLocalChat: async () => source,
+      }),
+    )
+
+    expect(result.localChats).toHaveLength(1)
+    expect(result.localChats[0].messages[0].attachments).toEqual([])
+    expect(result.omissions[0]).toMatchObject({
+      kind: 'attachment',
+      parent_source_id: 'local',
+    })
+  })
+
+  it('includes available embedded local images in the browser archive input', async () => {
+    const source = chat({
+      id: 'local',
+      isLocalOnly: true,
+      syncUserId: 'user',
+      messages: [
+        {
+          role: 'user',
+          content: 'image',
           timestamp: new Date(timestamp),
           attachments: [
-            { id: 'missing', type: 'image', fileName: 'missing.png' },
+            {
+              id: 'image',
+              type: 'image',
+              fileName: 'image.png',
+              base64: btoa(String.fromCharCode(...png)),
+            },
           ],
         },
       ],
     })
-    await expect(
-      collectNativeBackupV1(
-        dependencies({
-          listChats: async () => ({
-            items: [{ id: missingImage.id, syncVersion: 1 }],
-          }),
-          getCloudChat: async () => missingImage,
-        }),
-      ),
-    ).rejects.toThrow(
-      'image ["attachment","chat",0,0,"missing"]: image bytes are missing',
+    const result = await collectNativeBackupV2(
+      dependencies({
+        getLocalChats: async () => [source],
+        getLocalChat: async () => source,
+      }),
     )
+
+    expect(result.images).toHaveLength(1)
+    expect(result.images[0].bytes).toEqual(png)
   })
 
-  it('preserves authentication failures while reading cloud records', async () => {
-    const error = new AuthTokenUnavailableError('signed out')
-
-    await expect(
-      collectNativeBackupV1(
-        dependencies({
-          listChats: async () => ({
-            items: [{ id: 'chat', syncVersion: 1 }],
-          }),
-          getCloudChat: async () => {
-            throw error
-          },
-        }),
-      ),
-    ).rejects.toBe(error)
-  })
-
-  it('preflights per-image limits', async () => {
-    const oversized = chat({
+  it('downloads attachments concurrently within a bounded ordered pool', async () => {
+    const attachmentIds = Array.from(
+      { length: 8 },
+      (_, index) => `image-${index}`,
+    )
+    const source = chat({
       messages: [
         {
           role: 'user',
-          content: '',
+          content: 'images',
+          timestamp: new Date(timestamp),
+          attachments: attachmentIds.map((id) => ({
+            id,
+            type: 'image' as const,
+            fileName: `${id}.png`,
+            encryptionKey: 'key',
+          })),
+        },
+      ],
+    })
+    let releaseDownloads!: () => void
+    const downloadGate = new Promise<void>((resolve) => {
+      releaseDownloads = resolve
+    })
+    let active = 0
+    let maxActive = 0
+    const getCloudImage = vi.fn(async ({ id }: { id: string }) => {
+      active++
+      maxActive = Math.max(maxActive, active)
+      if (id === 'image-0') await downloadGate
+      active--
+      return png
+    })
+
+    const collection = collectNativeBackupV2(
+      dependencies({
+        getCloudInventory: async () =>
+          inventory([item('chat', 'chat', 'etag')]),
+        getCloudChats: batchReads(async () => source),
+        getCloudImage,
+      }),
+    )
+    await vi.waitFor(() =>
+      expect(getCloudImage).toHaveBeenCalledTimes(attachmentIds.length),
+    )
+    releaseDownloads()
+
+    const result = await collection
+    expect(maxActive).toBeGreaterThan(1)
+    expect(maxActive).toBeLessThan(attachmentIds.length)
+    expect(
+      result.relationships.chatImages.map(
+        ({ imageId }) => JSON.parse(imageId)[4],
+      ),
+    ).toEqual(attachmentIds)
+  })
+
+  it('keeps an explicitly omittable systemic attachment failure fatal', async () => {
+    const source = chat({
+      messages: [
+        {
+          role: 'user',
+          content: 'image',
           timestamp: new Date(timestamp),
           attachments: [
             {
-              id: 'large',
+              id: 'image',
               type: 'image',
-              fileName: 'large.png',
+              fileName: 'image.png',
               encryptionKey: 'key',
             },
           ],
         },
       ],
     })
+    const failure = new NativeBackupCollectionError(
+      'image',
+      'image',
+      'system unavailable',
+      'systemic',
+      'system_unavailable',
+      true,
+    )
 
     await expect(
-      collectNativeBackupV1(
+      collectNativeBackupV2(
         dependencies({
-          listChats: async () => ({
-            items: [{ id: oversized.id, syncVersion: 1 }],
-          }),
-          getCloudChat: async () => oversized,
+          getCloudInventory: async () =>
+            inventory([item('chat', 'chat', 'etag')]),
+          getCloudChats: batchReads(async () => source),
           getCloudImage: async () => {
-            const bytes = new Uint8Array(NATIVE_BACKUP_LIMITS.imageBytes + 1)
-            bytes.set(png)
-            return bytes
+            throw failure
           },
         }),
       ),
-    ).rejects.toThrow('image size limit exceeded')
+    ).rejects.toBe(failure)
   })
+
+  it.each([
+    new AuthTokenUnavailableError('signed out'),
+    new SyncNetworkError(),
+    new CloudBackupReadError('key_unavailable', 'cloud_key_unavailable', false),
+  ])(
+    'keeps authentication, network, and key failures fatal',
+    async (failure) => {
+      await expect(
+        collectNativeBackupV2(
+          dependencies({
+            getCloudInventory: async () =>
+              inventory([item('chat', 'chat', 'etag')]),
+            getCloudChats: batchReads(async () => {
+              throw failure
+            }),
+          }),
+        ),
+      ).rejects.toBe(failure)
+    },
+  )
 })

@@ -1,24 +1,43 @@
-import type { Attachment, Message } from '@/components/chat/types'
+import type { Attachment } from '@/components/chat/types'
 import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
 import {
   AuthTokenRefreshError,
   AuthTokenUnavailableError,
   authTokenManager,
 } from '@/services/auth'
+import {
+  unwrapBackupPullResult,
+  type BackupPullResult,
+} from '@/services/cloud/backup-read-error'
 import { requirePrimaryKeyB64 } from '@/services/cloud/cek-encoding'
-import { cloudStorage } from '@/services/cloud/cloud-storage'
+import {
+  CloudBackupReadError,
+  cloudStorage,
+} from '@/services/cloud/cloud-storage'
 import { projectStorage } from '@/services/cloud/project-storage'
 import {
   indexedDBStorage,
   type StoredChat,
 } from '@/services/storage/indexed-db'
 import { SyncEnclaveError } from '@/services/sync-enclave'
+import {
+  backupInventory,
+  type BackupInventoryItem,
+  type BackupInventoryResponse,
+} from '@/services/sync-enclave/sync-api'
 import type { Project, ProjectDocument } from '@/types/project'
 import { base64ToUint8Array } from '@/utils/binary-codec'
+import { z } from 'zod'
 import { NATIVE_BACKUP_LIMITS } from './constants'
-import type { NativeBackupV1Input } from './format'
+import {
+  deriveNativeBackupWarnings,
+  type NativeBackupOmission,
+  type NativeBackupV1Input,
+  type NativeBackupV2Input,
+} from './format'
 import { detectNativeBackupImageMimeType } from './image-mime'
 import {
+  NativeBackupDataValidationError,
   classifyNativeBackupChat,
   sanitizeNativeBackupChat,
   sanitizeNativeBackupImage,
@@ -27,24 +46,33 @@ import {
   sanitizeNativeBackupRelationships,
   type NativeBackupImageCandidate,
 } from './sanitize'
-const PAGE_SIZE = 500
-const CONCURRENCY = 4
+const STABLE_READ_ATTEMPTS = 3
+const ATTACHMENT_DOWNLOAD_CONCURRENCY = 4
+// One enclave pull carries this many records. Bounds response size
+// while collapsing per-record round trips on large accounts.
+export const CLOUD_PULL_BATCH_SIZE = 20
 const encoder = new TextEncoder()
-type Listed = { id: string; syncVersion: number }
-type Timed = Listed & { createdAt: string; updatedAt: string }
-type DocumentItem = Timed & { projectId: string }
-type Page<T> = Promise<{ items: T[]; next?: string }>
+type CloudInventoryItem = BackupInventoryItem
+type DocumentItem = BackupInventoryItem & { project_id: string }
+export type BackupReadRequest = { id: string; expectedEtag: string }
+export type BackupDocumentReadRequest = BackupReadRequest & {
+  projectId: string
+}
 export interface NativeBackupCollectionDependencies {
   isAuthenticated(): Promise<boolean>
   activeUserId(): string | null
   requireUnlockedCek(): void
-  listChats(token?: string): Page<Listed>
-  getCloudChat(id: string): Promise<StoredChat | null>
+  getCloudInventory(signal?: AbortSignal): Promise<BackupInventoryResponse>
+  getCloudChats(
+    requests: readonly BackupReadRequest[],
+  ): Promise<BackupPullResult<StoredChat | null>[]>
   getCloudImage(value: Attachment): Promise<Uint8Array | null>
-  listProjects(token?: string): Page<Timed>
-  getProject(id: string): Promise<Project | null>
-  listDocuments(projectId: string): Promise<DocumentItem[]>
-  getDocument(projectId: string, id: string): Promise<ProjectDocument | null>
+  getProjects(
+    requests: readonly BackupReadRequest[],
+  ): Promise<BackupPullResult<Project | null>[]>
+  getDocuments(
+    requests: readonly BackupDocumentReadRequest[],
+  ): Promise<BackupPullResult<ProjectDocument | null>[]>
   getLocalChats(): Promise<StoredChat[]>
   getLocalChat(id: string): Promise<StoredChat | null>
 }
@@ -53,6 +81,14 @@ export class NativeBackupCollectionError extends Error {
     public readonly kind: string,
     public readonly recordId: string,
     detail: string,
+    public readonly category:
+      | 'deleted'
+      | 'unavailable'
+      | 'invalid'
+      | 'unstable'
+      | 'systemic' = 'systemic',
+    public readonly reason = 'collection_failed',
+    public readonly omittable = false,
   ) {
     super(`Native backup collection failed for ${kind} ${recordId}: ${detail}`)
     this.name = 'NativeBackupCollectionError'
@@ -69,35 +105,43 @@ const defaults: NativeBackupCollectionDependencies = {
   isAuthenticated: () => authTokenManager.isAuthenticated(),
   activeUserId,
   requireUnlockedCek: () => void requirePrimaryKeyB64(),
-  listChats: async (continuationToken) => {
-    const page = await cloudStorage.listChats({
-      limit: PAGE_SIZE,
-      continuationToken,
-    })
-    return { items: page.conversations, next: page.nextContinuationToken }
-  },
-  getCloudChat: (id) => cloudStorage.downloadChat(id),
-  getCloudImage: async (value) => {
-    const message = { attachments: [value] } as Message
-    const encoded = (await cloudStorage.loadChatImages('', [message]))[value.id]
-    return encoded ? base64ToUint8Array(encoded) : null
-  },
-  listProjects: async (continuationToken) => {
-    const page = await projectStorage.listProjects({
-      limit: PAGE_SIZE,
-      continuationToken,
-    })
-    return { items: page.projects, next: page.nextContinuationToken }
-  },
-  getProject: (id) => projectStorage.getProject(id),
-  listDocuments: async (id) =>
-    (await projectStorage.listDocuments(id)).documents,
-  getDocument: (projectId, id) => projectStorage.getDocument(projectId, id),
+  getCloudInventory: backupInventory,
+  getCloudChats: (requests) => cloudStorage.downloadChatsForBackup(requests),
+  getCloudImage: (value) => cloudStorage.loadChatImageForBackup(value),
+  getProjects: (requests) => projectStorage.getProjectsForBackup(requests),
+  getDocuments: (requests) => projectStorage.getDocumentsForBackup(requests),
   getLocalChats: () => indexedDBStorage.getAllChats(),
   getLocalChat: (id) => indexedDBStorage.getChat(id),
 }
 function fail(kind: string, id: string, detail: string): never {
   throw new NativeBackupCollectionError(kind, id, detail)
+}
+function failItem(
+  kind: string,
+  id: string,
+  detail: string,
+  category: NativeBackupOmission['category'],
+  reason: string,
+): never {
+  throw new NativeBackupCollectionError(
+    kind,
+    id,
+    detail,
+    category,
+    reason,
+    true,
+  )
+}
+function isOmittableCollectionError(
+  error: unknown,
+): error is NativeBackupCollectionError & {
+  category: NativeBackupOmission['category']
+} {
+  return (
+    error instanceof NativeBackupCollectionError &&
+    error.omittable &&
+    error.category !== 'systemic'
+  )
 }
 async function wait<T>(s: AbortSignal | undefined, read: () => Promise<T>) {
   s?.throwIfAborted()
@@ -114,20 +158,19 @@ function valid<T>(kind: string, id: string, parse: () => T): T {
     return parse()
   } catch (error) {
     if (error instanceof NativeBackupCollectionError) throw error
-    return fail(kind, id, `record is invalid: ${detail(error)}`)
+    if (
+      !(error instanceof NativeBackupDataValidationError) &&
+      !(error instanceof z.ZodError)
+    )
+      throw error
+    return failItem(
+      kind,
+      id,
+      `record is invalid: ${detail(error)}`,
+      'invalid',
+      'record_invalid',
+    )
   }
-}
-function unique<T extends Listed>(
-  values: T[],
-  key: (value: T) => string = ({ id }) => id,
-): T[] {
-  const byId = new Map<string, T>()
-  for (const value of values) {
-    const identity = key(value)
-    const old = byId.get(identity)
-    if (!old || value.syncVersion >= old.syncVersion) byId.set(identity, value)
-  }
-  return [...byId.values()]
 }
 function throwIfAuthenticationError(error: unknown) {
   if (
@@ -137,35 +180,90 @@ function throwIfAuthenticationError(error: unknown) {
   )
     throw error
 }
-async function pages<T extends Listed>(
-  fn: (t?: string) => Page<T>,
-  s?: AbortSignal,
-) {
-  const values: T[] = []
-  let token: string | undefined
-  do {
-    const page = await wait(s, () => fn(token))
-    values.push(...page.items)
-    token = page.next
-  } while (token)
-  return unique(values)
+type CloudInventory = {
+  chats: CloudInventoryItem[]
+  projects: CloudInventoryItem[]
+  documents: DocumentItem[]
+  discovered: number
 }
-async function mapLimit<T, R>(
-  v: T[],
-  fn: (v: T) => Promise<R>,
-  s?: AbortSignal,
+function groupCloudInventory(
+  response: BackupInventoryResponse,
+): CloudInventory {
+  const chats: CloudInventoryItem[] = []
+  const projects: CloudInventoryItem[] = []
+  const documents: DocumentItem[] = []
+  for (const item of response.items) {
+    if (item.scope === 'chat') chats.push(item)
+    else if (item.scope === 'project') projects.push(item)
+    else documents.push(item as DocumentItem)
+  }
+  return { chats, projects, documents, discovered: response.total_items }
+}
+/**
+ * Walk inventory items in fixed-size batches, one enclave round trip
+ * per batch. Each item is handed a `read` thunk that consumes the
+ * prefetched batch slot on its first call and falls back to a
+ * single-record batch on retries, so `readRecord`'s per-record retry
+ * semantics are unchanged.
+ */
+async function collectInBatches<I, R>(
+  items: readonly I[],
+  fetchBatch: (batch: readonly I[]) => Promise<BackupPullResult<R>[]>,
+  handle: (item: I, read: () => Promise<R>) => Promise<void>,
+  signal?: AbortSignal,
 ) {
-  const output = new Array<R>(v.length)
-  let next = 0
-  await Promise.all(
-    Array.from({ length: Math.min(CONCURRENCY, v.length) }, async () => {
-      while (next < v.length) {
-        s?.throwIfAborted()
-        const index = next++
-        output[index] = await wait(s, () => fn(v[index]))
+  for (let start = 0; start < items.length; start += CLOUD_PULL_BATCH_SIZE) {
+    const batch = items.slice(start, start + CLOUD_PULL_BATCH_SIZE)
+    const results = await wait(signal, () => fetchBatch(batch))
+    for (const [index, item] of batch.entries()) {
+      let prefetched: BackupPullResult<R> | undefined = results[index]
+      const read = async () => {
+        if (prefetched) {
+          const result = prefetched
+          prefetched = undefined
+          return unwrapBackupPullResult(result)
+        }
+        return unwrapBackupPullResult((await fetchBatch([item]))[0])
       }
-    }),
+      await handle(item, read)
+    }
+  }
+}
+async function mapLimitInOrder<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  fn: (value: T) => Promise<R>,
+  consume: (result: R) => void,
+  signal?: AbortSignal,
+): Promise<R[]> {
+  const output = new Array<R>(values.length)
+  let nextIndex = 0
+  let stopped = false
+  let firstError: unknown
+  const stop = (error: unknown) => {
+    if (stopped) return
+    stopped = true
+    firstError = error
+  }
+  const worker = async () => {
+    while (!stopped) {
+      const index = nextIndex++
+      if (index >= values.length) return
+      try {
+        const result = await wait(signal, () => fn(values[index]))
+        if (stopped) return
+        consume(result)
+        output[index] = result
+      } catch (error) {
+        stop(error)
+        return
+      }
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, worker),
   )
+  if (stopped) throw firstError
   return output
 }
 type Pending = [number, number, number, number, number]
@@ -193,17 +291,24 @@ class Budget {
     this.check(pending)
     return pending
   }
-  image(pending: Pending, metadata: unknown, bytes: Uint8Array) {
+  imageSize(bytes: Uint8Array) {
     this.limit('image size', bytes.length, NATIVE_BACKUP_LIMITS.imageBytes)
+  }
+  image(pending: Pending, metadata: unknown, bytes: Uint8Array) {
+    this.imageSize(bytes)
     const json = jsonSize(metadata)
     pending[2] += json
     pending[3] += json + bytes.length
     pending[4] += 2
     this.check(pending)
   }
-  json(value: unknown) {
+  json(value: unknown, entity = false) {
     const bytes = jsonSize(value)
-    this.commit([0, 0, bytes, bytes, 1])
+    this.commit([0, 0, bytes, bytes, 1], entity)
+  }
+  metadata(value: unknown) {
+    const bytes = jsonSize(value) + 1
+    this.commit([0, 0, bytes, bytes, 0])
   }
   commit(value: Pending, entity = false) {
     if (entity) this.entities(1)
@@ -224,52 +329,74 @@ async function readRecord<T>(
   id: string,
   read: () => Promise<T | null>,
   signal?: AbortSignal,
+  missing: {
+    detail: string
+    category: NativeBackupOmission['category']
+    reason: string
+  } = {
+    detail: 'record is missing',
+    category: 'deleted',
+    reason: 'record_not_found',
+  },
 ) {
-  try {
-    const value = await wait(signal, read)
-    return value ?? fail(kind, id, 'record is missing or invalid')
-  } catch (error) {
-    signal?.throwIfAborted()
-    throwIfAuthenticationError(error)
-    if (error instanceof NativeBackupCollectionError) throw error
-    return fail(kind, id, `read failed: ${detail(error)}`)
+  let lastError: NativeBackupCollectionError | undefined
+  for (let attempt = 0; attempt < STABLE_READ_ATTEMPTS; attempt++) {
+    try {
+      const value = await wait(signal, read)
+      return (
+        value ??
+        failItem(kind, id, missing.detail, missing.category, missing.reason)
+      )
+    } catch (error) {
+      signal?.throwIfAborted()
+      throwIfAuthenticationError(error)
+      if (error instanceof CloudBackupReadError) {
+        if (!error.omittable) throw error
+        lastError = new NativeBackupCollectionError(
+          kind,
+          id,
+          'record could not be read at the captured version',
+          error.category === 'item_invalid'
+            ? 'invalid'
+            : error.category === 'snapshot_deleted'
+              ? 'deleted'
+              : error.category === 'snapshot_changed'
+                ? 'unstable'
+                : 'unavailable',
+          error.reason,
+          true,
+        )
+        if (
+          error.category === 'snapshot_deleted' ||
+          error.category === 'snapshot_changed'
+        )
+          throw lastError
+      } else if (isOmittableCollectionError(error)) {
+        lastError = error
+      } else {
+        throw error
+      }
+    }
   }
+  throw lastError!
 }
-async function stable<T extends { syncVersion?: number }, I extends Listed>(
+async function collectTimedInventoryItem<T, R>(
   kind: string,
-  initial: I,
+  item: CloudInventoryItem,
   read: () => Promise<T | null>,
-  refresh: () => Promise<I[]>,
-  signal?: AbortSignal,
-): Promise<{ value: T; item: I }> {
-  let item = initial
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const value = await readRecord(kind, item.id, read, signal)
-    if (value.syncVersion === item.syncVersion) return { value, item }
-    item =
-      unique(await wait(signal, refresh)).find(({ id }) => id === item.id) ??
-      fail(kind, item.id, 'record is missing or invalid')
-  }
-  return fail(kind, item.id, 'version changed during collection')
-}
-async function timed<T extends { syncVersion?: number }, I extends Timed, R>(
-  kind: string,
-  item: I,
-  read: () => Promise<T | null>,
-  refresh: () => Promise<I[]>,
   sanitize: (value: unknown) => R,
   budget: Budget,
   signal?: AbortSignal,
 ) {
-  const current = await stable(kind, item, read, refresh, signal)
+  const current = await readRecord(kind, item.id, read, signal)
   const value = valid(kind, item.id, () =>
     sanitize({
-      ...current.value,
-      createdAt: current.item.createdAt,
-      updatedAt: current.item.updatedAt,
+      ...current,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
     }),
   )
-  budget.json(value)
+  budget.json(value, true)
   return value
 }
 function portable(chat: StoredChat, images?: NativeBackupImageCandidate[]) {
@@ -313,62 +440,214 @@ function localEligible(chat: StoredChat, userId: string) {
       'local'
   )
 }
+function localInventoryToken(chats: StoredChat[], userId: string): string {
+  const values = chats.flatMap((chat) => {
+    if (!localEligible(chat, userId)) return []
+    try {
+      return [[chat.id, localToken(chat)]]
+    } catch (error) {
+      if (isOmittableCollectionError(error))
+        return [[chat.id, error.category, error.reason]]
+      throw error
+    }
+  })
+  values.sort((left, right) =>
+    left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : 0,
+  )
+  return JSON.stringify(values)
+}
 async function collectChat(
   chat: StoredChat,
   cloud: boolean,
   deps: NativeBackupCollectionDependencies,
   budget: Budget,
   signal?: AbortSignal,
+  allowPartial = false,
 ) {
   const candidates: NativeBackupImageCandidate[] = []
   const value = valid(cloud ? 'cloud chat' : 'local chat', chat.id, () =>
     portable(chat, candidates),
   )
-  const pending = budget.chat(value)
-  const images = await mapLimit(
+  type SuccessfulImage = {
+    candidate: NativeBackupImageCandidate
+    metadata: ReturnType<typeof sanitizeNativeBackupImage>
+    bytes: Uint8Array
+    mimeType: string
+  }
+  let pending: Pending | undefined
+  const successful: SuccessfulImage[] = []
+  const omitted: Array<{
+    candidate: NativeBackupImageCandidate
+    failure: NativeBackupCollectionError
+  }> = []
+  if (allowPartial) {
+    const allImagesOmitted = structuredClone(value)
+    removeOmittedImageReferences(
+      allImagesOmitted,
+      candidates.map((candidate) => ({ candidate })),
+      [],
+    )
+    pending = budget.chat(allImagesOmitted)
+  } else {
+    pending = budget.chat(value)
+  }
+  const results = await mapLimitInOrder(
     candidates,
+    ATTACHMENT_DOWNLOAD_CONCURRENCY,
     async (candidate) => {
-      const attachment =
-        candidate.attachmentIndex === undefined
-          ? undefined
-          : chat.messages[candidate.messageIndex].attachments?.[
-              candidate.attachmentIndex
-            ]
-      const base64 = imagePayload(chat, candidate)
-      let bytes: Uint8Array | null = null
       try {
-        bytes = base64
-          ? base64ToUint8Array(base64)
-          : cloud && attachment
-            ? await wait(signal, () => deps.getCloudImage(attachment))
-            : null
+        const attachment =
+          candidate.attachmentIndex === undefined
+            ? undefined
+            : chat.messages[candidate.messageIndex].attachments?.[
+                candidate.attachmentIndex
+              ]
+        const base64 = imagePayload(chat, candidate)
+        let bytes: Uint8Array | null = null
+        if (base64) {
+          try {
+            bytes = base64ToUint8Array(base64)
+          } catch (error) {
+            if (
+              !(error instanceof Error) ||
+              error.name !== 'InvalidCharacterError'
+            )
+              throw error
+            failItem(
+              'image',
+              candidate.sourceKey,
+              'image bytes are invalid',
+              'invalid',
+              'attachment_payload_invalid',
+            )
+          }
+        } else if (cloud && attachment) {
+          bytes = await readRecord(
+            'image',
+            candidate.sourceKey,
+            () => deps.getCloudImage(attachment),
+            signal,
+            {
+              detail: 'image bytes are missing',
+              category: 'unavailable',
+              reason: 'attachment_not_found',
+            },
+          )
+        }
+        if (!bytes)
+          failItem(
+            'image',
+            candidate.sourceKey,
+            'image bytes are missing',
+            'unavailable',
+            'attachment_not_found',
+          )
+        const mimeType =
+          detectNativeBackupImageMimeType(bytes) ??
+          failItem(
+            'image',
+            candidate.sourceKey,
+            'image type is unsupported',
+            'invalid',
+            'attachment_type_unsupported',
+          )
+        const metadata = valid('image', candidate.sourceKey, () =>
+          sanitizeNativeBackupImage({
+            ...candidate,
+            id: candidate.sourceKey,
+            mimeType,
+            sizeBytes: bytes.length,
+          }),
+        )
+        return { candidate, bytes, metadata, mimeType }
       } catch (error) {
-        signal?.throwIfAborted()
-        throwIfAuthenticationError(error)
-        fail('image', candidate.sourceKey, 'image bytes are invalid')
+        if (!allowPartial || !isOmittableCollectionError(error)) throw error
+        return { candidate, failure: error }
       }
-      if (!bytes) fail('image', candidate.sourceKey, 'image bytes are missing')
-      const mimeType =
-        detectNativeBackupImageMimeType(bytes) ??
-        fail('image', candidate.sourceKey, 'image type is unsupported')
-      if (candidate.legacyIndex !== undefined)
-        value.messages[candidate.messageIndex].imageData![
-          candidate.legacyIndex
-        ].mimeType = mimeType
-      const metadata = valid('image', candidate.sourceKey, () =>
-        sanitizeNativeBackupImage({
-          ...candidate,
-          id: candidate.sourceKey,
-          mimeType,
-          sizeBytes: bytes.length,
-        }),
-      )
-      budget.image(pending, metadata, bytes)
-      return { metadata, bytes }
+    },
+    (result) => {
+      if (!result.failure) budget.image(pending!, result.metadata, result.bytes)
     },
     signal,
   )
-  return { chat: value, images, pending }
+  for (const result of results) {
+    if (result.failure) {
+      omitted.push({ candidate: result.candidate, failure: result.failure })
+      continue
+    }
+    const { candidate, bytes, metadata, mimeType } = result
+    if (candidate.legacyIndex !== undefined)
+      value.messages[candidate.messageIndex].imageData![
+        candidate.legacyIndex
+      ].mimeType = mimeType
+    successful.push({ candidate, bytes, metadata, mimeType })
+  }
+  const images = successful.map(({ metadata, bytes }) => ({ metadata, bytes }))
+  if (omitted.length) removeOmittedImageReferences(value, omitted, images)
+  if (allowPartial) {
+    pending = budget.chat(value)
+    for (const image of images)
+      budget.image(pending, image.metadata, image.bytes)
+  }
+  return { chat: value, images, pending: pending!, omitted }
+}
+
+function removeOmittedImageReferences(
+  chat: ReturnType<typeof sanitizeNativeBackupChat>,
+  omitted: Array<{ candidate: NativeBackupImageCandidate }>,
+  images: Array<{ metadata: ReturnType<typeof sanitizeNativeBackupImage> }>,
+) {
+  const candidates = omitted.map(({ candidate }) => candidate)
+  const pageCandidates = candidates.filter(
+    ({ page, legacyIndex }) => page !== undefined && legacyIndex === undefined,
+  )
+  for (const candidate of pageCandidates) {
+    const message = chat.messages[candidate.messageIndex]
+    const attachment = message.attachments?.[candidate.attachmentIndex!]
+    if (attachment?.type === 'document') {
+      const page = attachment.pages?.find(({ page }) => page === candidate.page)
+      if (page) delete page.imageId
+    }
+  }
+
+  const directCandidates = candidates
+    .filter(
+      ({ attachmentIndex, page, legacyIndex }) =>
+        attachmentIndex !== undefined &&
+        page === undefined &&
+        legacyIndex === undefined,
+    )
+    .sort(
+      (left, right) =>
+        right.messageIndex - left.messageIndex ||
+        right.attachmentIndex! - left.attachmentIndex!,
+    )
+  for (const candidate of directCandidates)
+    chat.messages[candidate.messageIndex].attachments?.splice(
+      candidate.attachmentIndex!,
+      1,
+    )
+
+  const legacyCandidates = candidates
+    .filter(({ legacyIndex }) => legacyIndex !== undefined)
+    .sort(
+      (left, right) =>
+        right.messageIndex - left.messageIndex ||
+        right.legacyIndex! - left.legacyIndex!,
+    )
+  for (const candidate of legacyCandidates)
+    chat.messages[candidate.messageIndex].imageData?.splice(
+      candidate.legacyIndex!,
+      1,
+    )
+  for (const { metadata } of images) {
+    if (metadata.legacyIndex === undefined) continue
+    metadata.legacyIndex -= legacyCandidates.filter(
+      (candidate) =>
+        candidate.messageIndex === metadata.messageIndex &&
+        candidate.legacyIndex! < metadata.legacyIndex!,
+    ).length
+  }
 }
 async function retryChat<K>(
   kind: string,
@@ -381,7 +660,7 @@ async function retryChat<K>(
   collect: (chat: StoredChat) => ReturnType<typeof collectChat>,
   signal?: AbortSignal,
 ) {
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < STABLE_READ_ATTEMPTS; attempt++) {
     const chat = await readRecord(kind, id, read, signal)
     const current = revision(chat)
     if (current !== expected) {
@@ -394,12 +673,20 @@ async function retryChat<K>(
     if (revision(verify) === current) return result
     expected = await wait(signal, () => refresh(verify))
   }
-  return fail(kind, id, 'version changed during collection')
+  return failItem(
+    kind,
+    id,
+    'version changed during collection',
+    'unstable',
+    'version_did_not_converge',
+  )
 }
-export async function collectNativeBackupV1(
+
+async function collectNativeBackup(
   deps: NativeBackupCollectionDependencies = defaults,
   signal?: AbortSignal,
-): Promise<NativeBackupV1Input> {
+  allowPartial = false,
+): Promise<NativeBackupV2Input> {
   if (!(await wait(signal, () => deps.isAuthenticated())))
     fail('account', 'active', 'signed-in user is required')
   const userId = deps.activeUserId()
@@ -409,87 +696,207 @@ export async function collectNativeBackupV1(
   } catch {
     fail('account', userId, 'cloud encryption key is locked or unavailable')
   }
-  const [chatItems, projectItems, localSnapshots] = await Promise.all([
-    pages(deps.listChats, signal),
-    pages(deps.listProjects, signal),
-    wait(signal, () => deps.getLocalChats()),
-  ])
-  const documentItems = unique(
-    (
-      await mapLimit(projectItems, ({ id }) => deps.listDocuments(id), signal)
-    ).flat(),
-    ({ projectId, id }) => JSON.stringify([projectId, id]),
+  const response = await wait(signal, () => deps.getCloudInventory(signal))
+  if (response.total_items > NATIVE_BACKUP_LIMITS.discoveredRecords)
+    fail('limits', 'collection', 'discovered record limit exceeded')
+  return collectNativeBackupAttempt(
+    deps,
+    groupCloudInventory(response),
+    userId,
+    signal,
+    allowPartial,
   )
+}
+
+async function collectNativeBackupAttempt(
+  deps: NativeBackupCollectionDependencies,
+  inventory: CloudInventory,
+  userId: string,
+  signal?: AbortSignal,
+  allowPartial = false,
+  localInventoryAttempt = 0,
+): Promise<NativeBackupV2Input> {
+  const localSnapshots = await wait(signal, () => deps.getLocalChats())
+  if (
+    inventory.discovered + localSnapshots.length >
+    NATIVE_BACKUP_LIMITS.discoveredRecords
+  )
+    fail('limits', 'collection', 'discovered record limit exceeded')
+  const chatItems = inventory.chats
+  const projectItems = inventory.projects
+  const allDocumentItems = inventory.documents
+  const initialLocalInventoryToken = localInventoryToken(localSnapshots, userId)
   const budget = new Budget()
-  budget.entities(projectItems.length + documentItems.length)
-  const projects = await mapLimit(
-    projectItems,
-    (item) =>
-      timed(
-        'project',
-        item,
-        () => deps.getProject(item.id),
-        () => pages(deps.listProjects, signal),
-        sanitizeNativeBackupProject,
-        budget,
-        signal,
-      ),
-    signal,
-  )
-  const projectDocuments = await mapLimit(
-    documentItems,
-    (item) =>
-      timed(
-        'project document',
-        item,
-        () => deps.getDocument(item.projectId, item.id),
-        () => deps.listDocuments(item.projectId),
-        sanitizeNativeBackupProjectDocument,
-        budget,
-        signal,
-      ),
-    signal,
-  )
-  const cloudResults = []
-  for (const listed of chatItems) {
-    const result = await retryChat(
-      'cloud chat',
-      listed.id,
-      listed.syncVersion,
-      () => deps.getCloudChat(listed.id),
-      ({ syncVersion }) => syncVersion,
-      (chat) => classifyNativeBackupChat(chat, 'cloud') !== null,
-      async () =>
-        (await pages(deps.listChats, signal)).find(({ id }) => id === listed.id)
-          ?.syncVersion ??
-        fail('cloud chat', listed.id, 'record is missing or invalid'),
-      (chat) => collectChat(chat, true, deps, budget, signal),
-      signal,
-    )
-    if (!result) continue
-    budget.commit(result.pending, true)
-    cloudResults.push(result)
+  const omissions: NativeBackupOmission[] = []
+  const addOmission = (omission: NativeBackupOmission) => {
+    signal?.throwIfAborted()
+    if (omissions.length >= NATIVE_BACKUP_LIMITS.omissions)
+      fail('limits', 'collection', 'omission limit exceeded')
+    budget.metadata(omission)
+    omissions.push(omission)
   }
+  const omit = (
+    kind: NativeBackupOmission['kind'],
+    sourceId: string,
+    error: unknown,
+    parentSourceId?: string,
+  ) => {
+    if (!allowPartial || !isOmittableCollectionError(error)) throw error
+    addOmission({
+      kind,
+      source_id: sourceId,
+      ...(parentSourceId ? { parent_source_id: parentSourceId } : {}),
+      category: error.category,
+      reason: error.reason,
+    })
+  }
+  const projects: ReturnType<typeof sanitizeNativeBackupProject>[] = []
+  await collectInBatches(
+    projectItems,
+    (batch) =>
+      deps.getProjects(
+        batch.map(({ id, etag }) => ({ id, expectedEtag: etag })),
+      ),
+    async (item, read) => {
+      try {
+        projects.push(
+          await collectTimedInventoryItem(
+            'project',
+            item,
+            read,
+            sanitizeNativeBackupProject,
+            budget,
+            signal,
+          ),
+        )
+      } catch (error) {
+        omit('project', item.id, error)
+      }
+    },
+    signal,
+  )
+  const includedProjectIds = new Set(projects.map(({ id }) => id))
+  const documentItems = allDocumentItems.filter(({ project_id }) =>
+    includedProjectIds.has(project_id),
+  )
+  const projectDocuments: ReturnType<
+    typeof sanitizeNativeBackupProjectDocument
+  >[] = []
+  await collectInBatches(
+    documentItems,
+    (batch) =>
+      deps.getDocuments(
+        batch.map(({ project_id, id, etag }) => ({
+          projectId: project_id,
+          id,
+          expectedEtag: etag,
+        })),
+      ),
+    async (item, read) => {
+      try {
+        projectDocuments.push(
+          await collectTimedInventoryItem(
+            'project document',
+            item,
+            read,
+            sanitizeNativeBackupProjectDocument,
+            budget,
+            signal,
+          ),
+        )
+      } catch (error) {
+        omit('project_document', item.id, error, item.project_id)
+      }
+    },
+    signal,
+  )
+  for (const item of projectItems.filter(
+    ({ id }) => !includedProjectIds.has(id),
+  )) {
+    for (const document of allDocumentItems.filter(
+      ({ project_id }) => project_id === item.id,
+    ))
+      addOmission({
+        kind: 'project_document',
+        source_id: document.id,
+        parent_source_id: item.id,
+        category: 'unavailable',
+        reason: 'parent_project_omitted',
+      })
+  }
+  const cloudResults: Awaited<ReturnType<typeof collectChat>>[] = []
+  await collectInBatches(
+    chatItems,
+    (batch) =>
+      deps.getCloudChats(
+        batch.map(({ id, etag }) => ({ id, expectedEtag: etag })),
+      ),
+    async (listed, read) => {
+      try {
+        const chat = await readRecord('cloud chat', listed.id, read, signal)
+        const capturedChat = {
+          ...chat,
+          createdAt: listed.created_at,
+          updatedAt: listed.updated_at,
+          projectId: listed.project_id,
+        }
+        if (classifyNativeBackupChat(capturedChat, 'cloud') === null) return
+        const result = await collectChat(
+          capturedChat,
+          true,
+          deps,
+          budget,
+          signal,
+          allowPartial,
+        )
+        budget.commit(result.pending, true)
+        cloudResults.push(result)
+        for (const { failure } of result.omitted)
+          omit('attachment', failure.recordId, failure, listed.id)
+      } catch (error) {
+        omit('cloud_chat', listed.id, error)
+      }
+    },
+    signal,
+  )
   const localResults = []
   for (const snapshot of localSnapshots) {
     if (!localEligible(snapshot, userId)) continue
-    const result = await retryChat(
-      'local chat',
-      snapshot.id,
-      localToken(snapshot),
-      () => deps.getLocalChat(snapshot.id),
-      localToken,
-      (chat) => localEligible(chat, userId),
-      async (chat) => localToken(chat),
-      (chat) => collectChat(chat, false, deps, budget, signal),
-      signal,
-    )
-    if (!result) continue
-    budget.commit(result.pending, true)
-    localResults.push(result)
+    try {
+      const result = await retryChat(
+        'local chat',
+        snapshot.id,
+        localToken(snapshot),
+        () => deps.getLocalChat(snapshot.id),
+        localToken,
+        (chat) => localEligible(chat, userId),
+        async (chat) => localToken(chat),
+        (chat) => collectChat(chat, false, deps, budget, signal, allowPartial),
+        signal,
+      )
+      if (!result) continue
+      budget.commit(result.pending, true)
+      localResults.push(result)
+      for (const { failure } of result.omitted)
+        omit('attachment', failure.recordId, failure, snapshot.id)
+    } catch (error) {
+      omit('local_chat', snapshot.id, error)
+    }
   }
   const cloudChats = cloudResults.map(({ chat }) => chat)
   const localChats = localResults.map(({ chat }) => chat)
+  for (const chat of [...cloudChats, ...localChats]) {
+    if (chat.projectId && !includedProjectIds.has(chat.projectId)) {
+      addOmission({
+        kind: 'relationship',
+        source_id: chat.id,
+        parent_source_id: chat.projectId,
+        category: 'unavailable',
+        reason: 'project_reference_unavailable',
+      })
+      delete chat.projectId
+    }
+  }
   const images = [...cloudResults, ...localResults].flatMap(
     ({ images }) => images,
   )
@@ -507,7 +914,38 @@ export async function collectNativeBackupV1(
     })),
   })
   budget.json(relationships)
-  const input: NativeBackupV1Input = {
+  signal?.throwIfAborted()
+  const finalLocalSnapshots = await wait(signal, () => deps.getLocalChats())
+  if (
+    inventory.discovered + finalLocalSnapshots.length >
+    NATIVE_BACKUP_LIMITS.discoveredRecords
+  )
+    fail('limits', 'collection', 'discovered record limit exceeded')
+  const localChanged =
+    localInventoryToken(finalLocalSnapshots, userId) !==
+    initialLocalInventoryToken
+  if (localChanged) {
+    if (localInventoryAttempt + 1 < NATIVE_BACKUP_LIMITS.localInventoryAttempts)
+      return collectNativeBackupAttempt(
+        deps,
+        inventory,
+        userId,
+        signal,
+        allowPartial,
+        localInventoryAttempt + 1,
+      )
+    if (!allowPartial)
+      fail('inventory', 'local', 'local inventory did not converge')
+    addOmission({
+      kind: 'local_inventory',
+      source_id: 'eligible_local_chats',
+      category: 'unstable',
+      reason: 'inventory_did_not_converge',
+    })
+  }
+  const warnings = deriveNativeBackupWarnings(omissions)
+  for (const warning of warnings) budget.metadata(warning)
+  const input: NativeBackupV2Input = {
     backupId: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
     projects,
@@ -516,7 +954,22 @@ export async function collectNativeBackupV1(
     localChats,
     relationships,
     images,
+    omissions,
+    warnings,
   }
-  signal?.throwIfAborted()
   return input
+}
+
+export async function collectNativeBackupV1(
+  deps: NativeBackupCollectionDependencies = defaults,
+  signal?: AbortSignal,
+): Promise<NativeBackupV1Input> {
+  return collectNativeBackup(deps, signal, false)
+}
+
+export async function collectNativeBackupV2(
+  deps: NativeBackupCollectionDependencies = defaults,
+  signal?: AbortSignal,
+): Promise<NativeBackupV2Input> {
+  return collectNativeBackup(deps, signal, true)
 }

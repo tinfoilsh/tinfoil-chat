@@ -2,7 +2,9 @@ import {
   NATIVE_BACKUP_LIMITS,
   assertNativeBackupSizeLimits,
   assertValidNativeBackupV1,
+  assertValidNativeBackupV2,
   formatNativeBackupV1,
+  formatNativeBackupV2,
   type NativeBackupFormatInput,
   type NativeBackupManifestV1,
 } from '@/services/native-backup'
@@ -345,5 +347,272 @@ describe('native backup v1 manifest', () => {
         ),
       ).toThrow()
     }
+  })
+})
+
+describe('native backup v2 manifest', () => {
+  it('truthfully records complete and partial source coverage', () => {
+    const complete = formatNativeBackupV2({
+      ...input(),
+      omissions: [],
+      warnings: [],
+    })
+    expect(
+      assertValidNativeBackupV2(complete.manifestBytes, complete.files),
+    ).toMatchObject({ version: 2, complete: true, omissions: [], warnings: [] })
+
+    const partial = formatNativeBackupV2({
+      ...input(),
+      omissions: [
+        {
+          kind: 'cloud_chat',
+          source_id: 'unreadable-chat',
+          category: 'invalid',
+          reason: 'chat_payload_invalid',
+        },
+      ],
+      warnings: [
+        {
+          code: 'source_items_omitted',
+          category: 'source_coverage',
+          count: 1,
+        },
+      ],
+    })
+    expect(
+      assertValidNativeBackupV2(partial.manifestBytes, partial.files),
+    ).toMatchObject({ version: 2, complete: false })
+  })
+
+  it('rejects contradictory partial metadata', () => {
+    const formatted = formatNativeBackupV2({
+      ...input(),
+      omissions: [],
+      warnings: [],
+    })
+    const manifest = JSON.parse(
+      new TextDecoder().decode(formatted.manifestBytes),
+    )
+    manifest.complete = false
+
+    expect(() =>
+      assertValidNativeBackupV2(
+        new TextEncoder().encode(JSON.stringify(manifest)),
+        formatted.files,
+      ),
+    ).toThrow('completeness')
+  })
+
+  it('rejects duplicate omissions and warnings not exactly derived from them', () => {
+    const omission = {
+      kind: 'cloud_chat' as const,
+      source_id: 'chat',
+      category: 'invalid' as const,
+      reason: 'chat_payload_invalid',
+    }
+    expect(() =>
+      formatNativeBackupV2({
+        ...input(),
+        omissions: [omission, { ...omission, reason: 'different_reason' }],
+        warnings: [
+          {
+            code: 'source_items_omitted',
+            category: 'source_coverage',
+            count: 2,
+          },
+        ],
+      }),
+    ).toThrow('duplicate or contradictory')
+
+    expect(() =>
+      formatNativeBackupV2({
+        ...input(),
+        omissions: [omission],
+        warnings: [
+          {
+            code: 'source_items_omitted',
+            category: 'source_coverage',
+            count: 2,
+          },
+        ],
+      }),
+    ).toThrow('warnings do not match')
+
+    expect(() =>
+      formatNativeBackupV2({
+        ...input(),
+        omissions: [omission],
+        warnings: [
+          {
+            code: 'source_items_omitted',
+            category: 'source_coverage',
+            count: 1,
+          },
+          {
+            code: 'source_items_omitted',
+            category: 'source_coverage',
+            count: 1,
+          },
+        ],
+      }),
+    ).toThrow('warnings do not match')
+  })
+
+  it('derives relationship adjustments separately from omitted entities', () => {
+    const value = input()
+    delete value.cloudChats[0].projectId
+    value.relationships.projectChats = []
+    const formatted = formatNativeBackupV2({
+      ...value,
+      omissions: [
+        {
+          kind: 'relationship',
+          source_id: 'c',
+          parent_source_id: 'missing-project',
+          category: 'unavailable',
+          reason: 'project_reference_unavailable',
+        },
+      ],
+      warnings: [
+        {
+          code: 'chats_detached_from_omitted_projects',
+          category: 'relationship_adjustment',
+          count: 1,
+        },
+      ],
+    })
+
+    expect(
+      assertValidNativeBackupV2(formatted.manifestBytes, formatted.files),
+    ).toMatchObject({
+      complete: false,
+      warnings: [
+        {
+          code: 'chats_detached_from_omitted_projects',
+          category: 'relationship_adjustment',
+          count: 1,
+        },
+      ],
+    })
+  })
+
+  it('treats a null project ID as detached for relationship adjustments', () => {
+    const value = input()
+    value.cloudChats[0].projectId = null
+    value.relationships.projectChats = []
+
+    const formatted = formatNativeBackupV2({
+      ...value,
+      omissions: [
+        {
+          kind: 'relationship',
+          source_id: 'c',
+          parent_source_id: 'missing-project',
+          category: 'unavailable',
+          reason: 'project_reference_unavailable',
+        },
+      ],
+      warnings: [
+        {
+          code: 'chats_detached_from_omitted_projects',
+          category: 'relationship_adjustment',
+          count: 1,
+        },
+      ],
+    })
+
+    expect(() =>
+      assertValidNativeBackupV2(formatted.manifestBytes, formatted.files),
+    ).not.toThrow()
+  })
+
+  it('rejects omissions contradicted by included entities or relationships', () => {
+    const entityOmission = {
+      kind: 'project' as const,
+      source_id: 'p',
+      category: 'invalid' as const,
+      reason: 'record_invalid',
+    }
+    expect(() =>
+      formatNativeBackupV2({
+        ...input(),
+        omissions: [entityOmission],
+        warnings: [
+          {
+            code: 'source_items_omitted',
+            category: 'source_coverage',
+            count: 1,
+          },
+        ],
+      }),
+    ).toThrow('project omission conflicts')
+
+    expect(() =>
+      formatNativeBackupV2({
+        ...input(),
+        omissions: [
+          {
+            kind: 'attachment',
+            source_id: 'i',
+            parent_source_id: 'c',
+            category: 'unavailable',
+            reason: 'attachment_not_found',
+          },
+        ],
+        warnings: [
+          {
+            code: 'source_items_omitted',
+            category: 'source_coverage',
+            count: 1,
+          },
+        ],
+      }),
+    ).toThrow('attachment omission conflicts')
+
+    expect(() =>
+      formatNativeBackupV2({
+        ...input(),
+        omissions: [
+          {
+            kind: 'relationship',
+            source_id: 'c',
+            parent_source_id: 'p',
+            category: 'unavailable',
+            reason: 'project_reference_unavailable',
+          },
+        ],
+        warnings: [
+          {
+            code: 'chats_detached_from_omitted_projects',
+            category: 'relationship_adjustment',
+            count: 1,
+          },
+        ],
+      }),
+    ).toThrow('relationship adjustment conflicts')
+
+    const formatted = formatNativeBackupV2({
+      ...input(),
+      omissions: [],
+      warnings: [],
+    })
+    const manifest = JSON.parse(
+      new TextDecoder().decode(formatted.manifestBytes),
+    )
+    manifest.complete = false
+    manifest.omissions = [entityOmission]
+    manifest.warnings = [
+      {
+        code: 'source_items_omitted',
+        category: 'source_coverage',
+        count: 1,
+      },
+    ]
+    expect(() =>
+      assertValidNativeBackupV2(
+        new TextEncoder().encode(JSON.stringify(manifest)),
+        formatted.files,
+      ),
+    ).toThrow('project omission conflicts')
   })
 })

@@ -6,6 +6,7 @@ import { importStatus,type ImportStatusResponse } from '@/services/sync-enclave/
 import { uint8ArrayToBase64 } from '@/utils/binary-codec'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
+import { NATIVE_BACKUP_VERSION_V2 } from './constants'
 import {
   forEachNativeBackupLocalImage,
   validateAndPackageNativeBackup,
@@ -68,6 +69,67 @@ function emptyReport(): NativeRestoreResult['report'] {
     local_chats: empty(),
     attachments: empty(),
   }
+}
+
+function applySourceBackupWarnings(
+  validated: ValidatedNativeRestore,
+  report: NativeRestoreResult['report'],
+) {
+  if (
+    validated.backup.version !== NATIVE_BACKUP_VERSION_V2 ||
+    validated.backup.complete
+  )
+    return
+  const targets: Partial<
+    Record<
+      (typeof validated.backup.omissions)[number]['kind'],
+      NativeRestoreKind
+    >
+  > = {
+    project: 'projects',
+    project_document: 'project_documents',
+    cloud_chat: 'cloud_chats',
+    local_chat: 'local_chats',
+    attachment: 'attachments',
+  }
+  const counts = new Map<NativeRestoreKind, number>()
+  for (const omission of validated.backup.omissions) {
+    const target = targets[omission.kind]
+    if (!target) continue
+    counts.set(target, (counts.get(target) ?? 0) + 1)
+  }
+  const labels: Record<NativeRestoreKind, [string, string]> = {
+    projects: ['project', 'projects'],
+    project_documents: ['project document', 'project documents'],
+    cloud_chats: ['cloud chat', 'cloud chats'],
+    local_chats: ['local chat', 'local chats'],
+    attachments: ['attachment', 'attachments'],
+  }
+  for (const [kind, count] of counts)
+    report[kind].warnings.push(
+      `Source archive omitted ${count} ${labels[kind][count === 1 ? 0 : 1]}.`,
+    )
+  const localChatIds = new Set(validated.local.chats.map(({ id }) => id))
+  const relationshipCounts = new Map<NativeRestoreKind, number>()
+  for (const omission of validated.backup.omissions) {
+    if (omission.kind !== 'relationship') continue
+    const target = localChatIds.has(omission.source_id)
+      ? 'local_chats'
+      : 'cloud_chats'
+    relationshipCounts.set(target, (relationshipCounts.get(target) ?? 0) + 1)
+  }
+  for (const [target, count] of relationshipCounts)
+    report[target].warnings.push(
+      `Source archive adjusted ${count} relationship${count === 1 ? '' : 's'} to keep restored data valid.`,
+    )
+  if (
+    validated.backup.warnings.some(
+      ({ code }) => code === 'local_inventory_unstable',
+    )
+  )
+    report.local_chats.warnings.push(
+      'Local chats changed repeatedly during export; included local chats are a partial snapshot.',
+    )
 }
 
 // prettier-ignore
@@ -236,6 +298,7 @@ export async function restoreNativeBackup(
   if (!ownerId.trim()) throw new Error('Sign in before restoring a backup')
   const report = emptyReport()
   const validated = await dependencies.validate(file, { signal })
+  applySourceBackupWarnings(validated, report)
   let status: ImportStatusResponse | null = null
   let jobId: string | undefined
   if (validated.cloud) {
