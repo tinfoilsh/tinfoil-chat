@@ -536,14 +536,14 @@ export class CloudStorageService {
   }
 
   private async decodeBackupItem(item: PullItem): Promise<StoredChat | null> {
-    if (!item.ok) {
-      if (item.code === 'NOT_FOUND') return null
+    // validateBackupPullItem throws for NOT_FOUND, so any failed item
+    // that survives it carries an unexpected error code.
+    if (!item.ok)
       throw new SyncEnclaveError(
         'Chat pull returned an invalid item',
         undefined,
         item.code,
       )
-    }
     const plaintext = pullItemPlaintext(item)
     if (!plaintext)
       throw new CloudBackupReadError(

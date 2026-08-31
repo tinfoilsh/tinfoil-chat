@@ -50,15 +50,19 @@ export function unwrapBackupPullResult<T>(
 }
 
 /**
- * Group a batched pull response by record ID. Every returned item must
- * have been requested; per-ID duplicate detection is delegated to
- * `validateBackupPullItem`, which rejects multi-item buckets.
+ * Group a batched pull response by record ID. Request IDs must be
+ * unique so one returned record can never satisfy two positional
+ * results; every returned item must have been requested. Per-ID
+ * duplicate detection is delegated to `validateBackupPullItem`,
+ * which rejects multi-item buckets.
  */
 export function groupBackupPullItems(
   items: PullItem[],
   requestedIds: readonly string[],
 ): Map<string, PullItem[]> {
   const requested = new Set(requestedIds)
+  if (requested.size !== requestedIds.length)
+    throw new CloudBackupProtocolError('unexpected_item')
   const grouped = new Map<string, PullItem[]>()
   for (const item of items) {
     if (!requested.has(item.id))

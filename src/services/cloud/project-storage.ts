@@ -370,15 +370,14 @@ export class ProjectStorageService {
           wireId,
           expectedEtag,
         )
-        if (!item.ok) {
-          if (item.code === 'NOT_FOUND')
-            return { ok: true as const, value: null }
+        // validateBackupPullItem throws for NOT_FOUND, so any failed
+        // item that survives it carries an unexpected error code.
+        if (!item.ok)
           throw new SyncEnclaveError(
             'Backup pull returned an invalid item',
             undefined,
             item.code,
           )
-        }
         return { ok: true as const, value: decode(item, index) }
       } catch (error) {
         return { ok: false as const, error }

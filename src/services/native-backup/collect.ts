@@ -50,7 +50,7 @@ const STABLE_READ_ATTEMPTS = 3
 const ATTACHMENT_DOWNLOAD_CONCURRENCY = 4
 // One enclave pull carries this many records. Bounds response size
 // while collapsing per-record round trips on large accounts.
-const CLOUD_PULL_BATCH_SIZE = 20
+export const CLOUD_PULL_BATCH_SIZE = 20
 const encoder = new TextEncoder()
 type CloudInventoryItem = BackupInventoryItem
 type DocumentItem = BackupInventoryItem & { project_id: string }

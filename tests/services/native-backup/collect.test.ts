@@ -8,6 +8,7 @@ import {
   formatNativeBackupV2,
   type NativeBackupCollectionDependencies,
 } from '@/services/native-backup'
+import { CLOUD_PULL_BATCH_SIZE } from '@/services/native-backup/collect'
 import type { StoredChat } from '@/services/storage/indexed-db'
 import type {
   BackupInventoryItem,
@@ -181,8 +182,9 @@ describe('native backup collection', () => {
   })
 
   it('pulls inventory records in batches and isolates per-record failures', async () => {
-    const items = Array.from({ length: 25 }, (_, index) =>
-      item('chat', `chat-${index}`, `etag-${index}`),
+    const items = Array.from(
+      { length: CLOUD_PULL_BATCH_SIZE + 5 },
+      (_, index) => item('chat', `chat-${index}`, `etag-${index}`),
     )
     const getCloudChats = vi.fn(
       async (requests: ReadonlyArray<{ id: string; expectedEtag: string }>) =>
@@ -208,13 +210,13 @@ describe('native backup collection', () => {
     )
 
     expect(getCloudChats).toHaveBeenCalledTimes(2)
-    expect(getCloudChats.mock.calls[0][0]).toHaveLength(20)
+    expect(getCloudChats.mock.calls[0][0]).toHaveLength(CLOUD_PULL_BATCH_SIZE)
     expect(getCloudChats.mock.calls[1][0]).toHaveLength(5)
     expect(getCloudChats.mock.calls[0][0][0]).toEqual({
       id: 'chat-0',
       expectedEtag: 'etag-0',
     })
-    expect(result.cloudChats).toHaveLength(24)
+    expect(result.cloudChats).toHaveLength(items.length - 1)
     expect(result.omissions).toEqual([
       {
         kind: 'cloud_chat',

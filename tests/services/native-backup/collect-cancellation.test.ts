@@ -1,6 +1,7 @@
 import type { BackupPullResult } from '@/services/cloud/backup-read-error'
 import type { NativeBackupCollectionDependencies } from '@/services/native-backup'
 import { collectNativeBackupV1 } from '@/services/native-backup'
+import { CLOUD_PULL_BATCH_SIZE } from '@/services/native-backup/collect'
 import type { StoredChat } from '@/services/storage/indexed-db'
 
 const timestamp = '2026-08-20T12:00:00.000Z'
@@ -104,13 +105,16 @@ describe('native backup collection cancellation', () => {
       })
     // More projects than one pull batch so a second batch would be
     // fetched if the abort were ignored.
-    const projects = Array.from({ length: 30 }, (_, index) => ({
-      id: `project-${index}`,
-      scope: 'project' as const,
-      etag: 'etag',
-      created_at: timestamp,
-      updated_at: timestamp,
-    }))
+    const projects = Array.from(
+      { length: CLOUD_PULL_BATCH_SIZE + 10 },
+      (_, index) => ({
+        id: `project-${index}`,
+        scope: 'project' as const,
+        etag: 'etag',
+        created_at: timestamp,
+        updated_at: timestamp,
+      }),
+    )
 
     await expect(
       collectNativeBackupV1(
@@ -128,7 +132,7 @@ describe('native backup collection cancellation', () => {
     expect(getProjects).toHaveBeenCalledTimes(1)
     expect(
       getProjects.mock.calls[0][0].map(({ id }: { id: string }) => id),
-    ).toEqual(projects.slice(0, 20).map(({ id }) => id))
+    ).toEqual(projects.slice(0, CLOUD_PULL_BATCH_SIZE).map(({ id }) => id))
   })
 
   it('stops image reads and never returns partial input after abort', async () => {
