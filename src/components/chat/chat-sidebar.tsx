@@ -84,6 +84,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
+import { getChatLoadMoreAction } from './sidebar-pagination'
 import type { Chat } from './types'
 
 const FAVORITES_PANEL_ID = 'sidebar-favorites-panel'
@@ -132,9 +133,8 @@ type ChatSidebarProps = {
   backupWarningNeedsRecovery?: boolean
   onDismissBackupWarning?: () => void
   onChatsUpdated?: () => void | Promise<void>
-  initialChatPageToken?: string
   isInitialChatPageReady?: boolean
-  /** Triggers a deep (all-pages) cloud sync from the sidebar "Sync" button. */
+  /** Triggers an account revision sync from the sidebar "Sync" button. */
   onManualSync?: () => Promise<boolean>
   /** True while a cloud sync is in progress; drives the Sync button spinner. */
   isSyncing?: boolean
@@ -211,7 +211,6 @@ export function ChatSidebar({
   backupWarningNeedsRecovery = false,
   onDismissBackupWarning,
   onChatsUpdated,
-  initialChatPageToken,
   isInitialChatPageReady = false,
   onManualSync,
   isSyncing = false,
@@ -393,11 +392,11 @@ export function ChatSidebar({
     isLoading: isLoadingMore,
     hasAttempted: hasAttemptedLoadMore,
     isInitialized: isPaginationInitialized,
+    canRetryInitialization,
     loadMore: loadMorePage,
   } = useCloudPagination({
     isSignedIn: !!isSignedIn,
     userId: user?.id,
-    initialToken: initialChatPageToken,
     isInitialPageReady: isInitialChatPageReady,
   })
   const [visibleCloudChatCount, setVisibleCloudChatCount] = useState<number>(
@@ -728,7 +727,8 @@ export function ChatSidebar({
   )
   const hasMoreLoadedChats = filteredChats.length > visibleCloudChatCount
   const canLoadRemoteChats =
-    isInitialChatPageReady && isPaginationInitialized && hasMoreRemote
+    isInitialChatPageReady &&
+    ((isPaginationInitialized && hasMoreRemote) || canRetryInitialization)
   const shouldShowLoadMore =
     paginatesCloudChats && (hasMoreLoadedChats || canLoadRemoteChats)
 
@@ -739,7 +739,14 @@ export function ChatSidebar({
   const loadMoreChats = useCallback(async (): Promise<void> => {
     if (isLoadingMore || !isSignedIn) return
 
-    if (!hasMoreRemote) {
+    const action = getChatLoadMoreAction({
+      loadedChatCount: filteredChats.length,
+      visibleChatCount: visibleCloudChatCount,
+      hasRemoteCursor: hasMoreRemote,
+      canRetryRemoteInitialization: canRetryInitialization,
+    })
+    if (action === 'none') return
+    if (action === 'reveal-local') {
       setVisibleCloudChatCount((count) => count + PAGINATION.CHATS_PER_PAGE)
       return
     }
@@ -767,7 +774,16 @@ export function ChatSidebar({
         action: 'loadMoreChats',
       })
     }
-  }, [hasMoreRemote, isLoadingMore, isSignedIn, loadMorePage, onChatsUpdated])
+  }, [
+    canRetryInitialization,
+    filteredChats.length,
+    hasMoreRemote,
+    isLoadingMore,
+    isSignedIn,
+    loadMorePage,
+    onChatsUpdated,
+    visibleCloudChatCount,
+  ])
 
   // Prefer backing up the existing key with a passkey (PRF-capable devices
   // must stay in the passkey-only flow); fall back to the manual cloud-sync

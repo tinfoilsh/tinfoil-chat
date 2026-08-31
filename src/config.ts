@@ -39,6 +39,12 @@ export const SYNC_ENCLAVE_TIMEOUTS = {
 // Pagination settings
 export const PAGINATION = {
   CHATS_PER_PAGE: 20,
+  // Metadata-only page size used when scanning cloud history to find the
+  // first chat that is not cached locally. Larger than CHATS_PER_PAGE so
+  // long, fully-cached histories cost few round trips to scan. A returned
+  // cursor still points at a page start, so a later content fetch of
+  // CHATS_PER_PAGE items from that cursor stays correct.
+  CURSOR_SCAN_PAGE_SIZE: 100,
 } as const
 
 // Cloud sync settings

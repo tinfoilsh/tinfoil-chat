@@ -454,7 +454,6 @@ export function ChatInterface({
   const [chatPagination, setChatPagination] = useState<{
     isReady: boolean
     userId?: string
-    nextToken?: string
   }>({ isReady: false })
   const [cloudSyncSettingEnabled, setCloudSyncSettingEnabled] =
     useState(isCloudSyncEnabled)
@@ -2036,16 +2035,12 @@ export function ChatInterface({
     }
 
     runInitialSync()
-      .then(async (result) => {
+      .then(async () => {
         await reloadChats()
         if (!cancelled && !isProjectMode) {
           setChatPagination({
             isReady: true,
             userId: authUserId ?? undefined,
-            nextToken:
-              result && typeof result !== 'boolean'
-                ? result.nextToken
-                : undefined,
           })
         }
       })
@@ -3978,11 +3973,6 @@ export function ChatInterface({
                 backupWarningNeedsRecovery={manualRecoveryNeeded}
                 onDismissBackupWarning={dismissBackupWarning}
                 onChatsUpdated={reloadChats}
-                initialChatPageToken={
-                  chatPagination.userId === authUserId
-                    ? chatPagination.nextToken
-                    : undefined
-                }
                 isInitialChatPageReady={
                   chatPagination.userId === authUserId && chatPagination.isReady
                 }

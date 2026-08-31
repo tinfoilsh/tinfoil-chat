@@ -1,3 +1,4 @@
+import { PAGINATION } from '@/config'
 import {
   AUTH_ACTIVE_USER_ID,
   SETTINGS_CLOUD_SYNC_ENABLED,
@@ -27,9 +28,17 @@ import { logError } from '@/utils/error-handling'
 import type { AccountOperationGuard } from './account-operation'
 import { hasPrimaryKey, primaryKeyIdHexOrNull } from './cek-encoding'
 import { processRemoteChat } from './chat-codec'
-import { drainChatRevisionSync } from './chat-revision-sync'
+import { ingestRemoteChats } from './chat-ingestion'
+import {
+  BOOTSTRAP_RECENT_CONTENT_LIMIT,
+  drainChatRevisionSync,
+} from './chat-revision-sync'
 import { canWriteToCloud } from './cloud-key-authorization'
-import { cloudStorage, type UploadChatOptions } from './cloud-storage'
+import {
+  cloudStorage,
+  type ChatListResponse,
+  type UploadChatOptions,
+} from './cloud-storage'
 import { adoptLocalKeyForMigration } from './ensure-current-key'
 import {
   finalizeAlternativesIfMigrated,
@@ -54,7 +63,6 @@ export interface SyncResult {
   uploaded: number
   downloaded: number
   errors: string[]
-  nextToken?: string
 }
 
 export class SyncInProgressError extends Error {
@@ -93,11 +101,16 @@ export interface PaginatedChatsResult {
   nextToken?: string
 }
 
-class RemoteChatPageIncompleteError extends Error {
-  constructor(chatId: string, cause: unknown) {
-    super(
-      `Remote chat page is incomplete because ${chatId} could not be decoded`,
-    )
+export class RemoteChatPageIncompleteError extends Error {
+  readonly code = 'REMOTE_CHAT_PAGE_INCOMPLETE'
+
+  constructor(
+    public readonly chatId: string,
+    public readonly stage:
+      'boundary' | 'missing-content' | 'decode' | 'storage',
+    cause?: unknown,
+  ) {
+    super(`Remote chat page is incomplete at ${chatId}`)
     this.name = 'RemoteChatPageIncompleteError'
     this.cause = cause
   }
@@ -880,6 +893,19 @@ export class CloudSyncService {
     }
   }
 
+  private isLocalChatCurrent(
+    local: StoredChat | null | undefined,
+    remote: ChatListResponse['conversations'][number],
+    userId: string,
+  ): boolean {
+    return (
+      !!local &&
+      local.syncUserId === userId &&
+      !local.decryptionFailed &&
+      local.syncVersion === remote.syncVersion
+    )
+  }
+
   async loadChatsWithPagination(options: {
     limit: number
     continuationToken?: string
@@ -914,7 +940,7 @@ export class CloudSyncService {
             action: 'loadChatsWithPagination',
             metadata: { chatId: entry.id },
           })
-          throw new RemoteChatPageIncompleteError(entry.id, error)
+          throw new RemoteChatPageIncompleteError(entry.id, 'decode', error)
         }
       }
       return {
@@ -931,6 +957,92 @@ export class CloudSyncService {
       if (loadLocal) return this.paginateLocalChats(limit, continuationToken)
       throw error
     }
+  }
+
+  async initializeChatPaginationCursor(): Promise<{
+    hasMore: boolean
+    nextToken?: string
+  }> {
+    const generation = this.accountGeneration
+    const userId = this.readActiveUserId()
+    if (!(await cloudStorage.isAuthenticated())) {
+      this.ensureCurrentAccount(generation, userId)
+      return { hasMore: false }
+    }
+    this.ensureCurrentAccount(generation, userId)
+    if (!userId) throw new Error('Authenticated user ID is unavailable')
+    const remote = await cloudStorage.listChats({
+      limit: BOOTSTRAP_RECENT_CONTENT_LIMIT,
+      includeContent: false,
+    })
+    this.ensureCurrentAccount(generation, userId)
+    const prefix = remote.conversations.filter(
+      (entry) => !deletedChatsTracker.isDeleted(entry.id),
+    )
+    const missingOrStale = []
+    for (const entry of prefix) {
+      const local = await indexedDBStorage.getChat(entry.id)
+      this.ensureCurrentAccount(generation, userId)
+      if (!this.isLocalChatCurrent(local, entry, userId)) {
+        missingOrStale.push(entry)
+      }
+    }
+    if (missingOrStale.length > 0) {
+      const pulled = await cloudStorage.downloadChats(
+        missingOrStale.map((entry) => entry.id),
+      )
+      this.ensureCurrentAccount(generation, userId)
+      const metadata = new Map(missingOrStale.map((entry) => [entry.id, entry]))
+      await ingestRemoteChats(
+        pulled.map((entry) => ({
+          ...entry,
+          updatedAt: metadata.get(entry.id)!.updatedAt,
+          projectId: metadata.get(entry.id)!.projectId,
+        })),
+        {
+          setLoadedAt: true,
+          eventReason: 'pagination',
+          isCurrent: () =>
+            this.isCurrentGeneration(generation) &&
+            this.readActiveUserId() === userId,
+          userId,
+        },
+      )
+      this.ensureCurrentAccount(generation, userId)
+    }
+    for (const entry of prefix) {
+      const local = await indexedDBStorage.getChat(entry.id)
+      this.ensureCurrentAccount(generation, userId)
+      if (!this.isLocalChatCurrent(local, entry, userId)) {
+        throw new RemoteChatPageIncompleteError(entry.id, 'boundary')
+      }
+    }
+
+    let nextToken = remote.nextContinuationToken
+    const visitedTokens = new Set<string>()
+    while (nextToken) {
+      if (visitedTokens.has(nextToken)) {
+        throw new Error('Cloud pagination cursor did not advance')
+      }
+      visitedTokens.add(nextToken)
+      const pageStartToken = nextToken
+      const page = await cloudStorage.listChats({
+        limit: PAGINATION.CURSOR_SCAN_PAGE_SIZE,
+        continuationToken: pageStartToken,
+        includeContent: false,
+      })
+      this.ensureCurrentAccount(generation, userId)
+      for (const entry of page.conversations) {
+        if (deletedChatsTracker.isDeleted(entry.id)) continue
+        const local = await indexedDBStorage.getChat(entry.id)
+        this.ensureCurrentAccount(generation, userId)
+        if (!this.isLocalChatCurrent(local, entry, userId)) {
+          return { hasMore: true, nextToken: pageStartToken }
+        }
+      }
+      nextToken = page.nextContinuationToken
+    }
+    return { hasMore: false }
   }
 
   async fetchAndStorePage(options: {
@@ -953,15 +1065,27 @@ export class CloudSyncService {
     this.ensureCurrentAccount(generation, userId)
     let saved = 0
     for (const entry of remote.conversations) {
-      if (!entry.content || deletedChatsTracker.isDeleted(entry.id)) continue
+      if (deletedChatsTracker.isDeleted(entry.id)) continue
+      if (!entry.content) continue
+      let decoded: Awaited<ReturnType<typeof processRemoteChat>>
       try {
-        const decoded = await processRemoteChat({
+        decoded = await processRemoteChat({
           id: entry.id,
           plaintext: entry.content,
           syncVersion: entry.syncVersion,
           formatVersion: 2,
         })
+      } catch (error) {
         this.ensureCurrentAccount(generation, userId)
+        logError('Failed to decode paginated remote chat', error, {
+          component: 'CloudSync',
+          action: 'fetchAndStorePage',
+          metadata: { chatId: entry.id },
+        })
+        continue
+      }
+      this.ensureCurrentAccount(generation, userId)
+      try {
         const local = await indexedDBStorage.getChat(entry.id)
         this.ensureCurrentAccount(generation, userId)
         const applied = await indexedDBStorage.applyRemoteChatIfFresh({
@@ -983,6 +1107,7 @@ export class CloudSyncService {
           action: 'fetchAndStorePage',
           metadata: { chatId: entry.id },
         })
+        throw new RemoteChatPageIncompleteError(entry.id, 'storage', error)
       }
     }
     if (saved > 0) chatEvents.emit({ reason: 'pagination', ids: [] })
