@@ -20,6 +20,7 @@ import {
   newIdempotencyKey,
   pullItemPlaintext,
   revisionSnapshot,
+  type PullItem,
 } from '../sync-enclave/sync-api'
 import {
   SyncEnclaveError,
@@ -29,7 +30,9 @@ import { RESTORE_DELETED_HEADERS } from '../sync-enclave/wire-contract'
 import type { AccountOperationGuard } from './account-operation'
 import {
   CloudBackupReadError,
+  groupBackupPullItems,
   validateBackupPullItem,
+  type BackupPullResult,
 } from './backup-read-error'
 import { pullKey, requirePrimaryKeyB64 } from './cek-encoding'
 import {
@@ -434,50 +437,22 @@ export class CloudStorageService {
    * Fetch raw encrypted content for a single chat by ID.
    * Returns v0 JSON string or v1 binary ArrayBuffer based on X-Format-Version header.
    */
-  async fetchRawChatContent(
-    chatId: string,
-    options: { strictBackupRead?: boolean; expectedEtag?: string } = {},
-  ): Promise<RawChatContent | null> {
+  async fetchRawChatContent(chatId: string): Promise<RawChatContent | null> {
     const keys = pullKey()
-    if (keys.length === 0) {
-      if (options.strictBackupRead)
-        throw new CloudBackupReadError(
-          'key_unavailable',
-          'cloud_key_unavailable',
-          false,
-        )
-      return null
-    }
+    if (keys.length === 0) return null
 
     const resp = await enclavePull({
       scope: 'chat',
       ids: [chatId],
       keys,
     })
-    const item =
-      options.expectedEtag !== undefined
-        ? validateBackupPullItem(resp.items, chatId, options.expectedEtag)
-        : resp.items[0]
+    const item = resp.items[0]
     if (!item || !item.ok) {
       if (item && item.code === 'NOT_FOUND') return null
-      if (options.strictBackupRead)
-        throw new SyncEnclaveError(
-          'Chat pull returned an invalid item',
-          undefined,
-          item?.code,
-        )
       throw new Error(item?.code || 'Failed to pull chat from sync enclave')
     }
     const plaintext = pullItemPlaintext(item)
-    if (!plaintext) {
-      if (options.strictBackupRead)
-        throw new CloudBackupReadError(
-          'item_invalid',
-          'chat_payload_unavailable',
-          true,
-        )
-      return null
-    }
+    if (!plaintext) return null
     return {
       plaintext: new TextDecoder().decode(plaintext),
       formatVersion: 2,
@@ -517,24 +492,74 @@ export class CloudStorageService {
     }
   }
 
-  async downloadChatForBackup(
-    chatId: string,
-    expectedEtag: string,
-  ): Promise<StoredChat | null> {
-    const raw = await this.fetchRawChatContent(chatId, {
-      strictBackupRead: true,
-      expectedEtag,
+  /**
+   * Batched strict backup read: one enclave round trip pulls every
+   * requested chat and validates each item against its captured
+   * inventory ETag. Results align positionally with `requests`;
+   * per-record failures are settled into the result slot so one
+   * unreadable record cannot mask its batch peers.
+   */
+  async downloadChatsForBackup(
+    requests: ReadonlyArray<{ id: string; expectedEtag: string }>,
+  ): Promise<BackupPullResult<StoredChat | null>[]> {
+    if (requests.length === 0) return []
+    const keys = pullKey()
+    if (keys.length === 0)
+      throw new CloudBackupReadError(
+        'key_unavailable',
+        'cloud_key_unavailable',
+        false,
+      )
+    const resp = await enclavePull({
+      scope: 'chat',
+      ids: requests.map(({ id }) => id),
+      keys,
     })
-    if (raw === null) return null
+    const grouped = groupBackupPullItems(
+      resp.items,
+      requests.map(({ id }) => id),
+    )
+    return Promise.all(
+      requests.map(async ({ id, expectedEtag }) => {
+        try {
+          const item = validateBackupPullItem(
+            grouped.get(id) ?? [],
+            id,
+            expectedEtag,
+          )
+          return { ok: true as const, value: await this.decodeBackupItem(item) }
+        } catch (error) {
+          return { ok: false as const, error }
+        }
+      }),
+    )
+  }
+
+  private async decodeBackupItem(item: PullItem): Promise<StoredChat | null> {
+    if (!item.ok) {
+      if (item.code === 'NOT_FOUND') return null
+      throw new SyncEnclaveError(
+        'Chat pull returned an invalid item',
+        undefined,
+        item.code,
+      )
+    }
+    const plaintext = pullItemPlaintext(item)
+    if (!plaintext)
+      throw new CloudBackupReadError(
+        'item_invalid',
+        'chat_payload_unavailable',
+        true,
+      )
     try {
       const result = await processRemoteChat(
         {
-          id: chatId,
-          plaintext: raw.plaintext,
+          id: item.id,
+          plaintext: new TextDecoder().decode(plaintext),
           formatVersion: 2,
-          syncVersion: raw.syncVersion,
+          syncVersion: etagToSyncVersion(item.etag),
         },
-        raw.projectIdSet ? { projectId: raw.projectId } : {},
+        item.project_id_set === true ? { projectId: item.project_id } : {},
       )
       return result.chat
     } catch (error) {

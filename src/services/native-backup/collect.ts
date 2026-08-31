@@ -5,6 +5,10 @@ import {
   AuthTokenUnavailableError,
   authTokenManager,
 } from '@/services/auth'
+import {
+  unwrapBackupPullResult,
+  type BackupPullResult,
+} from '@/services/cloud/backup-read-error'
 import { requirePrimaryKeyB64 } from '@/services/cloud/cek-encoding'
 import {
   CloudBackupReadError,
@@ -44,22 +48,31 @@ import {
 } from './sanitize'
 const STABLE_READ_ATTEMPTS = 3
 const ATTACHMENT_DOWNLOAD_CONCURRENCY = 4
+// One enclave pull carries this many records. Bounds response size
+// while collapsing per-record round trips on large accounts.
+const CLOUD_PULL_BATCH_SIZE = 20
 const encoder = new TextEncoder()
 type CloudInventoryItem = BackupInventoryItem
 type DocumentItem = BackupInventoryItem & { project_id: string }
+export type BackupReadRequest = { id: string; expectedEtag: string }
+export type BackupDocumentReadRequest = BackupReadRequest & {
+  projectId: string
+}
 export interface NativeBackupCollectionDependencies {
   isAuthenticated(): Promise<boolean>
   activeUserId(): string | null
   requireUnlockedCek(): void
   getCloudInventory(signal?: AbortSignal): Promise<BackupInventoryResponse>
-  getCloudChat(id: string, expectedEtag: string): Promise<StoredChat | null>
+  getCloudChats(
+    requests: readonly BackupReadRequest[],
+  ): Promise<BackupPullResult<StoredChat | null>[]>
   getCloudImage(value: Attachment): Promise<Uint8Array | null>
-  getProject(id: string, expectedEtag: string): Promise<Project | null>
-  getDocument(
-    projectId: string,
-    id: string,
-    expectedEtag: string,
-  ): Promise<ProjectDocument | null>
+  getProjects(
+    requests: readonly BackupReadRequest[],
+  ): Promise<BackupPullResult<Project | null>[]>
+  getDocuments(
+    requests: readonly BackupDocumentReadRequest[],
+  ): Promise<BackupPullResult<ProjectDocument | null>[]>
   getLocalChats(): Promise<StoredChat[]>
   getLocalChat(id: string): Promise<StoredChat | null>
 }
@@ -93,13 +106,10 @@ const defaults: NativeBackupCollectionDependencies = {
   activeUserId,
   requireUnlockedCek: () => void requirePrimaryKeyB64(),
   getCloudInventory: backupInventory,
-  getCloudChat: (id, expectedEtag) =>
-    cloudStorage.downloadChatForBackup(id, expectedEtag),
+  getCloudChats: (requests) => cloudStorage.downloadChatsForBackup(requests),
   getCloudImage: (value) => cloudStorage.loadChatImageForBackup(value),
-  getProject: (id, expectedEtag) =>
-    projectStorage.getProjectForBackup(id, expectedEtag),
-  getDocument: (projectId, id, expectedEtag) =>
-    projectStorage.getDocumentForBackup(projectId, id, expectedEtag),
+  getProjects: (requests) => projectStorage.getProjectsForBackup(requests),
+  getDocuments: (requests) => projectStorage.getDocumentsForBackup(requests),
   getLocalChats: () => indexedDBStorage.getAllChats(),
   getLocalChat: (id) => indexedDBStorage.getChat(id),
 }
@@ -188,6 +198,36 @@ function groupCloudInventory(
     else documents.push(item as DocumentItem)
   }
   return { chats, projects, documents, discovered: response.total_items }
+}
+/**
+ * Walk inventory items in fixed-size batches, one enclave round trip
+ * per batch. Each item is handed a `read` thunk that consumes the
+ * prefetched batch slot on its first call and falls back to a
+ * single-record batch on retries, so `readRecord`'s per-record retry
+ * semantics are unchanged.
+ */
+async function collectInBatches<I, R>(
+  items: readonly I[],
+  fetchBatch: (batch: readonly I[]) => Promise<BackupPullResult<R>[]>,
+  handle: (item: I, read: () => Promise<R>) => Promise<void>,
+  signal?: AbortSignal,
+) {
+  for (let start = 0; start < items.length; start += CLOUD_PULL_BATCH_SIZE) {
+    const batch = items.slice(start, start + CLOUD_PULL_BATCH_SIZE)
+    const results = await wait(signal, () => fetchBatch(batch))
+    for (const [index, item] of batch.entries()) {
+      let prefetched: BackupPullResult<R> | undefined = results[index]
+      const read = async () => {
+        if (prefetched) {
+          const result = prefetched
+          prefetched = undefined
+          return unwrapBackupPullResult(result)
+        }
+        return unwrapBackupPullResult((await fetchBatch([item]))[0])
+      }
+      await handle(item, read)
+    }
+  }
 }
 async function mapLimitInOrder<T, R>(
   values: readonly T[],
@@ -710,44 +750,66 @@ async function collectNativeBackupAttempt(
       reason: error.reason,
     })
   }
-  const projects = []
-  for (const item of projectItems) {
-    try {
-      projects.push(
-        await collectTimedInventoryItem(
-          'project',
-          item,
-          () => deps.getProject(item.id, item.etag),
-          sanitizeNativeBackupProject,
-          budget,
-          signal,
-        ),
-      )
-    } catch (error) {
-      omit('project', item.id, error)
-    }
-  }
+  const projects: ReturnType<typeof sanitizeNativeBackupProject>[] = []
+  await collectInBatches(
+    projectItems,
+    (batch) =>
+      deps.getProjects(
+        batch.map(({ id, etag }) => ({ id, expectedEtag: etag })),
+      ),
+    async (item, read) => {
+      try {
+        projects.push(
+          await collectTimedInventoryItem(
+            'project',
+            item,
+            read,
+            sanitizeNativeBackupProject,
+            budget,
+            signal,
+          ),
+        )
+      } catch (error) {
+        omit('project', item.id, error)
+      }
+    },
+    signal,
+  )
   const includedProjectIds = new Set(projects.map(({ id }) => id))
   const documentItems = allDocumentItems.filter(({ project_id }) =>
     includedProjectIds.has(project_id),
   )
-  const projectDocuments = []
-  for (const item of documentItems) {
-    try {
-      projectDocuments.push(
-        await collectTimedInventoryItem(
-          'project document',
-          item,
-          () => deps.getDocument(item.project_id, item.id, item.etag),
-          sanitizeNativeBackupProjectDocument,
-          budget,
-          signal,
-        ),
-      )
-    } catch (error) {
-      omit('project_document', item.id, error, item.project_id)
-    }
-  }
+  const projectDocuments: ReturnType<
+    typeof sanitizeNativeBackupProjectDocument
+  >[] = []
+  await collectInBatches(
+    documentItems,
+    (batch) =>
+      deps.getDocuments(
+        batch.map(({ project_id, id, etag }) => ({
+          projectId: project_id,
+          id,
+          expectedEtag: etag,
+        })),
+      ),
+    async (item, read) => {
+      try {
+        projectDocuments.push(
+          await collectTimedInventoryItem(
+            'project document',
+            item,
+            read,
+            sanitizeNativeBackupProjectDocument,
+            budget,
+            signal,
+          ),
+        )
+      } catch (error) {
+        omit('project_document', item.id, error, item.project_id)
+      }
+    },
+    signal,
+  )
   for (const item of projectItems.filter(
     ({ id }) => !includedProjectIds.has(id),
   )) {
@@ -762,38 +824,41 @@ async function collectNativeBackupAttempt(
         reason: 'parent_project_omitted',
       })
   }
-  const cloudResults = []
-  for (const listed of chatItems) {
-    try {
-      const chat = await readRecord(
-        'cloud chat',
-        listed.id,
-        () => deps.getCloudChat(listed.id, listed.etag),
-        signal,
-      )
-      const capturedChat = {
-        ...chat,
-        createdAt: listed.created_at,
-        updatedAt: listed.updated_at,
-        projectId: listed.project_id,
+  const cloudResults: Awaited<ReturnType<typeof collectChat>>[] = []
+  await collectInBatches(
+    chatItems,
+    (batch) =>
+      deps.getCloudChats(
+        batch.map(({ id, etag }) => ({ id, expectedEtag: etag })),
+      ),
+    async (listed, read) => {
+      try {
+        const chat = await readRecord('cloud chat', listed.id, read, signal)
+        const capturedChat = {
+          ...chat,
+          createdAt: listed.created_at,
+          updatedAt: listed.updated_at,
+          projectId: listed.project_id,
+        }
+        if (classifyNativeBackupChat(capturedChat, 'cloud') === null) return
+        const result = await collectChat(
+          capturedChat,
+          true,
+          deps,
+          budget,
+          signal,
+          allowPartial,
+        )
+        budget.commit(result.pending, true)
+        cloudResults.push(result)
+        for (const { failure } of result.omitted)
+          omit('attachment', failure.recordId, failure, listed.id)
+      } catch (error) {
+        omit('cloud_chat', listed.id, error)
       }
-      if (classifyNativeBackupChat(capturedChat, 'cloud') === null) continue
-      const result = await collectChat(
-        capturedChat,
-        true,
-        deps,
-        budget,
-        signal,
-        allowPartial,
-      )
-      budget.commit(result.pending, true)
-      cloudResults.push(result)
-      for (const { failure } of result.omitted)
-        omit('attachment', failure.recordId, failure, listed.id)
-    } catch (error) {
-      omit('cloud_chat', listed.id, error)
-    }
-  }
+    },
+    signal,
+  )
   const localResults = []
   for (const snapshot of localSnapshots) {
     if (!localEligible(snapshot, userId)) continue

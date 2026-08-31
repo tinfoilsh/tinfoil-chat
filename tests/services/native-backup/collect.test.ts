@@ -1,5 +1,6 @@
 import type { Attachment } from '@/components/chat/types'
 import { AuthTokenUnavailableError } from '@/services/auth'
+import type { BackupPullResult } from '@/services/cloud/backup-read-error'
 import { CloudBackupReadError } from '@/services/cloud/cloud-storage'
 import {
   NativeBackupCollectionError,
@@ -14,6 +15,40 @@ import type {
 } from '@/services/sync-enclave/sync-api'
 import { SyncNetworkError } from '@/services/sync-enclave/sync-enclave-client'
 import type { Project, ProjectDocument } from '@/types/project'
+
+async function settle<T>(read: () => Promise<T>): Promise<BackupPullResult<T>> {
+  try {
+    return { ok: true, value: await read() }
+  } catch (error) {
+    return { ok: false, error }
+  }
+}
+
+function batchReads<T>(fn: (id: string, expectedEtag: string) => Promise<T>) {
+  return (requests: ReadonlyArray<{ id: string; expectedEtag: string }>) =>
+    Promise.all(
+      requests.map(({ id, expectedEtag }) =>
+        settle(() => fn(id, expectedEtag)),
+      ),
+    )
+}
+
+function batchDocumentReads<T>(
+  fn: (projectId: string, id: string, expectedEtag: string) => Promise<T>,
+) {
+  return (
+    requests: ReadonlyArray<{
+      projectId: string
+      id: string
+      expectedEtag: string
+    }>,
+  ) =>
+    Promise.all(
+      requests.map(({ projectId, id, expectedEtag }) =>
+        settle(() => fn(projectId, id, expectedEtag)),
+      ),
+    )
+}
 
 const timestamp = '2026-08-20T12:00:00.000Z'
 const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
@@ -89,10 +124,10 @@ function dependencies(
     activeUserId: () => 'user',
     requireUnlockedCek: () => {},
     getCloudInventory: async () => inventory(),
-    getCloudChat: async () => null,
+    getCloudChats: batchReads(async () => null),
     getCloudImage: async () => null,
-    getProject: async () => null,
-    getDocument: async () => null,
+    getProjects: batchReads(async () => null),
+    getDocuments: batchDocumentReads(async () => null),
     getLocalChats: async () => [],
     getLocalChat: async () => null,
     ...overrides,
@@ -119,9 +154,9 @@ describe('native backup collection', () => {
     const result = await collectNativeBackupV2(
       dependencies({
         getCloudInventory,
-        getCloudChat,
-        getProject,
-        getDocument,
+        getCloudChats: batchReads(getCloudChat),
+        getProjects: batchReads(getProject),
+        getDocuments: batchDocumentReads(getDocument),
       }),
     )
 
@@ -143,6 +178,51 @@ describe('native backup collection', () => {
       projectDocuments: [{ projectId: 'project', documentId: 'document' }],
     })
     expect(() => formatNativeBackupV2(result)).not.toThrow()
+  })
+
+  it('pulls inventory records in batches and isolates per-record failures', async () => {
+    const items = Array.from({ length: 25 }, (_, index) =>
+      item('chat', `chat-${index}`, `etag-${index}`),
+    )
+    const getCloudChats = vi.fn(
+      async (requests: ReadonlyArray<{ id: string; expectedEtag: string }>) =>
+        requests.map(({ id }) =>
+          id === 'chat-3'
+            ? {
+                ok: false as const,
+                error: new CloudBackupReadError(
+                  'snapshot_deleted',
+                  'record_deleted_after_snapshot',
+                  true,
+                ),
+              }
+            : { ok: true as const, value: chat({ id }) },
+        ),
+    )
+
+    const result = await collectNativeBackupV2(
+      dependencies({
+        getCloudInventory: async () => inventory(items),
+        getCloudChats,
+      }),
+    )
+
+    expect(getCloudChats).toHaveBeenCalledTimes(2)
+    expect(getCloudChats.mock.calls[0][0]).toHaveLength(20)
+    expect(getCloudChats.mock.calls[1][0]).toHaveLength(5)
+    expect(getCloudChats.mock.calls[0][0][0]).toEqual({
+      id: 'chat-0',
+      expectedEtag: 'etag-0',
+    })
+    expect(result.cloudChats).toHaveLength(24)
+    expect(result.omissions).toEqual([
+      {
+        kind: 'cloud_chat',
+        source_id: 'chat-3',
+        category: 'deleted',
+        reason: 'record_deleted_after_snapshot',
+      },
+    ])
   })
 
   it('reuses the captured cloud inventory while local inventory converges', async () => {
@@ -181,7 +261,7 @@ describe('native backup collection', () => {
         dependencies({
           getCloudInventory: async () =>
             inventory([item('chat', 'chat', 'opaque-etag')]),
-          getCloudChat,
+          getCloudChats: batchReads(getCloudChat),
         }),
       )
 
@@ -206,14 +286,14 @@ describe('native backup collection', () => {
             item('project', 'project', 'project-etag'),
             item('project_document', 'document', 'doc-etag', 'project'),
           ]),
-        getCloudChat: async () => cloudChat,
-        getProject: async () => {
+        getCloudChats: batchReads(async () => cloudChat),
+        getProjects: batchReads(async () => {
           throw new CloudBackupReadError(
             'item_invalid',
             'project_payload_invalid',
             true,
           )
-        },
+        }),
       }),
     )
 
@@ -338,7 +418,7 @@ describe('native backup collection', () => {
       dependencies({
         getCloudInventory: async () =>
           inventory([item('chat', 'chat', 'etag')]),
-        getCloudChat: async () => source,
+        getCloudChats: batchReads(async () => source),
         getCloudImage,
       }),
     )
@@ -389,7 +469,7 @@ describe('native backup collection', () => {
         dependencies({
           getCloudInventory: async () =>
             inventory([item('chat', 'chat', 'etag')]),
-          getCloudChat: async () => source,
+          getCloudChats: batchReads(async () => source),
           getCloudImage: async () => {
             throw failure
           },
@@ -410,9 +490,9 @@ describe('native backup collection', () => {
           dependencies({
             getCloudInventory: async () =>
               inventory([item('chat', 'chat', 'etag')]),
-            getCloudChat: async () => {
+            getCloudChats: batchReads(async () => {
               throw failure
-            },
+            }),
           }),
         ),
       ).rejects.toBe(failure)

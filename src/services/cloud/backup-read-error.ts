@@ -33,6 +33,43 @@ export class CloudBackupProtocolError extends Error {
   }
 }
 
+/**
+ * Settled result of one record inside a batched backup pull. Batch
+ * responses stay positionally aligned with their requests so callers
+ * can keep processing records in captured-inventory order.
+ */
+export type BackupPullResult<T> =
+  { ok: true; value: T } | { ok: false; error: unknown }
+
+export function unwrapBackupPullResult<T>(
+  result: BackupPullResult<T> | undefined,
+): T {
+  if (!result) throw new CloudBackupProtocolError('missing_item')
+  if (!result.ok) throw result.error
+  return result.value
+}
+
+/**
+ * Group a batched pull response by record ID. Every returned item must
+ * have been requested; per-ID duplicate detection is delegated to
+ * `validateBackupPullItem`, which rejects multi-item buckets.
+ */
+export function groupBackupPullItems(
+  items: PullItem[],
+  requestedIds: readonly string[],
+): Map<string, PullItem[]> {
+  const requested = new Set(requestedIds)
+  const grouped = new Map<string, PullItem[]>()
+  for (const item of items) {
+    if (!requested.has(item.id))
+      throw new CloudBackupProtocolError('unexpected_item')
+    const bucket = grouped.get(item.id)
+    if (bucket) bucket.push(item)
+    else grouped.set(item.id, [item])
+  }
+  return grouped
+}
+
 export function validateBackupPullItem(
   items: PullItem[],
   expectedId: string,

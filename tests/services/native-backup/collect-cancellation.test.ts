@@ -1,8 +1,16 @@
+import type { BackupPullResult } from '@/services/cloud/backup-read-error'
 import type { NativeBackupCollectionDependencies } from '@/services/native-backup'
 import { collectNativeBackupV1 } from '@/services/native-backup'
 import type { StoredChat } from '@/services/storage/indexed-db'
 
 const timestamp = '2026-08-20T12:00:00.000Z'
+
+function batchOf<T>(
+  requests: readonly unknown[],
+  value: T,
+): BackupPullResult<T>[] {
+  return requests.map(() => ({ ok: true, value }))
+}
 
 function dependencies(
   overrides: Partial<NativeBackupCollectionDependencies> = {},
@@ -16,10 +24,10 @@ function dependencies(
       total_items: 0,
       items: [],
     }),
-    getCloudChat: async () => null,
+    getCloudChats: async (requests) => batchOf(requests, null),
     getCloudImage: async () => null,
-    getProject: async () => null,
-    getDocument: async () => null,
+    getProjects: async (requests) => batchOf(requests, null),
+    getDocuments: async (requests) => batchOf(requests, null),
     getLocalChats: async () => [],
     getLocalChat: async () => null,
     ...overrides,
@@ -69,7 +77,7 @@ describe('native backup collection cancellation', () => {
   it('stops immediately when the one-shot inventory request aborts', async () => {
     const controller = new AbortController()
     const reason = new DOMException('Canceled', 'AbortError')
-    const getCloudChat = vi.fn()
+    const getCloudChats = vi.fn()
     const getCloudInventory = vi.fn().mockImplementation(async () => {
       controller.abort(reason)
       return { captured_at: timestamp, total_items: 0, items: [] }
@@ -77,22 +85,26 @@ describe('native backup collection cancellation', () => {
 
     await expect(
       collectNativeBackupV1(
-        dependencies({ getCloudInventory, getCloudChat }),
+        dependencies({ getCloudInventory, getCloudChats }),
         controller.signal,
       ),
     ).rejects.toBe(reason)
     expect(getCloudInventory).toHaveBeenCalledTimes(1)
-    expect(getCloudChat).not.toHaveBeenCalled()
+    expect(getCloudChats).not.toHaveBeenCalled()
   })
 
-  it('does not read later projects after a project read aborts', async () => {
+  it('does not process later project batches after a batch read aborts', async () => {
     const controller = new AbortController()
     const reason = new DOMException('Canceled', 'AbortError')
-    const getProject = vi.fn().mockImplementation(async () => {
-      controller.abort(reason)
-      return null
-    })
-    const projects = Array.from({ length: 8 }, (_, index) => ({
+    const getProjects = vi
+      .fn()
+      .mockImplementation(async (requests: readonly unknown[]) => {
+        controller.abort(reason)
+        return batchOf(requests, null)
+      })
+    // More projects than one pull batch so a second batch would be
+    // fetched if the abort were ignored.
+    const projects = Array.from({ length: 30 }, (_, index) => ({
       id: `project-${index}`,
       scope: 'project' as const,
       etag: 'etag',
@@ -108,13 +120,15 @@ describe('native backup collection cancellation', () => {
             total_items: projects.length,
             items: projects,
           }),
-          getProject,
+          getProjects,
         }),
         controller.signal,
       ),
     ).rejects.toBe(reason)
-    expect(getProject).toHaveBeenCalledTimes(1)
-    expect(getProject).toHaveBeenCalledWith('project-0', 'etag')
+    expect(getProjects).toHaveBeenCalledTimes(1)
+    expect(
+      getProjects.mock.calls[0][0].map(({ id }: { id: string }) => id),
+    ).toEqual(projects.slice(0, 20).map(({ id }) => id))
   })
 
   it('stops image reads and never returns partial input after abort', async () => {
@@ -125,7 +139,11 @@ describe('native backup collection cancellation', () => {
       controller.abort(reason)
       return new Uint8Array([1])
     })
-    const getCloudChat = vi.fn().mockResolvedValue(chat)
+    const getCloudChats = vi
+      .fn()
+      .mockImplementation(async (requests: readonly unknown[]) =>
+        batchOf(requests, chat),
+      )
 
     await expect(
       collectNativeBackupV1(
@@ -143,13 +161,13 @@ describe('native backup collection cancellation', () => {
               },
             ],
           }),
-          getCloudChat,
+          getCloudChats,
           getCloudImage,
         }),
         controller.signal,
       ),
     ).rejects.toBe(reason)
     expect(getCloudImage).toHaveBeenCalledTimes(1)
-    expect(getCloudChat).toHaveBeenCalledTimes(1)
+    expect(getCloudChats).toHaveBeenCalledTimes(1)
   })
 })

@@ -1,10 +1,28 @@
-import { CloudBackupReadError } from '@/services/cloud/backup-read-error'
+import {
+  CloudBackupReadError,
+  type BackupPullResult,
+} from '@/services/cloud/backup-read-error'
 import {
   NativeBackupCollectionError,
   type NativeBackupCollectionDependencies,
 } from '@/services/native-backup/collect'
 import type { StoredChat } from '@/services/storage/indexed-db'
 import type { BackupInventoryItem } from '@/services/sync-enclave/sync-api'
+
+function batchReads<T>(fn: (id: string, expectedEtag: string) => Promise<T>) {
+  return (requests: ReadonlyArray<{ id: string; expectedEtag: string }>) =>
+    Promise.all(
+      requests.map(
+        async ({ id, expectedEtag }): Promise<BackupPullResult<T>> => {
+          try {
+            return { ok: true, value: await fn(id, expectedEtag) }
+          } catch (error) {
+            return { ok: false, error }
+          }
+        },
+      ),
+    )
+}
 
 vi.mock('@/services/native-backup/constants', async (importOriginal) => {
   const actual =
@@ -58,10 +76,11 @@ function dependencies(
       total_items: 0,
       items: [],
     }),
-    getCloudChat: async () => null,
+    getCloudChats: batchReads(async () => null),
     getCloudImage: async () => null,
-    getProject: async () => null,
-    getDocument: async () => null,
+    getProjects: batchReads(async () => null),
+    getDocuments: async (requests: readonly unknown[]) =>
+      requests.map(() => ({ ok: true as const, value: null })),
     getLocalChats: async () => [],
     getLocalChat: async () => null,
     ...overrides,
@@ -82,7 +101,7 @@ describe('native backup collection limits', () => {
             total_items: 1,
             items: [item('chat')],
           }),
-          getCloudChat: async () => cloudChat,
+          getCloudChats: batchReads(async () => cloudChat),
           getCloudImage,
         }),
       ),
@@ -103,7 +122,7 @@ describe('native backup collection limits', () => {
             total_items: 3,
             items: [item('chat-1'), item('chat-2'), item('chat-3')],
           }),
-          getCloudChat,
+          getCloudChats: batchReads(getCloudChat),
         }),
       ),
     ).rejects.toThrow('discovered record limit exceeded')
@@ -129,7 +148,7 @@ describe('native backup collection limits', () => {
             total_items: 2,
             items: [item('chat-1'), item('chat-2')],
           }),
-          getCloudChat,
+          getCloudChats: batchReads(getCloudChat),
         }),
       ),
     ).rejects.toThrow('omission limit exceeded')
@@ -172,7 +191,7 @@ describe('native backup collection limits', () => {
           total_items: 1,
           items: [item('chat')],
         }),
-        getCloudChat: async () => source,
+        getCloudChats: batchReads(async () => source),
         getCloudImage: async ({ id }) => (id === 'available' ? png : null),
       }),
     )
@@ -231,7 +250,7 @@ describe('native backup collection limits', () => {
           total_items: 1,
           items: [item('chat')],
         }),
-        getCloudChat: async () => source,
+        getCloudChats: batchReads(async () => source),
         getCloudImage,
       }),
     )

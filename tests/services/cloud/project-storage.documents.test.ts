@@ -1,4 +1,7 @@
-import { CloudBackupReadError } from '@/services/cloud/backup-read-error'
+import {
+  CloudBackupReadError,
+  unwrapBackupPullResult,
+} from '@/services/cloud/backup-read-error'
 import { ProjectStorageService } from '@/services/cloud/project-storage'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -40,6 +43,17 @@ vi.mock('@/services/sync-enclave/sync-api', async () => {
 vi.mock('@/utils/error-handling', () => ({
   logError: vi.fn(),
 }))
+
+async function getDocumentForBackup(
+  storage: ProjectStorageService,
+  projectId: string,
+  id: string,
+  expectedEtag: string,
+) {
+  return unwrapBackupPullResult(
+    (await storage.getDocumentsForBackup([{ projectId, id, expectedEtag }]))[0],
+  )
+}
 
 describe('ProjectStorageService documents', () => {
   beforeEach(() => {
@@ -106,9 +120,12 @@ describe('ProjectStorageService documents', () => {
     })
     mocks.pullItemPlaintext.mockReturnValue(new TextEncoder().encode('{'))
 
-    const malformed = await storage
-      .getDocumentForBackup('project-1', 'doc-1', '1')
-      .catch((error: unknown) => error)
+    const malformed = await getDocumentForBackup(
+      storage,
+      'project-1',
+      'doc-1',
+      '1',
+    ).catch((error: unknown) => error)
     expect(malformed).toBeInstanceOf(CloudBackupReadError)
     expect(malformed).toMatchObject({
       category: 'item_invalid',
@@ -123,7 +140,7 @@ describe('ProjectStorageService documents', () => {
     mocks.pullItemPlaintext.mockReturnValue(new TextEncoder().encode('{}'))
     try {
       await expect(
-        storage.getDocumentForBackup('project-1', 'doc-1', '1'),
+        getDocumentForBackup(storage, 'project-1', 'doc-1', '1'),
       ).rejects.toBe(runtimeFailure)
     } finally {
       parse.mockRestore()
@@ -143,7 +160,7 @@ describe('ProjectStorageService documents', () => {
       ],
     })
     await expect(
-      storage.getDocumentForBackup('project-1', 'doc-1', 'captured-etag'),
+      getDocumentForBackup(storage, 'project-1', 'doc-1', 'captured-etag'),
     ).rejects.toMatchObject({
       category: 'snapshot_changed',
       reason: 'record_changed_after_snapshot',
@@ -153,7 +170,7 @@ describe('ProjectStorageService documents', () => {
       items: [{ id: 'doc-1', ok: true, etag: 'captured-etag' }],
     })
     await expect(
-      storage.getDocumentForBackup('project-1', 'doc-1', 'captured-etag'),
+      getDocumentForBackup(storage, 'project-1', 'doc-1', 'captured-etag'),
     ).rejects.toMatchObject({ code: 'unexpected_item' })
   })
 
@@ -180,7 +197,7 @@ describe('ProjectStorageService documents', () => {
     )
 
     await expect(
-      storage.getDocumentForBackup('project-1', 'doc-1', 'captured-etag'),
+      getDocumentForBackup(storage, 'project-1', 'doc-1', 'captured-etag'),
     ).resolves.toMatchObject({
       id: 'doc-1',
       projectId: 'project-1',
