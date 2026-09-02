@@ -48,6 +48,10 @@ export const SETTINGS_CODE_EXECUTION_ENABLED =
 export const SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED =
   'tinfoil-settings-pixelate-sidebar-chat-titles-enabled'
 export const SETTINGS_PII_CHECK_ENABLED = 'tinfoil-settings-pii-check-enabled'
+// When enabled, pressing Enter in the chat input inserts a newline instead
+// of submitting the message; submit via Cmd/Ctrl+Enter or the send button.
+export const SETTINGS_ENTER_TO_NEWLINE_ENABLED =
+  'tinfoil-settings-enter-to-newline-enabled'
 export const SETTINGS_GENUI_ENABLED = 'tinfoil-settings-genui-enabled'
 export const SETTINGS_THEME_MODE = 'tinfoil-settings-theme-mode'
 export const SETTINGS_THEME = 'tinfoil-settings-theme'
