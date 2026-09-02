@@ -36,6 +36,7 @@ import {
 import { MacFileIcon } from './components/mac-file-icon'
 import { CONSTANTS } from './constants'
 import { useEnterToNewline } from './hooks/use-enter-to-newline'
+import { isImeComposition } from './keyboard-utils'
 import type { PromptPreset } from './prompts/types'
 import type { ProcessedDocument } from './renderers/types'
 import type { LoadingState } from './types'
@@ -959,6 +960,11 @@ export function ChatInput({
             }}
             onPaste={handlePaste}
             onKeyDown={(e) => {
+              // Enter during IME composition only confirms the conversion;
+              // it must not send the message or edit the list structure.
+              if (e.key === 'Enter' && isImeComposition(e)) {
+                return
+              }
               if (e.key === 'Tab') {
                 const textarea = e.currentTarget
                 const cursorPosition = textarea.selectionStart

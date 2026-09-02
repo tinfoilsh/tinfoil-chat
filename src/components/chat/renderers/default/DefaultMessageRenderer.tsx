@@ -18,6 +18,7 @@ import { RxCopy } from 'react-icons/rx'
 import { hasMessageAttachments } from '../../attachment-helpers'
 import { hasVisibleAssistantMessage } from '../../hooks/streaming/interrupted-message'
 import { useEnterToNewline } from '../../hooks/use-enter-to-newline'
+import { isImeComposition } from '../../keyboard-utils'
 import { CodeExecProcess } from '../components/CodeExecProcess'
 import { DocumentList } from '../components/DocumentList'
 import { MessageActions } from '../components/MessageActions'
@@ -596,6 +597,9 @@ const DefaultMessageComponent = ({
                     value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}
                     onKeyDown={(e) => {
+                      if (e.key === 'Enter' && isImeComposition(e)) {
+                        return
+                      }
                       if (
                         e.key === 'Enter' &&
                         !e.shiftKey &&
