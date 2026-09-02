@@ -16,11 +16,6 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() }),
 }))
 
-vi.mock('@/components/chat/hooks/use-chat-font', () => ({
-  CHAT_FONT_CLASSES: { default: '' },
-  useChatFont: () => 'default',
-}))
-
 function renderChatInput(handleSubmit = vi.fn()) {
   render(
     <ChatInput
