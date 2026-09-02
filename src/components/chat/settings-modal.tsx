@@ -2,10 +2,14 @@ import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { UserAvatar } from '@/components/user-avatar'
 import { API_BASE_URL } from '@/config'
-import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
+import {
+  ENTER_TO_NEWLINE_CHANGED_EVENT,
+  PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
+} from '@/constants/settings-events'
 import {
   SETTINGS_CHAT_FONT,
   SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED,
+  SETTINGS_ENTER_TO_NEWLINE_ENABLED,
   SETTINGS_GENUI_ENABLED,
   SETTINGS_PII_CHECK_ENABLED,
   SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
@@ -476,6 +480,10 @@ export function SettingsModal({
   // Web Search PII check setting (defaults to on)
   const [piiCheckEnabled, setPiiCheckEnabled] = useState<boolean>(true)
 
+  // Enter inserts newline instead of sending (defaults to off)
+  const [enterToNewlineEnabled, setEnterToNewlineEnabled] =
+    useState<boolean>(false)
+
   const [pixelateSidebarChatTitles, setPixelateSidebarChatTitles] =
     useState<boolean>(true)
 
@@ -652,6 +660,12 @@ export function SettingsModal({
     // Load PII check setting (defaults to true if not set)
     const savedPiiCheck = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
     setPiiCheckEnabled(savedPiiCheck === null ? true : savedPiiCheck === 'true')
+
+    // Load Enter-inserts-newline setting (defaults to false if not set)
+    const savedEnterToNewline = localStorage.getItem(
+      SETTINGS_ENTER_TO_NEWLINE_ENABLED,
+    )
+    setEnterToNewlineEnabled(savedEnterToNewline === 'true')
 
     const savedPixelateSidebarChatTitles = localStorage.getItem(
       SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
@@ -2484,6 +2498,53 @@ ${encryptionKey.replace('key_', '')}
                             </option>
                           ))}
                         </select>
+                      </div>
+                    </div>
+                    {/* Enter inserts newline */}
+                    <div
+                      className={cn(
+                        'rounded-lg border border-border-subtle p-4',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="mr-3 flex-1">
+                          <div className="font-aeonik text-sm font-medium text-content-primary">
+                            Press Enter for new line
+                          </div>
+                          <div className="font-aeonik-fono text-xs text-content-muted">
+                            Enter inserts a new line instead of sending your
+                            message. Send with Cmd/Ctrl+Enter or the send
+                            button.
+                          </div>
+                        </div>
+                        <label className="relative inline-flex cursor-pointer items-center">
+                          <input
+                            type="checkbox"
+                            aria-label="Press Enter for new line"
+                            checked={enterToNewlineEnabled}
+                            onChange={(e) => {
+                              const newValue = e.target.checked
+                              setEnterToNewlineEnabled(newValue)
+                              if (isClient) {
+                                localStorage.setItem(
+                                  SETTINGS_ENTER_TO_NEWLINE_ENABLED,
+                                  newValue.toString(),
+                                )
+                                window.dispatchEvent(
+                                  new CustomEvent(
+                                    ENTER_TO_NEWLINE_CHANGED_EVENT,
+                                    {
+                                      detail: { enabled: newValue },
+                                    },
+                                  ),
+                                )
+                              }
+                            }}
+                            className="peer sr-only"
+                          />
+                          <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-border-strong" />
+                        </label>
                       </div>
                     </div>
                   </div>

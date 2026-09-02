@@ -17,6 +17,7 @@ import { GoClockFill } from 'react-icons/go'
 import { RxCopy } from 'react-icons/rx'
 import { hasMessageAttachments } from '../../attachment-helpers'
 import { hasVisibleAssistantMessage } from '../../hooks/streaming/interrupted-message'
+import { useEnterToNewline } from '../../hooks/use-enter-to-newline'
 import { CodeExecProcess } from '../components/CodeExecProcess'
 import { DocumentList } from '../components/DocumentList'
 import { MessageActions } from '../components/MessageActions'
@@ -61,6 +62,7 @@ const DefaultMessageComponent = ({
   onRetryToolCall,
 }: MessageRenderProps) => {
   const isUser = message.role === 'user'
+  const enterToNewline = useEnterToNewline()
   const [isEditing, setIsEditing] = React.useState(false)
   const [editContent, setEditContent] = React.useState(message.content || '')
   const [copiedUser, setCopiedUser] = React.useState(false)
@@ -594,7 +596,11 @@ const DefaultMessageComponent = ({
                     value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
+                      if (
+                        e.key === 'Enter' &&
+                        !e.shiftKey &&
+                        (!enterToNewline || e.metaKey || e.ctrlKey)
+                      ) {
                         e.preventDefault()
                         handleSubmitEdit()
                       } else if (e.key === 'Escape') {
