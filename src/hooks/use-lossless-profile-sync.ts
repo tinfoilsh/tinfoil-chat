@@ -1,6 +1,7 @@
 import { CLOUD_SYNC } from '@/config'
 import { AUTH_ACTIVE_USER_CHANGED_EVENT } from '@/constants/auth-events'
 import {
+  ENTER_TO_NEWLINE_CHANGED_EVENT,
   PINNED_CHAT_IDS_CHANGED_EVENT,
   PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
 } from '@/constants/settings-events'
@@ -428,6 +429,7 @@ export function useProfileSync() {
       'codeExecutionEnabledChanged',
       PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
       'piiCheckEnabledChanged',
+      ENTER_TO_NEWLINE_CHANGED_EVENT,
       'genUIEnabledChanged',
       'chatFontChanged',
     ]

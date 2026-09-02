@@ -1,6 +1,7 @@
 import {
   SETTINGS_CHAT_FONT,
   SETTINGS_CODE_EXECUTION_ENABLED,
+  SETTINGS_ENTER_TO_NEWLINE_ENABLED,
   SETTINGS_PII_CHECK_ENABLED,
   SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
   SETTINGS_REASONING_EFFORT,
@@ -165,6 +166,7 @@ describe('profile-settings-serializer', () => {
     localStorage.setItem(SETTINGS_CODE_EXECUTION_ENABLED, 'true')
     localStorage.setItem(SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED, 'false')
     localStorage.setItem(SETTINGS_PII_CHECK_ENABLED, 'false')
+    localStorage.setItem(SETTINGS_ENTER_TO_NEWLINE_ENABLED, 'true')
     localStorage.setItem(SETTINGS_CHAT_FONT, 'mono')
 
     const loaded = loadLocalSettings()
@@ -179,6 +181,7 @@ describe('profile-settings-serializer', () => {
       codeExecutionEnabled: true,
       pixelateSidebarChatTitlesEnabled: false,
       piiCheckEnabled: false,
+      enterToNewlineEnabled: true,
       chatFont: 'mono',
     })
   })
@@ -232,6 +235,7 @@ describe('profile-settings-serializer', () => {
       codeExecutionEnabled: false,
       pixelateSidebarChatTitlesEnabled: true,
       piiCheckEnabled: true,
+      enterToNewlineEnabled: true,
       chatFont: 'serif',
     })
 
@@ -251,6 +255,7 @@ describe('profile-settings-serializer', () => {
       localStorage.getItem(SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED),
     ).toBe('true')
     expect(localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)).toBe('true')
+    expect(localStorage.getItem(SETTINGS_ENTER_TO_NEWLINE_ENABLED)).toBe('true')
     expect(localStorage.getItem(SETTINGS_CHAT_FONT)).toBe('serif')
   })
 

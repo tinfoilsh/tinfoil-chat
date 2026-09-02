@@ -151,6 +151,7 @@ export const ProfileDataSchema = z
     codeExecutionEnabled: z.boolean().optional(),
     pixelateSidebarChatTitlesEnabled: z.boolean().optional(),
     piiCheckEnabled: z.boolean().optional(),
+    enterToNewlineEnabled: z.boolean().optional(),
     genUIEnabled: z.boolean().optional(),
     chatFont: z.enum(['system', 'serif', 'mono', 'dyslexic']).optional(),
     version: z.number().optional(),

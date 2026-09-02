@@ -35,6 +35,7 @@ import {
 } from './components/context-usage-indicator'
 import { MacFileIcon } from './components/mac-file-icon'
 import { CONSTANTS } from './constants'
+import { useEnterToNewline } from './hooks/use-enter-to-newline'
 import type { PromptPreset } from './prompts/types'
 import type { ProcessedDocument } from './renderers/types'
 import type { LoadingState } from './types'
@@ -135,6 +136,7 @@ export function ChatInput({
   const documentsScrollRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
   const { isProjectMode, activeProject } = useProject()
+  const enterToNewline = useEnterToNewline()
   const [textareaResetNonce, setTextareaResetNonce] = useState(0)
   const prevInputValueRef = useRef(input)
   const shouldRemountOnClearRef = useRef(false)
@@ -1079,12 +1081,16 @@ export function ChatInput({
                     }, 0)
                   }
                 }
-              } else if (e.key === 'Enter' && !e.shiftKey) {
+              } else if (
+                e.key === 'Enter' &&
+                !e.shiftKey &&
+                (!enterToNewline || e.metaKey || e.ctrlKey)
+              ) {
                 // On mobile, Enter should insert a newline, not submit
                 const isMobile = /iPhone|iPad|iPod|Android/i.test(
                   navigator.userAgent,
                 )
-                if (isMobile) {
+                if (isMobile && !e.metaKey && !e.ctrlKey) {
                   return
                 }
                 e.preventDefault()
@@ -1097,7 +1103,7 @@ export function ChatInput({
                   shouldRemountOnClearRef.current = true
                   handleSubmit(e)
                 }
-              } else if (e.key === 'Enter' && e.shiftKey) {
+              } else if (e.key === 'Enter') {
                 const textarea = e.currentTarget
                 const cursorPosition = textarea.selectionStart
                 const textBeforeCursor = input.slice(0, cursorPosition)

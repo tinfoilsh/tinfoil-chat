@@ -84,6 +84,7 @@ export interface ProfileData {
   codeExecutionEnabled?: boolean
   pixelateSidebarChatTitlesEnabled?: boolean
   piiCheckEnabled?: boolean
+  enterToNewlineEnabled?: boolean
   genUIEnabled?: boolean
   chatFont?: 'system' | 'serif' | 'mono' | 'dyslexic'
 
