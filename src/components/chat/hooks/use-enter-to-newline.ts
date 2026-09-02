@@ -3,11 +3,17 @@ import { SETTINGS_ENTER_TO_NEWLINE_ENABLED } from '@/constants/storage-keys'
 import { useSyncExternalStore } from 'react'
 
 const subscribe = (onStoreChange: () => void) => {
+  // A null key means localStorage.clear(), which also resets this setting.
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === null || event.key === SETTINGS_ENTER_TO_NEWLINE_ENABLED) {
+      onStoreChange()
+    }
+  }
   window.addEventListener(ENTER_TO_NEWLINE_CHANGED_EVENT, onStoreChange)
-  window.addEventListener('storage', onStoreChange)
+  window.addEventListener('storage', handleStorage)
   return () => {
     window.removeEventListener(ENTER_TO_NEWLINE_CHANGED_EVENT, onStoreChange)
-    window.removeEventListener('storage', onStoreChange)
+    window.removeEventListener('storage', handleStorage)
   }
 }
 

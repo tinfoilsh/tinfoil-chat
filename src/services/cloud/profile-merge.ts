@@ -40,7 +40,11 @@ export const PROFILE_MERGE_FIELDS = [
 // Older clients omit this field, while the setting itself has no unset state.
 const PRESERVE_LOCAL_WHEN_REMOTE_OMITS = new Set<
   (typeof PROFILE_MERGE_FIELDS)[number]
->(['pixelateSidebarChatTitlesEnabled', 'pinnedChatIds'])
+>([
+  'pixelateSidebarChatTitlesEnabled',
+  'pinnedChatIds',
+  'enterToNewlineEnabled',
+])
 
 const TREAT_LOCAL_OMISSION_AS_UNEDITED = new Set<
   (typeof PROFILE_MERGE_FIELDS)[number]

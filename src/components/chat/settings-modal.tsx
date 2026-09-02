@@ -717,6 +717,11 @@ export function SettingsModal({
     ) => {
       setPixelateSidebarChatTitles(event.detail.enabled)
     }
+    const handleEnterToNewlineUpdate = (
+      event: CustomEvent<{ enabled: boolean }>,
+    ) => {
+      setEnterToNewlineEnabled(event.detail.enabled)
+    }
 
     // Listen for cloud sync setting changes (e.g., from modal or other sources)
     const handleCloudSyncUpdate = () => {
@@ -737,6 +742,10 @@ export function SettingsModal({
     window.addEventListener(
       PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
       handlePixelateSidebarChatTitlesUpdate as EventListener,
+    )
+    window.addEventListener(
+      ENTER_TO_NEWLINE_CHANGED_EVENT,
+      handleEnterToNewlineUpdate as EventListener,
     )
     window.addEventListener(
       CLOUD_SYNC_SETTING_CHANGED_EVENT,
@@ -761,6 +770,10 @@ export function SettingsModal({
       window.removeEventListener(
         PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
         handlePixelateSidebarChatTitlesUpdate as EventListener,
+      )
+      window.removeEventListener(
+        ENTER_TO_NEWLINE_CHANGED_EVENT,
+        handleEnterToNewlineUpdate as EventListener,
       )
       window.removeEventListener(
         CLOUD_SYNC_SETTING_CHANGED_EVENT,
