@@ -32,6 +32,7 @@ export const PROFILE_MERGE_FIELDS = [
   'codeExecutionEnabled',
   'pixelateSidebarChatTitlesEnabled',
   'piiCheckEnabled',
+  'enterToNewlineEnabled',
   'genUIEnabled',
   'chatFont',
 ] as const

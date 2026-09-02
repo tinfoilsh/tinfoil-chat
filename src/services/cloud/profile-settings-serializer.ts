@@ -1,10 +1,12 @@
 import {
+  ENTER_TO_NEWLINE_CHANGED_EVENT,
   PINNED_CHAT_IDS_CHANGED_EVENT,
   PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
 } from '@/constants/settings-events'
 import {
   SETTINGS_CHAT_FONT,
   SETTINGS_CODE_EXECUTION_ENABLED,
+  SETTINGS_ENTER_TO_NEWLINE_ENABLED,
   SETTINGS_GENUI_ENABLED,
   SETTINGS_PII_CHECK_ENABLED,
   SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
@@ -108,6 +110,7 @@ export function hasProfileChanged(
     profile1.pixelateSidebarChatTitlesEnabled !==
       profile2.pixelateSidebarChatTitlesEnabled ||
     profile1.piiCheckEnabled !== profile2.piiCheckEnabled ||
+    profile1.enterToNewlineEnabled !== profile2.enterToNewlineEnabled ||
     profile1.genUIEnabled !== profile2.genUIEnabled ||
     profile1.chatFont !== profile2.chatFont
   )
@@ -248,6 +251,13 @@ export function loadLocalSettings(): ProfileData {
     settings.piiCheckEnabled = piiCheckEnabled === 'true'
   }
 
+  const enterToNewlineEnabled = localStorage.getItem(
+    SETTINGS_ENTER_TO_NEWLINE_ENABLED,
+  )
+  if (enterToNewlineEnabled !== null) {
+    settings.enterToNewlineEnabled = enterToNewlineEnabled === 'true'
+  }
+
   const genUIEnabled = localStorage.getItem(SETTINGS_GENUI_ENABLED)
   if (genUIEnabled !== null) {
     settings.genUIEnabled = genUIEnabled === 'true'
@@ -287,6 +297,7 @@ export function resetSettingsToLocalDefaults(): ProfileData {
     codeExecutionEnabled: false,
     pixelateSidebarChatTitlesEnabled: true,
     piiCheckEnabled: true,
+    enterToNewlineEnabled: false,
     genUIEnabled: true,
     chatFont: 'system',
   }
@@ -517,6 +528,18 @@ export function applySettingsToLocal(settings: ProfileData): void {
     window.dispatchEvent(
       new CustomEvent('piiCheckEnabledChanged', {
         detail: { enabled: settings.piiCheckEnabled },
+      }),
+    )
+  }
+
+  if (settings.enterToNewlineEnabled !== undefined) {
+    localStorage.setItem(
+      SETTINGS_ENTER_TO_NEWLINE_ENABLED,
+      String(settings.enterToNewlineEnabled),
+    )
+    window.dispatchEvent(
+      new CustomEvent(ENTER_TO_NEWLINE_CHANGED_EVENT, {
+        detail: { enabled: settings.enterToNewlineEnabled },
       }),
     )
   }
