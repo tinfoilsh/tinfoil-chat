@@ -10,6 +10,7 @@
 import {
   IF_MATCH_SENTINELS,
   MAX_PULL_IDS,
+  PULL_ITEM_CODE_UNSPECIFIED,
   PULL_ITEM_CODES,
   RESTORE_DELETED_HEADERS,
   SYNC_HEADERS,
@@ -74,5 +75,6 @@ describe('wire-contract', () => {
       BadRequest: 'BAD_REQUEST',
       LegacyBlobNotMigrated: 'LEGACY_BLOB_NOT_MIGRATED',
     })
+    expect(PULL_ITEM_CODE_UNSPECIFIED).toBe('UNSPECIFIED')
   })
 })

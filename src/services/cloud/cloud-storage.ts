@@ -29,6 +29,7 @@ import {
 } from '../sync-enclave/sync-enclave-client'
 import {
   PULL_ITEM_CODE_UNSPECIFIED,
+  PULL_ITEM_CODES,
   RESTORE_DELETED_HEADERS,
 } from '../sync-enclave/wire-contract'
 import type { AccountOperationGuard } from './account-operation'
@@ -501,7 +502,7 @@ export class CloudStorageService {
     })
     const item = resp.items[0]
     if (!item || !item.ok) {
-      if (item && item.code === 'NOT_FOUND') return null
+      if (item && item.code === PULL_ITEM_CODES.NotFound) return null
       throw new Error(item?.code || 'Failed to pull chat from sync enclave')
     }
     const plaintext = pullItemPlaintext(item)
@@ -734,7 +735,7 @@ export class CloudStorageService {
         if (
           error instanceof SyncEnclaveError &&
           (error.status === ATTACHMENT_NOT_FOUND_STATUS ||
-            error.code === 'NOT_FOUND')
+            error.code === PULL_ITEM_CODES.NotFound)
         )
           throw new CloudBackupReadError(
             'item_unavailable',
