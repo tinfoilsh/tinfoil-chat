@@ -9,6 +9,8 @@
  */
 import {
   IF_MATCH_SENTINELS,
+  MAX_PULL_IDS,
+  PULL_ITEM_CODES,
   RESTORE_DELETED_HEADERS,
   SYNC_HEADERS,
   SYNC_PROTOCOL_VERSION,
@@ -60,6 +62,17 @@ describe('wire-contract', () => {
       ExistingDataUnderOtherKey: 'EXISTING_DATA_UNDER_OTHER_KEY',
       SyncConflict: 'SYNC_CONFLICT',
       ProfileSyncUpgradeRequired: 'PROFILE_SYNC_UPGRADE_REQUIRED',
+    })
+  })
+
+  it('pull contract matches confidential-sync internal/server', () => {
+    expect(MAX_PULL_IDS).toBe(100)
+    expect(PULL_ITEM_CODES).toEqual({
+      NotFound: 'NOT_FOUND',
+      UnknownKey: 'UNKNOWN_KEY',
+      Network: 'NETWORK',
+      BadRequest: 'BAD_REQUEST',
+      LegacyBlobNotMigrated: 'LEGACY_BLOB_NOT_MIGRATED',
     })
   })
 })

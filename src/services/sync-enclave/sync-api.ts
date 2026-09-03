@@ -23,6 +23,9 @@
 import { base64ToUint8Array, uint8ArrayToBase64 } from '@/utils/binary-codec'
 import { z } from 'zod'
 import { SyncEnclaveError, getSyncEnclaveClient } from './sync-enclave-client'
+import { MAX_PULL_IDS, PULL_ITEM_CODES } from './wire-contract'
+
+export { MAX_PULL_IDS, PULL_ITEM_CODES }
 
 export type Scope = 'profile' | 'chat' | 'project' | 'project_document'
 
@@ -70,13 +73,6 @@ export interface PullKey {
   key_id?: string
 }
 
-/**
- * Upper bound on `ids` per pull request, mirroring the enclave's
- * MaxPullIDs. The enclave rejects larger batches with 400; callers
- * that need more rows must issue multiple requests.
- */
-export const MAX_PULL_IDS = 100
-
 export interface PullRequest {
   scope: Scope
   ids?: string[]
@@ -90,18 +86,6 @@ export interface PullRequest {
    */
   keys: PullKey[]
 }
-
-/**
- * Per-item `code` values the enclave sets when a pull item has
- * `ok=false`; mirrors the enclave's internal/server/errors.go.
- */
-export const PULL_ITEM_CODES = {
-  NotFound: 'NOT_FOUND',
-  UnknownKey: 'UNKNOWN_KEY',
-  Network: 'NETWORK',
-  BadRequest: 'BAD_REQUEST',
-  LegacyBlobNotMigrated: 'LEGACY_BLOB_NOT_MIGRATED',
-} as const
 
 export interface PullItem {
   id: string
