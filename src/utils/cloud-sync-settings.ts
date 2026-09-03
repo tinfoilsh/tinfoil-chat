@@ -1,9 +1,29 @@
 import {
   SETTINGS_CLOUD_SYNC_ENABLED,
+  SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED,
   SETTINGS_LOCAL_ONLY_MODE_ENABLED,
 } from '@/constants/storage-keys'
 
 export const CLOUD_SYNC_SETTING_CHANGED_EVENT = 'cloudSyncSettingChanged'
+
+/**
+ * Record a user's explicit choice to turn cloud sync on or off. The
+ * explicit-disable marker stops the sign-in path from auto-enabling
+ * sync for an account that has an encryption key but opted out.
+ */
+export function recordCloudSyncPreference(enabled: boolean): void {
+  if (typeof window === 'undefined') return
+  try {
+    if (enabled) {
+      localStorage.removeItem(SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED)
+    } else {
+      localStorage.setItem(SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED, 'true')
+    }
+  } catch {
+    // Storage unavailable (e.g., Safari private mode) - silently fail
+  }
+  setCloudSyncEnabled(enabled)
+}
 
 export function isCloudSyncEnabled(): boolean {
   if (typeof window === 'undefined') return false

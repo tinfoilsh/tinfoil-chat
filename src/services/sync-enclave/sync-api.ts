@@ -23,6 +23,9 @@
 import { base64ToUint8Array, uint8ArrayToBase64 } from '@/utils/binary-codec'
 import { z } from 'zod'
 import { SyncEnclaveError, getSyncEnclaveClient } from './sync-enclave-client'
+import { MAX_PULL_IDS, PULL_ITEM_CODES } from './wire-contract'
+
+export { MAX_PULL_IDS, PULL_ITEM_CODES }
 
 export type Scope = 'profile' | 'chat' | 'project' | 'project_document'
 
@@ -96,7 +99,7 @@ export interface PullItem {
   project_id_set?: boolean
   project_id?: string | null
   needs_rewrap?: boolean
-  /** Error code when `ok=false` (e.g. "NEEDS_REWRAP", "NOT_FOUND"). */
+  /** One of PULL_ITEM_CODES when `ok=false`. */
   code?: string
   reason?: string
 }

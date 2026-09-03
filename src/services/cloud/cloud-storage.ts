@@ -17,6 +17,7 @@ import {
   listStatus as enclaveListStatus,
   pull as enclavePull,
   push as enclavePush,
+  MAX_PULL_IDS,
   newIdempotencyKey,
   pullItemPlaintext,
   revisionSnapshot,
@@ -26,7 +27,11 @@ import {
   SyncEnclaveError,
   SyncNetworkError,
 } from '../sync-enclave/sync-enclave-client'
-import { RESTORE_DELETED_HEADERS } from '../sync-enclave/wire-contract'
+import {
+  PULL_ITEM_CODE_UNSPECIFIED,
+  PULL_ITEM_CODES,
+  RESTORE_DELETED_HEADERS,
+} from '../sync-enclave/wire-contract'
 import type { AccountOperationGuard } from './account-operation'
 import {
   CloudBackupReadError,
@@ -65,12 +70,24 @@ export interface ChatListResponse {
     id: string
     updatedAt: string
     syncVersion: number
-    content?: string
-    projectId?: string
+    /** Authoritative server value; null means the chat is in no project. */
+    projectId: string | null
   }>
   nextContinuationToken?: string
   hasMore: boolean
 }
+
+/**
+ * Per-row outcome of a batched pull. A row is `unavailable` when the
+ * enclave answered but could not hand back plaintext for it: deleted
+ * between list and pull (`NOT_FOUND`), sealed under a key this device
+ * does not hold (`UNKNOWN_KEY`), or a transient upstream failure
+ * (`NETWORK`). `code` is the enclave's structured item code so callers
+ * classify without matching on messages.
+ */
+export type PulledChatResult =
+  | { status: 'ok'; id: string; syncVersion: number; content: string }
+  | { status: 'unavailable'; id: string; code: string }
 
 export interface ProfileSyncStatus {
   exists: boolean
@@ -151,8 +168,45 @@ function chatUpdateToMeta(update: {
     id: update.id,
     updatedAt: update.updated_at,
     syncVersion: etagToSyncVersion(update.etag) ?? 1,
-    projectId: update.project_id ?? undefined,
+    projectId: update.project_id ?? null,
   }
+}
+
+function settlePulledChatBatch(
+  requestedIds: readonly string[],
+  items: PullItem[],
+): PulledChatResult[] {
+  const requested = new Set(requestedIds)
+  const itemsById = new Map<string, PullItem>()
+  for (const item of items) {
+    if (!requested.has(item.id) || itemsById.has(item.id)) {
+      throw new Error('Sync enclave returned an unexpected chat batch item')
+    }
+    itemsById.set(item.id, item)
+  }
+  return requestedIds.map((id) => {
+    const item = itemsById.get(id)
+    if (!item) {
+      throw new Error('Sync enclave returned an incomplete chat batch')
+    }
+    if (!item.ok) {
+      return {
+        status: 'unavailable',
+        id,
+        code: item.code ?? PULL_ITEM_CODE_UNSPECIFIED,
+      }
+    }
+    const plaintext = pullItemPlaintext(item)
+    if (!plaintext) {
+      throw new Error('Sync enclave returned empty chat content')
+    }
+    return {
+      status: 'ok',
+      id,
+      syncVersion: etagToSyncVersion(item.etag) ?? 1,
+      content: new TextDecoder().decode(plaintext),
+    }
+  })
 }
 
 // hasNextCursor guards against truthy-but-meaningless cursor values
@@ -448,7 +502,7 @@ export class CloudStorageService {
     })
     const item = resp.items[0]
     if (!item || !item.ok) {
-      if (item && item.code === 'NOT_FOUND') return null
+      if (item && item.code === PULL_ITEM_CODES.NotFound) return null
       throw new Error(item?.code || 'Failed to pull chat from sync enclave')
     }
     const plaintext = pullItemPlaintext(item)
@@ -573,43 +627,27 @@ export class CloudStorageService {
     }
   }
 
-  async downloadChats(
-    chatIds: string[],
-    options: { tolerateNotFound?: boolean } = {},
-  ): Promise<ChatListResponse['conversations']> {
+  /**
+   * Pull chat plaintext for every requested id. Requests are split into
+   * enclave-sized batches and results come back in request order, one
+   * per id. Transport and protocol failures (network error, response
+   * missing or duplicating an id, empty plaintext) reject the whole
+   * call; per-row enclave outcomes are settled into the result so one
+   * unreadable chat cannot hide its batch peers from the caller.
+   */
+  async downloadChats(chatIds: readonly string[]): Promise<PulledChatResult[]> {
     if (chatIds.length === 0) return []
     const keys = pullKey()
     if (keys.length === 0) {
       throw new Error('Cloud sync key is unavailable')
     }
-    const response = await enclavePull({ scope: 'chat', ids: chatIds, keys })
-    const conversations: ChatListResponse['conversations'] = []
-    const requestedIds = new Set(chatIds)
-    const returnedIds = new Set<string>()
-    for (const item of response.items) {
-      if (!requestedIds.has(item.id) || returnedIds.has(item.id)) {
-        throw new Error('Sync enclave returned an unexpected chat batch item')
-      }
-      returnedIds.add(item.id)
-      if (!item.ok) {
-        if (options.tolerateNotFound && item.code === 'NOT_FOUND') continue
-        throw new Error(item.code ?? 'Failed to batch-pull chat content')
-      }
-      const plaintext = pullItemPlaintext(item)
-      if (!plaintext) {
-        throw new Error('Sync enclave returned empty chat content')
-      }
-      conversations.push({
-        id: item.id,
-        updatedAt: '',
-        syncVersion: etagToSyncVersion(item.etag) ?? 1,
-        content: new TextDecoder().decode(plaintext),
-      })
+    const results: PulledChatResult[] = []
+    for (let start = 0; start < chatIds.length; start += MAX_PULL_IDS) {
+      const batch = chatIds.slice(start, start + MAX_PULL_IDS)
+      const response = await enclavePull({ scope: 'chat', ids: batch, keys })
+      results.push(...settlePulledChatBatch(batch, response.items))
     }
-    if (returnedIds.size !== requestedIds.size) {
-      throw new Error('Sync enclave returned an incomplete chat batch')
-    }
-    return conversations
+    return results
   }
 
   /**
@@ -697,7 +735,7 @@ export class CloudStorageService {
         if (
           error instanceof SyncEnclaveError &&
           (error.status === ATTACHMENT_NOT_FOUND_STATUS ||
-            error.code === 'NOT_FOUND')
+            error.code === PULL_ITEM_CODES.NotFound)
         )
           throw new CloudBackupReadError(
             'item_unavailable',
@@ -790,7 +828,6 @@ export class CloudStorageService {
   async listChats(options?: {
     limit?: number
     continuationToken?: string
-    includeContent?: boolean
   }): Promise<ChatListResponse> {
     await this.ensureAuthReady()
     const limit = Math.min(options?.limit ?? ENCLAVE_CHAT_LIST_LIMIT, 500)
@@ -800,71 +837,10 @@ export class CloudStorageService {
       limit,
       direction: 'desc',
     })
-    const conversations = status.updates.map(chatUpdateToMeta)
-
-    if (options?.includeContent && conversations.length > 0) {
-      await this.attachInlineContent(conversations)
-    }
-
     return {
-      conversations,
+      conversations: status.updates.map(chatUpdateToMeta),
       nextContinuationToken: status.next_cursor,
       hasMore: hasNextCursor(status.next_cursor),
-    }
-  }
-
-  private async attachInlineContent(
-    conversations: ChatListResponse['conversations'],
-  ): Promise<void> {
-    const keys = pullKey()
-    if (keys.length === 0) return
-    const pulled = await enclavePull({
-      scope: 'chat',
-      ids: conversations.map((c) => c.id),
-      keys,
-    })
-    const pulledById = new Map<
-      string,
-      { content: string; syncVersion?: number }
-    >()
-    for (const item of pulled.items) {
-      if (!item.ok) {
-        // Batch pull is best-effort: surface per-item failures via
-        // structured logging and keep filling in the rest of the
-        // page. Throwing here would tear down the whole sync on the
-        // first legacy row encrypted under a key this device no
-        // longer holds, which is exactly the scenario the recovery
-        // wizard is supposed to surface. NOT_FOUND is silent because
-        // it just means the row was deleted between list and pull.
-        if (item.code !== 'NOT_FOUND') {
-          logWarning('Skipping chat the sync enclave could not return', {
-            component: 'CloudStorage',
-            action: 'attachInlineContent',
-            metadata: {
-              chatId: item.id,
-              code: item.code ?? 'unknown',
-              reason: item.reason,
-            },
-          })
-        }
-        continue
-      }
-      const plaintext = pullItemPlaintext(item)
-      if (plaintext) {
-        pulledById.set(item.id, {
-          content: new TextDecoder().decode(plaintext),
-          syncVersion: etagToSyncVersion(item.etag),
-        })
-      }
-    }
-    for (const conversation of conversations) {
-      const pulled = pulledById.get(conversation.id)
-      if (pulled) {
-        conversation.content = pulled.content
-        if (pulled.syncVersion) {
-          conversation.syncVersion = pulled.syncVersion
-        }
-      }
     }
   }
 

@@ -5,6 +5,7 @@ import {
   CloudStorageService,
 } from '@/services/cloud/cloud-storage'
 import { SyncEnclaveError, SyncNetworkError } from '@/services/sync-enclave'
+import { MAX_PULL_IDS } from '@/services/sync-enclave/sync-api'
 import { EncryptedAttachmentValidationError } from '@/utils/binary-codec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -118,41 +119,86 @@ describe('CloudStorageService auth readiness', () => {
     vi.unstubAllGlobals()
   })
 
-  it('tolerates only structured not-found items in revision content batches', async () => {
+  it('settles each pulled chat in request order without hiding batch peers', async () => {
     mockEnclavePull.mockResolvedValue({
       items: [
-        { id: 'gone', ok: false, code: 'NOT_FOUND' },
         {
           id: 'present',
           ok: true,
           etag: '2',
           plaintext: btoa('{"title":"Present"}'),
         },
+        { id: 'gone', ok: false, code: 'NOT_FOUND' },
+        { id: 'locked', ok: false, code: 'UNKNOWN_KEY' },
       ],
     })
 
     await expect(
-      new CloudStorageService().downloadChats(['gone', 'present'], {
-        tolerateNotFound: true,
-      }),
+      new CloudStorageService().downloadChats(['gone', 'present', 'locked']),
     ).resolves.toEqual([
-      expect.objectContaining({ id: 'present', syncVersion: 2 }),
+      { status: 'unavailable', id: 'gone', code: 'NOT_FOUND' },
+      {
+        status: 'ok',
+        id: 'present',
+        syncVersion: 2,
+        content: '{"title":"Present"}',
+      },
+      { status: 'unavailable', id: 'locked', code: 'UNKNOWN_KEY' },
     ])
   })
 
-  it('rejects non-not-found and incomplete revision content batches', async () => {
+  it('rejects incomplete, unexpected, and empty chat batches', async () => {
     const storage = new CloudStorageService()
-    mockEnclavePull.mockResolvedValueOnce({
-      items: [{ id: 'chat-1', ok: false, code: 'NEEDS_REWRAP' }],
-    })
-    await expect(
-      storage.downloadChats(['chat-1'], { tolerateNotFound: true }),
-    ).rejects.toThrow('NEEDS_REWRAP')
-
     mockEnclavePull.mockResolvedValueOnce({ items: [] })
-    await expect(
-      storage.downloadChats(['chat-1'], { tolerateNotFound: true }),
-    ).rejects.toThrow('incomplete chat batch')
+    await expect(storage.downloadChats(['chat-1'])).rejects.toThrow(
+      'incomplete chat batch',
+    )
+
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [
+        { id: 'chat-1', ok: true, etag: '1', plaintext: btoa('{}') },
+        { id: 'chat-1', ok: true, etag: '1', plaintext: btoa('{}') },
+      ],
+    })
+    await expect(storage.downloadChats(['chat-1'])).rejects.toThrow(
+      'unexpected chat batch item',
+    )
+
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [
+        { id: 'chat-1', ok: true, etag: '1', plaintext: btoa('{}') },
+        { id: 'chat-2', ok: true, etag: '1', plaintext: btoa('{}') },
+      ],
+    })
+    await expect(storage.downloadChats(['chat-1'])).rejects.toThrow(
+      'unexpected chat batch item',
+    )
+
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [{ id: 'chat-1', ok: true, etag: '1' }],
+    })
+    await expect(storage.downloadChats(['chat-1'])).rejects.toThrow(
+      'empty chat content',
+    )
+  })
+
+  it('splits large downloads into enclave-sized pull requests', async () => {
+    const ids = Array.from({ length: MAX_PULL_IDS + 1 }, (_, i) => `chat-${i}`)
+    mockEnclavePull.mockImplementation(async ({ ids: batch }) => ({
+      items: batch.map((id: string) => ({
+        id,
+        ok: true,
+        etag: '1',
+        plaintext: btoa('{}'),
+      })),
+    }))
+
+    const results = await new CloudStorageService().downloadChats(ids)
+
+    expect(results.map((result) => result.id)).toEqual(ids)
+    expect(mockEnclavePull).toHaveBeenCalledTimes(2)
+    expect(mockEnclavePull.mock.calls[0][0].ids).toHaveLength(MAX_PULL_IDS)
+    expect(mockEnclavePull.mock.calls[1][0].ids).toEqual([ids[MAX_PULL_IDS]])
   })
 
   it('preserves structured backup attachment failures instead of swallowing them', async () => {

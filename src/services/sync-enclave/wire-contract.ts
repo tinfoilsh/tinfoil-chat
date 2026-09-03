@@ -59,9 +59,38 @@ export const WIRE_CODES = {
   ProfileSyncUpgradeRequired: 'PROFILE_SYNC_UPGRADE_REQUIRED',
 } as const
 
+/**
+ * Sync enclave pull contract; see confidential-sync
+ * internal/server/ops.go (MaxPullIDs) and errors.go (item codes).
+ */
+
+/** Upper bound on `ids` per pull request; larger batches are a 400. */
+export const MAX_PULL_IDS = 100
+
+/**
+ * Per-item `code` values the enclave sets when a pull item has
+ * `ok=false`. Every value here is emitted by the enclave's pullOne.
+ */
+export const PULL_ITEM_CODES = {
+  NotFound: 'NOT_FOUND',
+  UnknownKey: 'UNKNOWN_KEY',
+  Network: 'NETWORK',
+  BadRequest: 'BAD_REQUEST',
+  LegacyBlobNotMigrated: 'LEGACY_BLOB_NOT_MIGRATED',
+} as const
+
+/**
+ * Stand-in used when an `ok=false` item arrives without a code, so
+ * downstream classification never has to handle `undefined`.
+ */
+export const PULL_ITEM_CODE_UNSPECIFIED = 'UNSPECIFIED'
+
 export type SyncHeaderName = (typeof SYNC_HEADERS)[keyof typeof SYNC_HEADERS]
 export type RestoreDeletedHeaderName =
   (typeof RESTORE_DELETED_HEADERS)[keyof typeof RESTORE_DELETED_HEADERS]
 export type IfMatchSentinel =
   (typeof IF_MATCH_SENTINELS)[keyof typeof IF_MATCH_SENTINELS]
 export type WireCode = (typeof WIRE_CODES)[keyof typeof WIRE_CODES]
+export type PullItemCode =
+  | (typeof PULL_ITEM_CODES)[keyof typeof PULL_ITEM_CODES]
+  | typeof PULL_ITEM_CODE_UNSPECIFIED

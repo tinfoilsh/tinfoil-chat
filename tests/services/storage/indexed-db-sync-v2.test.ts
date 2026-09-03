@@ -558,6 +558,34 @@ describe('IndexedDB sync protocol v2 migration', () => {
     await expect(storage.getSyncState('user-2')).resolves.toBeNull()
   })
 
+  it('invalidates the revision checkpoint when synced chats are wiped locally', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'synced-chat',
+      title: 'Synced',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    await storage.markAsSynced('synced-chat', 1)
+    await storage.saveChat({
+      id: 'local-chat',
+      title: 'Local',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      isLocalOnly: true,
+    })
+    await storage.commitRevisionBatch([], '7', 'user-1')
+
+    await expect(storage.deleteAllNonLocalChats()).resolves.toBe(1)
+
+    await expect(storage.getChat('synced-chat')).resolves.toBeNull()
+    await expect(storage.getChat('local-chat')).resolves.not.toBeNull()
+    await expect(storage.getSyncState('user-1')).resolves.toBeNull()
+  })
+
   it('preserves other-account delete intents across checkpoint resets', async () => {
     const storage = new IndexedDBStorage()
     await storage.initialize()

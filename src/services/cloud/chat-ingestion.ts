@@ -6,6 +6,7 @@
  * appears in every sync method.
  */
 
+import { logError } from '@/utils/error-handling'
 import { chatEvents, type ChatChangeReason } from '../storage/chat-events'
 import { indexedDBStorage, type ChatSyncMetadata } from '../storage/indexed-db'
 import {
@@ -39,10 +40,15 @@ export interface IngestOptions {
   userId?: string
 }
 
+export interface IngestFailure {
+  chatId: string
+  error: unknown
+}
+
 export interface IngestResult {
   savedIds: string[]
   downloaded: number
-  errors: string[]
+  errors: IngestFailure[]
 }
 
 export async function ingestRemoteChats(
@@ -122,9 +128,12 @@ export async function ingestRemoteChats(
         result.downloaded++
       }
     } catch (error) {
-      result.errors.push(
-        `Failed to process chat ${remoteChat.id}: ${error instanceof Error ? error.message : String(error)}`,
-      )
+      logError('Failed to ingest remote chat', error, {
+        component: 'ChatIngestion',
+        action: 'ingestRemoteChats',
+        metadata: { chatId: remoteChat.id },
+      })
+      result.errors.push({ chatId: remoteChat.id, error })
     }
   }
 

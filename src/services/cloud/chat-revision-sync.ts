@@ -15,18 +15,18 @@ import {
   type StoredChat,
 } from '@/services/storage/indexed-db'
 import {
+  PULL_ITEM_CODES,
   revisionEvents,
   revisionSnapshot,
   revisionSummary,
   type RevisionEvent,
   type RevisionSnapshotItem,
 } from '@/services/sync-enclave/sync-api'
-import { ingestRemoteChats } from './chat-ingestion'
+import { ingestRemoteChats, type RemoteChatEntry } from './chat-ingestion'
 import { cloudStorage } from './cloud-storage'
 import { isUploadableChat } from './sync-predicates'
 
 const REVISION_PAGE_LIMIT = 250
-const CONTENT_BATCH_SIZE = 100
 export const BOOTSTRAP_RECENT_CONTENT_LIMIT = 50
 const DECIMAL_REVISION_PATTERN = /^\d+$/
 
@@ -67,6 +67,53 @@ function etagToSyncVersion(etag: string | undefined): number {
     throw new Error('Sync enclave returned an invalid chat ETag')
   }
   return version
+}
+
+type RemoteChatMetadata = Pick<
+  RevisionEvent,
+  'id' | 'etag' | 'project_id' | 'updated_at'
+>
+
+/**
+ * Pull and store content for the given rows. Revision sync must mirror
+ * the server exactly, so a row the enclave could not return is fatal
+ * unless it was deleted between the listing and the pull; a later
+ * delete event reconciles that case.
+ */
+async function pullAndIngest(
+  rows: readonly RemoteChatMetadata[],
+  userId: string,
+  isCurrent: () => boolean,
+): Promise<number> {
+  if (rows.length === 0) return 0
+  const metadata = new Map(rows.map((row) => [row.id, row]))
+  const results = await cloudStorage.downloadChats([...metadata.keys()])
+  ensureCurrent(isCurrent)
+  const remoteChats: RemoteChatEntry[] = []
+  for (const result of results) {
+    if (result.status === 'unavailable') {
+      if (result.code === PULL_ITEM_CODES.NotFound) continue
+      throw new Error(
+        `Sync enclave could not return chat ${result.id}: ${result.code}`,
+      )
+    }
+    const row = metadata.get(result.id)!
+    remoteChats.push({
+      id: result.id,
+      content: result.content,
+      updatedAt: row.updated_at,
+      syncVersion: etagToSyncVersion(row.etag),
+      projectId: row.project_id,
+    })
+  }
+  const ingest = await ingestRemoteChats(remoteChats, { isCurrent, userId })
+  if (ingest.errors.length > 0) {
+    const [failure] = ingest.errors
+    throw new Error(`Failed to process chat ${failure.chatId}`, {
+      cause: failure.error,
+    })
+  }
+  return ingest.downloaded
 }
 
 function toRemoteState(
@@ -114,44 +161,18 @@ async function applyPulledUpserts(
   const latestById = new Map<string, RevisionEvent>()
   for (const event of events) latestById.set(event.id, event)
   const latest = [...latestById.values()]
-  const idsToPull: string[] = []
+  const toPull: RevisionEvent[] = []
   for (const event of latest) {
     if (pendingDeleteIds.has(event.id)) continue
     const local = await indexedDBStorage.getChat(event.id)
     ensureCurrent(isCurrent)
     if (local?.locallyModified) continue
     if (!local || String(local.syncVersion ?? 0) !== event.etag) {
-      idsToPull.push(event.id)
+      toPull.push(event)
     }
   }
 
-  let downloaded = 0
-  for (
-    let offset = 0;
-    offset < idsToPull.length;
-    offset += CONTENT_BATCH_SIZE
-  ) {
-    const pulled = await cloudStorage.downloadChats(
-      idsToPull.slice(offset, offset + CONTENT_BATCH_SIZE),
-      { tolerateNotFound: true },
-    )
-    ensureCurrent(isCurrent)
-    const eventById = new Map(latest.map((event) => [event.id, event]))
-    const ingest = await ingestRemoteChats(
-      pulled.map((chat) => {
-        const event = eventById.get(chat.id)!
-        return {
-          ...chat,
-          updatedAt: event.updated_at,
-          syncVersion: etagToSyncVersion(event.etag),
-          projectId: event.project_id,
-        }
-      }),
-      { isCurrent, userId },
-    )
-    if (ingest.errors.length > 0) throw new Error(ingest.errors[0])
-    downloaded += ingest.downloaded
-  }
+  const downloaded = await pullAndIngest(toPull, userId, isCurrent)
   return {
     downloaded,
     states: latest.map((event) =>
@@ -210,33 +231,11 @@ async function bootstrapFromSnapshot(
       recentMissing.push(item)
     }
   }
-  const candidates = [...staleExisting, ...recentMissing]
-
-  let downloaded = 0
-  for (
-    let offset = 0;
-    offset < candidates.length;
-    offset += CONTENT_BATCH_SIZE
-  ) {
-    const batch = candidates.slice(offset, offset + CONTENT_BATCH_SIZE)
-    const pulled = await cloudStorage.downloadChats(
-      batch.map((item) => item.id),
-      { tolerateNotFound: true },
-    )
-    ensureCurrent(isCurrent)
-    const metadata = new Map(batch.map((item) => [item.id, item]))
-    const ingest = await ingestRemoteChats(
-      pulled.map((chat) => ({
-        ...chat,
-        updatedAt: metadata.get(chat.id)!.updated_at,
-        syncVersion: etagToSyncVersion(metadata.get(chat.id)!.etag),
-        projectId: metadata.get(chat.id)!.project_id,
-      })),
-      { isCurrent, userId },
-    )
-    if (ingest.errors.length > 0) throw new Error(ingest.errors[0])
-    downloaded += ingest.downloaded
-  }
+  const downloaded = await pullAndIngest(
+    [...staleExisting, ...recentMissing],
+    userId,
+    isCurrent,
+  )
 
   ensureCurrent(isCurrent)
   const deletedIds = await indexedDBStorage.reconcileRevisionSnapshot(
