@@ -1,7 +1,8 @@
+import { ChatError } from '@/components/chat/chat-utils'
 import type { BaseModel } from '@/config/models'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const createCompletion = vi.fn()
+const runAgent = vi.fn()
 const discardRateLimitSnapshot = vi.fn()
 const getRateLimitInfo = vi.fn()
 const refreshRateLimit = vi.fn(async () => undefined)
@@ -20,23 +21,17 @@ vi.mock('@/components/chat/constants', async () => {
   }
 })
 
-vi.mock('@/services/inference/tinfoil-client', () => ({
-  acquireRecoverableTinfoilTransport: vi.fn(),
-  createRecoverableTinfoilClient: vi.fn(),
-  discardRateLimitSnapshot: () => discardRateLimitSnapshot(),
-  getRateLimitInfo: () => getRateLimitInfo(),
-  getTinfoilClient: vi.fn(async () => ({
-    chat: {
-      completions: {
-        create: (...args: unknown[]) => createCompletion(...args),
-      },
-    },
-  })),
-  refreshRateLimit: () => refreshRateLimit(),
-  resetTinfoilClient: vi.fn(),
+vi.mock('@/services/inference/agui/client', () => ({
+  runAgent: (...args: unknown[]) => runAgent(...args),
 }))
 
-import { ChatError } from '@/components/chat/chat-utils'
+vi.mock('@/services/inference/tinfoil-client', () => ({
+  discardRateLimitSnapshot: () => discardRateLimitSnapshot(),
+  getRateLimitInfo: () => getRateLimitInfo(),
+  inferenceRequest: vi.fn(),
+  refreshRateLimit: () => refreshRateLimit(),
+}))
+
 import { sendChatStream } from '@/services/inference/inference-client'
 
 const model: BaseModel = {
@@ -49,13 +44,13 @@ const model: BaseModel = {
 }
 
 function status429Error() {
-  return Object.assign(new Error('Rate limit reached'), { status: 429 })
+  return new ChatError('Rate limit reached', 'RATE_LIMIT', { status: 429 })
 }
 
 function successfulStream() {
   return {
     async *[Symbol.asyncIterator]() {
-      yield { choices: [{ delta: { content: 'answer' } }] }
+      yield { type: 'TEXT_MESSAGE_CHUNK', messageId: 'm', delta: 'answer' }
     },
   }
 }
@@ -69,6 +64,8 @@ function send(onRetry?: (attempt: number, maxRetries: number) => void) {
     ],
     signal: new AbortController().signal,
     genUIEnabled: false,
+    threadId: 'chat-1',
+    runId: 'turn-1',
     onRetry,
   })
 }
@@ -79,7 +76,7 @@ describe('sendChatStream 429 quota classification', () => {
   })
 
   it('fails immediately with RATE_LIMIT when the daily quota is exhausted', async () => {
-    createCompletion.mockRejectedValue(status429Error())
+    runAgent.mockRejectedValue(status429Error())
     getRateLimitInfo.mockReturnValue({
       maxRequests: 10,
       remaining: 0,
@@ -97,11 +94,11 @@ describe('sendChatStream 429 quota classification', () => {
     expect(discardRateLimitSnapshot).toHaveBeenCalled()
     expect(refreshRateLimit).toHaveBeenCalled()
     expect(onRetry).not.toHaveBeenCalled()
-    expect(createCompletion).toHaveBeenCalledTimes(1)
+    expect(runAgent).toHaveBeenCalledTimes(1)
   })
 
   it('fails immediately with HOURLY_LIMIT when the hourly cap is exhausted', async () => {
-    createCompletion.mockRejectedValue(status429Error())
+    runAgent.mockRejectedValue(status429Error())
     getRateLimitInfo.mockReturnValue({
       maxRequests: 0,
       remaining: 0,
@@ -113,11 +110,11 @@ describe('sendChatStream 429 quota classification', () => {
 
     expect(error).toBeInstanceOf(ChatError)
     expect((error as ChatError).code).toBe('HOURLY_LIMIT')
-    expect(createCompletion).toHaveBeenCalledTimes(1)
+    expect(runAgent).toHaveBeenCalledTimes(1)
   })
 
   it('retries a 429 when the refreshed quota still has requests remaining', async () => {
-    createCompletion
+    runAgent
       .mockRejectedValueOnce(status429Error())
       .mockResolvedValueOnce(successfulStream())
     getRateLimitInfo.mockReturnValue({
@@ -132,11 +129,11 @@ describe('sendChatStream 429 quota classification', () => {
 
     expect(typeof stream[Symbol.asyncIterator]).toBe('function')
     expect(onRetry).toHaveBeenCalledTimes(1)
-    expect(createCompletion).toHaveBeenCalledTimes(2)
+    expect(runAgent).toHaveBeenCalledTimes(2)
   })
 
   it('retries a 429 when no quota is tracked (paid tier)', async () => {
-    createCompletion
+    runAgent
       .mockRejectedValueOnce(status429Error())
       .mockResolvedValueOnce(successfulStream())
     getRateLimitInfo.mockReturnValue(null)
@@ -144,6 +141,6 @@ describe('sendChatStream 429 quota classification', () => {
     const stream = await send()
 
     expect(typeof stream[Symbol.asyncIterator]).toBe('function')
-    expect(createCompletion).toHaveBeenCalledTimes(2)
+    expect(runAgent).toHaveBeenCalledTimes(2)
   })
 })

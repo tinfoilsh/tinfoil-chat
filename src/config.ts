@@ -22,6 +22,13 @@ export const IS_DEV =
   process.env.NEXT_PUBLIC_DEV === 'true' && isLocalRuntimeOrigin()
 export const DEV_API_KEY = process.env.NEXT_PUBLIC_DEV_API_KEY || ''
 
+export const HARNESS_URL =
+  process.env.NEXT_PUBLIC_HARNESS_URL || 'https://chat-api.tinfoil.sh'
+
+export const HARNESS_REPO =
+  process.env.NEXT_PUBLIC_HARNESS_REPO ||
+  'tinfoilsh/confidential-tinfoil-harness'
+
 // Sync enclave URL. The web client speaks only to this attested enclave
 // for blob reads/writes; the enclave is the only encryptor.
 export const SYNC_ENCLAVE_URL =

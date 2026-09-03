@@ -111,8 +111,7 @@ function message(
 
 function envelope(turnId: string): PendingRecoveryEnvelope {
   return {
-    v: 1,
-    sessionId: '0123456789abcdef0123456789abcdef',
+    v: 2,
     turnId,
     keyId: 'key-id',
     createdAt: new Date().toISOString(),
@@ -223,13 +222,13 @@ describe('chat recovery sync mutations', () => {
       isLocalOnly: false,
       pendingRecoveries: [
         {
-          v: 1,
+          v: 2,
           storage: 'local',
           turnId: 'turn-1',
           createdAt: new Date().toISOString(),
           expiresAt: new Date(Date.now() + 60_000).toISOString(),
           sessionId: '0123456789abcdef0123456789abcdef',
-          recoveryToken: 'local-token',
+          recoveryToken: 'fedcba9876543210fedcba9876543210',
         },
       ],
     }
@@ -558,7 +557,6 @@ describe('chat recovery sync mutations', () => {
     const replaced = envelope('turn-1')
     const replacement = {
       ...envelope('turn-1'),
-      sessionId: 'abcdef0123456789abcdef0123456789',
       ciphertext: 'BBBBBBBBBBBBBBBBBBBBBBBB',
     }
     remoteChat.pendingRecoveries = [replacement]

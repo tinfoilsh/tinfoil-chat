@@ -1,7 +1,8 @@
+import { IS_DEV } from '@/config'
 import {
-  getCachedVerificationDocument,
-  getVerificationDocument,
-} from '@/services/inference/tinfoil-client'
+  getCachedHarnessVerificationDocument,
+  getHarnessVerificationDocument,
+} from '@/services/inference/agui/client'
 import { logError, logInfo } from '@/utils/error-handling'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -18,10 +19,15 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+// 'pending' also covers "attestation ran but reached no verdict yet"; dev
+// attests nothing at all, which is 'unverified' rather than a failure.
+export type VerificationStatus =
+  'pending' | 'verified' | 'failed' | 'unverified'
+
 type VerifierSidebarProps = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
-  onVerificationComplete: (success: boolean) => void
+  onVerificationComplete: (status: VerificationStatus) => void
   onVerificationUpdate?: (state: any) => void
   isDarkMode: boolean
   isClient: boolean
@@ -52,6 +58,12 @@ export function VerifierSidebar({
   onVerificationCompleteRef.current = onVerificationComplete
 
   const fetchVerificationDocument = useCallback(async () => {
+    // Dev routes chat through a local proxy and attests nothing, so the
+    // document is null by construction — resolve instead of retrying for it.
+    if (IS_DEV) {
+      onVerificationCompleteRef.current('unverified')
+      return
+    }
     if (isRetryingRef.current) return
     isRetryingRef.current = true
     retryCountRef.current = 0
@@ -67,14 +79,16 @@ export function VerifierSidebar({
       }
 
       try {
-        const doc = await getVerificationDocument()
+        const doc = await getHarnessVerificationDocument()
         if (doc) {
           setVerificationDocument(doc)
           if (onVerificationUpdateRef.current) {
             onVerificationUpdateRef.current(doc)
           }
           if (doc.securityVerified !== undefined) {
-            onVerificationCompleteRef.current(doc.securityVerified)
+            onVerificationCompleteRef.current(
+              doc.securityVerified ? 'verified' : 'failed',
+            )
             return true
           }
         }
@@ -91,11 +105,11 @@ export function VerifierSidebar({
 
     let success = false
     try {
-      const cachedDoc = getCachedVerificationDocument()
+      const cachedDoc = getCachedHarnessVerificationDocument()
       if (cachedDoc?.securityVerified === true) {
         setVerificationDocument(cachedDoc)
         onVerificationUpdateRef.current?.(cachedDoc)
-        onVerificationCompleteRef.current(true)
+        onVerificationCompleteRef.current('verified')
         return
       }
 
@@ -128,14 +142,14 @@ export function VerifierSidebar({
       // Retries exhausted. A previously successful attestation may still be
       // cached (e.g. the panel was opened while offline after startup
       // verification succeeded), so don't downgrade that to a failure.
-      const terminalCachedDoc = getCachedVerificationDocument()
+      const terminalCachedDoc = getCachedHarnessVerificationDocument()
       if (terminalCachedDoc?.securityVerified === true) {
         setVerificationDocument(terminalCachedDoc)
         onVerificationUpdateRef.current?.(terminalCachedDoc)
-        onVerificationCompleteRef.current(true)
+        onVerificationCompleteRef.current('verified')
         return
       }
-      onVerificationCompleteRef.current(false)
+      onVerificationCompleteRef.current('failed')
     } finally {
       isRetryingRef.current = false
     }

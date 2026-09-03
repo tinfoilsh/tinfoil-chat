@@ -2,6 +2,7 @@ import {
   MAX_RECOVERY_CIPHERTEXT_BYTES,
   MAX_RECOVERY_ID_LENGTH,
   RECOVERY_ENVELOPE_EXPIRY_MS,
+  RECOVERY_ENVELOPE_VERSION,
   type SyncedRecoveryEnvelope,
 } from '@/types/chat-recovery'
 import { base64ToUint8Array } from './binary-codec'
@@ -80,8 +81,14 @@ export function decodeRecoveryBase64(
 export function validateRecoveryEnvelope(
   envelope: SyncedRecoveryEnvelope,
 ): void {
-  if (typeof envelope !== 'object' || envelope === null || envelope.v !== 1) {
-    throw new Error('chat recovery: envelope version must be 1')
+  if (
+    typeof envelope !== 'object' ||
+    envelope === null ||
+    envelope.v !== RECOVERY_ENVELOPE_VERSION
+  ) {
+    throw new Error(
+      `chat recovery: envelope version must be ${RECOVERY_ENVELOPE_VERSION}`,
+    )
   }
   requireRecoveryId(envelope.turnId, 'turnId')
   requireRecoveryLowercaseHex(envelope.keyId, 32, 'keyId')

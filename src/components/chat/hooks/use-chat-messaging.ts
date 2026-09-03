@@ -28,15 +28,19 @@ import { REQUEST_UPGRADE_EVENT } from '@/constants/chat-events'
 import { useChatRecoveryActive } from '@/hooks/use-chat-recovery-drafts'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { ENCRYPTION_KEY_CHANGED_EVENT } from '@/services/encryption/encryption-service'
+import { getCodeExecutionContainerAuthTokenForChat } from '@/services/exec-snapshot'
 import { generateCodeExecutionAccessToken } from '@/services/exec-snapshot/access-token'
-import { getCodeExecutionContainerAuthTokenForChat } from '@/services/exec-snapshot/use-exec-snapshot'
+import type {
+  AguiEventStream,
+  CodeExecutionOptions,
+} from '@/services/inference/agui/protocol'
 import {
   abandonChatRecoveryAttempt,
   cancelChatRecovery,
   completeLiveChatRecovery,
   markChatRecoveryTurnCancelled,
   markChatRecoveryTurnSettled,
-  persistChatRecoveryToken,
+  persistChatRecoveryEnvelope,
   releaseActiveChatRecovery,
   scanPendingChatRecoveries,
   startChatRecoveryAttempt,
@@ -46,7 +50,6 @@ import {
   setChatRecoveryActive,
 } from '@/services/inference/chat-recovery-drafts'
 import { persistInterruptedAssistant } from '@/services/inference/chat-recovery-sync'
-import type { ChatChunkStream } from '@/services/inference/chat-stream'
 import { sendChatStream } from '@/services/inference/inference-client'
 import {
   getRateLimitInfo,
@@ -180,7 +183,7 @@ function canUseChatRecovery(options: {
 }
 
 async function waitForRecoveryReady(
-  stream: ChatChunkStream,
+  stream: AguiEventStream,
   signal: AbortSignal,
 ): Promise<void> {
   if (!stream.recoveryReady) return
@@ -382,7 +385,7 @@ export function useChatMessaging({
         // Mark the recovery turn cancelled synchronously with the abort.
         // When stop lands before the first token, the recovery attempt may
         // still be registering (token capture races the abort); the mark
-        // makes persistChatRecoveryToken discard its envelope instead of
+        // makes persistChatRecoveryEnvelope discard its envelope instead of
         // surfacing "Recovering stream..." for a turn the user just stopped.
         if (activeGeneration?.turnId) {
           markChatRecoveryTurnCancelled(targetId, activeGeneration.turnId)
@@ -1106,7 +1109,7 @@ export function useChatMessaging({
       //   })
       // }
 
-      let response: ChatChunkStream | null = null
+      let response: AguiEventStream | null = null
       const recoveryCleanupByChat = new Map<string, Promise<void>>()
       const abandonAndReleaseRecovery = (chatId: string): Promise<void> => {
         const existingCleanup = recoveryCleanupByChat.get(chatId)
@@ -1177,11 +1180,30 @@ export function useChatMessaging({
 
         const baseSystemPrompt = systemPromptOverride || systemPrompt
 
-        const codeExecutionContainerAuthToken = codeExecutionEnabled
-          ? ((await getCodeExecutionContainerAuthTokenForChat(
-              updatedChat.id,
-            )) ?? undefined)
-          : undefined
+        // The container the code runs in is addressed by these three per-chat
+        // secrets, so they travel together or not at all: without all of them
+        // the harness has nothing to authorize against, and the turn is better
+        // refused than answered with the tool quietly absent.
+        let codeExecution: CodeExecutionOptions | undefined
+        if (codeExecutionEnabled) {
+          const containerAuthToken =
+            await getCodeExecutionContainerAuthTokenForChat(updatedChat.id)
+          if (
+            !updatedChat.codeExecutionAccessToken ||
+            !codeExecutionEncryptionKey ||
+            !containerAuthToken
+          ) {
+            throw new ChatError(
+              'Code execution requested without an accessToken, encryption key, or container auth token',
+              'FETCH_ERROR',
+            )
+          }
+          codeExecution = {
+            accessToken: updatedChat.codeExecutionAccessToken,
+            encryptionKey: codeExecutionEncryptionKey,
+            containerAuthToken,
+          }
+        }
 
         // Recovery is best-effort: the user turn must be durable locally
         // before the recoverable inference request starts. This required wait
@@ -1235,38 +1257,38 @@ export function useChatMessaging({
           signal: controller.signal,
           reasoningEffort,
           thinkingEnabled,
-          webSearchEnabled: chatWebSearchEnabled,
-          codeExecutionEnabled,
-          piiCheckEnabled,
           genUIEnabled: genUIEnabled ?? true,
-          codeExecutionAccessToken: updatedChat.codeExecutionAccessToken,
-          codeExecutionEncryptionKey: codeExecutionEncryptionKey ?? undefined,
-          codeExecutionContainerAuthToken,
+          webSearchEnabled: chatWebSearchEnabled,
+          piiCheckEnabled,
+          codeExecution,
+          threadId: streamChatIdRef.current,
+          runId: turnId ?? crypto.randomUUID(),
           recovery:
             recoveryEligible &&
             recoveryEnabled &&
             recoveryUserId !== null &&
             turnId !== null
               ? {
-                  onAttemptStarted: (sessionId) => {
+                  onAttemptStarted: (storage) => {
                     startChatRecoveryAttempt(
                       streamChatIdRef.current,
                       turnId,
-                      sessionId,
+                      storage,
                     )
                   },
-                  onTokenCaptured: (sessionId, token) =>
-                    persistChatRecoveryToken({
+                  onRunRecoverable: (storage) =>
+                    persistChatRecoveryEnvelope({
                       userId: recoveryUserId,
                       chatId: streamChatIdRef.current,
                       turnId,
-                      sessionId,
-                      token,
+                      storage,
                     }),
                   onAttemptAbandoned: abandonChatRecoveryAttempt,
                 }
               : undefined,
         })
+
+        recoveryEnabled = recoveryEnabled && Boolean(response.recoveryReady)
 
         const assistantMessage = await processStreamingResponse(response, {
           streamChatIdRef,

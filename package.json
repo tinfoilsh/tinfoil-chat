@@ -77,7 +77,6 @@
     "@tailwindcss/container-queries": "^0.1.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
-    "@types/dompurify": "^3.0.5",
     "@types/node": "^20",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

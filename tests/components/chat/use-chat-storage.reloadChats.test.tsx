@@ -67,7 +67,7 @@ function createMockRecovery(
   overrides: Partial<PendingRecoveryEnvelope> = {},
 ): PendingRecoveryEnvelope {
   return {
-    v: 1,
+    v: 2,
     turnId: 'turn-1',
     keyId: '0'.repeat(32),
     createdAt: '2026-07-21T00:00:00.000Z',

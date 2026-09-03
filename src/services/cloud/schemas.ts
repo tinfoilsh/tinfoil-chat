@@ -13,6 +13,7 @@
 import {
   MAX_PENDING_RECOVERIES_PER_CHAT,
   MAX_RECOVERY_ID_LENGTH,
+  RECOVERY_ENVELOPE_VERSION,
   type SyncedRecoveryEnvelope,
 } from '@/types/chat-recovery'
 import { validateRecoveryEnvelope } from '@/utils/chat-recovery-envelope'
@@ -37,7 +38,7 @@ const MessageSchema = z
 
 export const PendingRecoveryEnvelopeSchema = z
   .object({
-    v: z.literal(1),
+    v: z.literal(RECOVERY_ENVELOPE_VERSION),
     turnId: RecoveryIdSchema,
     keyId: RecoveryKeyIdSchema,
     createdAt: RecoveryTimestampSchema,
@@ -81,23 +82,36 @@ export const RemoteChatPlaintextSchema = z
   .object({
     title: z.string().optional(),
     messages: z.array(MessageSchema),
-    pendingRecoveries: z
-      .array(PendingRecoveryEnvelopeSchema)
-      .max(MAX_PENDING_RECOVERIES_PER_CHAT)
-      .superRefine((envelopes, context) => {
-        const seen = new Set<string>()
-        for (const [index, envelope] of envelopes.entries()) {
-          if (seen.has(envelope.turnId)) {
-            context.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: 'recovery turn identifiers must be unique',
-              path: [index, 'turnId'],
-            })
+    // Envelopes sealed at an older version are dropped rather than rejected: a
+    // chat is worth more than the runs it had in flight, and a client that
+    // cannot open one would only refuse the whole row over it.
+    pendingRecoveries: z.preprocess(
+      (value) =>
+        Array.isArray(value)
+          ? value.filter(
+              (envelope) =>
+                (envelope as { v?: unknown } | null)?.v ===
+                RECOVERY_ENVELOPE_VERSION,
+            )
+          : value,
+      z
+        .array(PendingRecoveryEnvelopeSchema)
+        .max(MAX_PENDING_RECOVERIES_PER_CHAT)
+        .superRefine((envelopes, context) => {
+          const seen = new Set<string>()
+          for (const [index, envelope] of envelopes.entries()) {
+            if (seen.has(envelope.turnId)) {
+              context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'recovery turn identifiers must be unique',
+                path: [index, 'turnId'],
+              })
+            }
+            seen.add(envelope.turnId)
           }
-          seen.add(envelope.turnId)
-        }
-      })
-      .optional(),
+        })
+        .optional(),
+    ),
     createdAt: z.union([z.string(), z.number()]).optional(),
     updatedAt: z.union([z.string(), z.number()]).optional(),
     model: z.string().optional(),

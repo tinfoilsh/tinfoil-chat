@@ -1,6 +1,6 @@
 import { IS_DEV } from '@/config'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
-import type { ChatChunkStream } from '@/services/inference/chat-stream'
+import type { AguiEventStream } from '@/services/inference/agui/protocol'
 import {
   createStreamLogger,
   type StreamLogger,
@@ -12,7 +12,7 @@ import { RichStreamSession } from './rich-stream-session'
 import type { StreamingContext } from './types'
 
 export async function processStreamingResponse(
-  stream: ChatChunkStream,
+  stream: AguiEventStream,
   ctx: StreamingContext,
 ): Promise<Message | null> {
   const streamLogger: StreamLogger | undefined = IS_DEV
@@ -29,6 +29,7 @@ export async function processStreamingResponse(
   const publisher = new AnimationFramePublisher(ctx.onUpdate)
   let interruptionPublished = false
   let publicationCompleted = false
+  let runFailed = false
 
   const publishInterruption = () => {
     if (interruptionPublished) return
@@ -45,10 +46,11 @@ export async function processStreamingResponse(
     if (ctx.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     if (streamingChatId) streamingTracker.startStreaming(streamingChatId)
 
-    for await (const chunk of stream) {
+    for await (const event of stream) {
       if (ctx.signal?.aborted) break
-      streamLogger?.logParsedEvent(chunk)
-      if (session.processChunk(chunk, streamLogger)) {
+      streamLogger?.logParsedEvent(event)
+      runFailed ||= event.type === 'RUN_ERROR'
+      if (session.processEvent(event)) {
         publisher.publishLazy(() => session.snapshot(ctx.turnId))
       }
     }
@@ -58,6 +60,15 @@ export async function processStreamingResponse(
     const message = session.complete(ctx.turnId)
     if (session.hasChanges) await publisher.finish(message)
     if (ctx.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    publicationCompleted = true
+    streamLogger?.flush(streamingChatId)
+    return message
+  } catch (error) {
+    if (!runFailed || ctx.signal?.aborted) throw error
+    const message = session.interruptedSnapshot(ctx.turnId)
+    if (!hasVisibleAssistantMessage(message)) throw error
+    await publisher.finish(message)
+    if (ctx.signal?.aborted) throw error
     publicationCompleted = true
     streamLogger?.flush(streamingChatId)
     return message

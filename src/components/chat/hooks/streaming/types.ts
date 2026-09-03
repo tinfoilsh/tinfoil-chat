@@ -67,11 +67,6 @@ export type GenUIToolCallDeltaEvent = {
   argumentsDelta: string
 }
 
-// Code execution: router emits `<tinfoil-event>` markers with a single
-// `in_progress` event carrying fully-formed args, then a terminal event
-// carrying the output. No mid-stream argument accumulation — args arrive
-// fully-formed because the model finished emitting them before the router
-// decided to run the tool.
 export type CodeExecToolCallEvent = {
   type: 'code_exec_tool_call'
   id: string

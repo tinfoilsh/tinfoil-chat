@@ -1,6 +1,8 @@
+import type { RunStorage } from '@/services/inference/agui/protocol'
 import { deriveTinfoilKeyIdHex } from '@/services/sync-enclave/tinfoil-key-id'
 import {
   RECOVERY_ENVELOPE_EXPIRY_MS,
+  RECOVERY_ENVELOPE_VERSION,
   type SyncedRecoveryEnvelope,
 } from '@/types/chat-recovery'
 import { uint8ArrayToBase64 } from '@/utils/binary-codec'
@@ -19,35 +21,22 @@ const SHA_256 = 'SHA-256'
 const CEK_BYTES = 32
 const NONCE_BYTES = 12
 const AES_GCM_TAG_BYTES = 16
-const RECOVERY_TOKEN_HEX_LENGTH = 64
-const SESSION_ID_HEX_LENGTH = 32
+const RUN_SESSION_HEX_LENGTH = 32
 const KEY_ID_HEX_LENGTH = 32
-const RECOVERY_ENVELOPE_VERSION = 1
 
 export const RECOVERY_ENVELOPE_HKDF_INFO = 'tinfoil-chat-recovery-envelope-v1'
 
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder('utf-8', { fatal: true })
 
-export type RecoveryTokenFields = {
-  exportedSecret: string
-  requestEnc: string
-}
-
-export type RecoveryTokenPayload = string | RecoveryTokenFields
-
-export type RecoveryEnvelopePayload = {
-  sessionId: string
-  recoveryToken: RecoveryTokenPayload
-}
+export type RecoveryEnvelopePayload = RunStorage
 
 export type EncryptRecoveryEnvelopeOptions = {
   cek: Uint8Array
   userId: string
   chatId: string
   turnId: string
-  sessionId: string
-  recoveryToken: RecoveryTokenPayload
+  storage: RunStorage
   keyId?: string
   now?: Date | number
 }
@@ -79,53 +68,6 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   ) as ArrayBuffer
 }
 
-function validateRecoveryTokenFields(
-  value: unknown,
-): asserts value is RecoveryTokenFields {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error('chat recovery: recovery token must be an object')
-  }
-  const fields = value as Record<string, unknown>
-  const keys = Object.keys(fields)
-  if (
-    keys.length !== 2 ||
-    !keys.includes('exportedSecret') ||
-    !keys.includes('requestEnc')
-  ) {
-    throw new Error(
-      'chat recovery: recovery token must contain exactly exportedSecret and requestEnc',
-    )
-  }
-  requireRecoveryLowercaseHex(
-    fields.exportedSecret as string,
-    RECOVERY_TOKEN_HEX_LENGTH,
-    'recovery token exportedSecret',
-  )
-  requireRecoveryLowercaseHex(
-    fields.requestEnc as string,
-    RECOVERY_TOKEN_HEX_LENGTH,
-    'recovery token requestEnc',
-  )
-}
-
-function validateRecoveryToken(
-  token: unknown,
-): asserts token is RecoveryTokenPayload {
-  if (typeof token === 'string') {
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(token)
-    } catch {
-      throw new Error(
-        'chat recovery: serialized recovery token must be valid JSON',
-      )
-    }
-    validateRecoveryTokenFields(parsed)
-    return
-  }
-  validateRecoveryTokenFields(token)
-}
-
 function validatePayload(
   value: unknown,
 ): asserts value is RecoveryEnvelopePayload {
@@ -145,10 +87,14 @@ function validatePayload(
   }
   requireRecoveryLowercaseHex(
     payload.sessionId as string,
-    SESSION_ID_HEX_LENGTH,
+    RUN_SESSION_HEX_LENGTH,
     'sessionId',
   )
-  validateRecoveryToken(payload.recoveryToken)
+  requireRecoveryLowercaseHex(
+    payload.recoveryToken as string,
+    RUN_SESSION_HEX_LENGTH,
+    'recoveryToken',
+  )
 }
 
 function aadBytes(
@@ -271,10 +217,7 @@ export async function encryptRecoveryEnvelope(
   } as const
 
   return sealPayload(
-    {
-      sessionId: options.sessionId,
-      recoveryToken: options.recoveryToken,
-    },
+    options.storage,
     options.cek,
     options.userId,
     options.chatId,

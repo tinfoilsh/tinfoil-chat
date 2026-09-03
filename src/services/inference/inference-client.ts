@@ -10,33 +10,30 @@ import {
 import type { Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
 import { AUTO_MODEL_OPTIONS_FIELD, AUTO_REQUEST_MODEL } from '@/config/models'
-import { shouldRetryTestFail } from '@/utils/dev-simulator'
+import { DEV_SIMULATOR_MODEL, shouldRetryTestFail } from '@/utils/dev-simulator'
 import { logError, logInfo } from '@/utils/error-handling'
 import {
   PERFORMANCE_METRICS,
   recordPerformanceDuration,
   startPerformanceTimer,
 } from '@/utils/performance-metrics'
+import { newRunStorage, runAgent, runSimulatedAgent } from './agui/client'
 import {
-  APIConnectionError,
-  APIUserAbortError,
-  AuthenticationError,
-} from 'openai'
-import type { ChatCompletionCreateParamsNonStreaming } from 'openai/resources/chat/completions'
-import type { SessionRecoveryToken } from 'tinfoil'
+  type AguiEventStream,
+  type CodeExecutionOptions,
+  type RunAgentInput,
+  type RunStorage,
+} from './agui/protocol'
 import { ChatQueryBuilder } from './chat-query-builder'
-import { chatChunkStreamFromSSE, type ChatChunkStream } from './chat-stream'
 import {
-  acquireRecoverableTinfoilTransport,
-  createRecoverableTinfoilClient,
   discardRateLimitSnapshot,
   getRateLimitInfo,
-  getTinfoilClient,
+  inferenceRequest,
   refreshRateLimit,
-  resetTinfoilClient,
-  type RecoverableTinfoilTransportLease,
 } from './tinfoil-client'
 
+// The key a model's `reasoningConfig.params` is filed under, not a URL: the
+// inference base URL already ends at the version root.
 const CHAT_COMPLETIONS_ENDPOINT = '/v1/chat/completions'
 
 const EFFORT_PLACEHOLDER = '$EFFORT'
@@ -144,29 +141,8 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// Statuses the OpenAI SDK itself treats as retryable (client shouldRetry):
-// request timeout, lock timeout, and rate limit. 5xx is handled as a range.
+// Request timeout, lock timeout, and rate limit. 5xx is handled as a range.
 const RETRYABLE_HTTP_STATUSES = new Set([408, 409, 429])
-const RECOVERY_SESSION_ID_BYTES = 16
-
-export function generateRecoverySessionId(): string {
-  const bytes = crypto.getRandomValues(
-    new Uint8Array(RECOVERY_SESSION_ID_BYTES),
-  )
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join(
-    '',
-  )
-}
-
-export interface ChatRecoveryCallbacks {
-  onAttemptStarted: (sessionId: string) => void
-  onTokenCaptured: (
-    sessionId: string,
-    token: SessionRecoveryToken,
-  ) => Promise<void>
-  onAttemptAbandoned: (sessionId: string) => Promise<void>
-}
-
 function getHttpStatus(error: unknown): number | undefined {
   const status = (error as { status?: unknown })?.status
   return typeof status === 'number' ? status : undefined
@@ -188,7 +164,7 @@ async function classifyQuotaExhausted429(
   // a user whose last request was merely throttled, misclassifying a
   // transient 429 as exhaustion.
   discardRateLimitSnapshot()
-  await refreshRateLimit()
+  await refreshRateLimit(true)
   const limit = getRateLimitInfo()
   if (!limit || limit.remaining > 0) {
     return null
@@ -205,26 +181,17 @@ async function classifyQuotaExhausted429(
 // Typed classification only — never inspect error message strings, which
 // vary across browsers, SDK versions, and locales.
 export function isRetryableError(error: unknown): boolean {
-  // Don't retry user-initiated aborts. APIUserAbortError is the SDK wrapper
-  // for our AbortSignal; "AbortError" is the spec-defined DOMException name
-  // for the same condition on raw fetch paths.
-  if (error instanceof APIUserAbortError) {
-    return false
-  }
+  // "AbortError" is the spec-defined DOMException name for a user-initiated
+  // abort, which is what our AbortSignal produces on every request path.
   if ((error as { name?: unknown })?.name === 'AbortError') {
     return false
   }
 
-  // ChatErrors are terminal classifications produced by our own layers
-  // (e.g. the hourly usage cap); retrying them cannot succeed.
   if (error instanceof ChatError) {
-    return false
-  }
-
-  // Transport failures raised by the SDK, including its request timeout
-  // (APIConnectionTimeoutError extends APIConnectionError).
-  if (error instanceof APIConnectionError) {
-    return true
+    if (error.code === 'HOURLY_LIMIT' || error.status === undefined) {
+      return false
+    }
+    return error.status >= 500 || RETRYABLE_HTTP_STATUSES.has(error.status)
   }
 
   // fetch() signals a network failure by rejecting with a TypeError.
@@ -245,12 +212,6 @@ export function isRetryableError(error: unknown): boolean {
 
 export interface SendChatStreamParams {
   model: BaseModel
-  /**
-   * Ordered Auto candidates. When provided (an Auto option is selected), the
-   * request `model` is set to the router's "auto" sentinel and each
-   * candidate's params travel in the `auto_model_options` blob. `model` is the
-   * representative (first) candidate, used to build the shared message body.
-   */
   autoCandidates?: BaseModel[]
   systemPrompt: string
   rules?: string
@@ -259,28 +220,29 @@ export interface SendChatStreamParams {
   signal: AbortSignal
   reasoningEffort?: ReasoningEffort
   thinkingEnabled?: boolean
-  webSearchEnabled?: boolean
-  codeExecutionEnabled?: boolean
-  piiCheckEnabled?: boolean
-  /**
-   * Include GenUI tool definitions in the request so the model can emit
-   * render_* tool calls. Internal utilities (title gen, memory extraction,
-   * etc.) should pass `false` to avoid steering those paths toward tools.
-   */
   genUIEnabled?: boolean
-  // The three below are required when codeExecutionEnabled.
-  /** Per-chat secret; buckets lookup key + code-exec session id. */
-  codeExecutionAccessToken?: string
-  /** AES-256 key (base64url) for buckets envelope encryption. */
-  codeExecutionEncryptionKey?: string
-  /** Per-chat hex token authenticating the code-exec container. */
-  codeExecutionContainerAuthToken?: string
+  webSearchEnabled?: boolean
+  piiCheckEnabled?: boolean
+  codeExecution?: CodeExecutionOptions
+  threadId: string
+  runId: string
   recovery?: ChatRecoveryCallbacks
+}
+
+/**
+ * How a caller that means to be able to come back to this run is told about
+ * the pair it may come back with. The run becomes recoverable only once it is
+ * under way, and only for as long as nobody drops its log.
+ */
+export interface ChatRecoveryCallbacks {
+  onAttemptStarted: (storage: RunStorage) => void
+  onRunRecoverable: (storage: RunStorage) => Promise<void>
+  onAttemptAbandoned: (storage: RunStorage, spilled?: boolean) => Promise<void>
 }
 
 export async function sendChatStream(
   params: SendChatStreamParams,
-): Promise<ChatChunkStream> {
+): Promise<AguiEventStream> {
   const {
     model,
     autoCandidates,
@@ -291,348 +253,144 @@ export async function sendChatStream(
     signal,
     reasoningEffort,
     thinkingEnabled,
-    webSearchEnabled,
-    codeExecutionEnabled,
-    piiCheckEnabled,
     genUIEnabled,
-    codeExecutionAccessToken,
-    codeExecutionEncryptionKey,
-    codeExecutionContainerAuthToken,
+    webSearchEnabled,
+    piiCheckEnabled,
+    codeExecution,
+    threadId,
+    runId,
     recovery,
   } = params
 
-  const genUITools = genUIEnabled ? buildGenUIToolSchemas() : []
-
-  if (model.modelName === 'dev-simulator') {
-    const simulatorUrl = '/api/dev/simulator'
-    const messages = ChatQueryBuilder.buildMessages({
-      model,
-      systemPrompt,
-      rules,
-      messages: updatedMessages,
-      autoCandidates,
-      includeGenUIHint: genUIEnabled,
-      includeTimeReminder: true,
-    })
-
-    // Get the last user message for retry test check
-    const lastUserMessage = updatedMessages
-      .filter((m) => m.role === 'user')
-      .pop()
-    const queryText = lastUserMessage?.content || ''
-
-    let lastError: unknown = null
-    const maxRetries = CONSTANTS.MESSAGE_SEND_MAX_RETRIES
-
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      if (signal.aborted) {
-        throw new DOMException('Aborted', 'AbortError')
-      }
-
-      try {
-        // Check if this is a retry test that should fail. A TypeError is
-        // what fetch() rejects with on a real network failure, so the
-        // simulation exercises the same retry classification as production.
-        if (shouldRetryTestFail(queryText)) {
-          throw new TypeError('Simulated network error for retry testing')
-        }
-
-        const response = await fetch(simulatorUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: model.modelName,
-            messages,
-            stream: true,
-          }),
-          signal,
-        })
-
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new ChatError(
-              'Dev simulator is only available in development environment',
-              'FETCH_ERROR',
-            )
-          }
-          throw new ChatError(
-            `Server returned ${response.status}: ${response.statusText}`,
-            'FETCH_ERROR',
-          )
-        }
-
-        return chatChunkStreamFromSSE(response)
-      } catch (err: unknown) {
-        lastError = err
-        const anyErr = err as any
-
-        if (
-          (typeof DOMException !== 'undefined' &&
-            anyErr instanceof DOMException &&
-            anyErr.name === 'AbortError') ||
-          anyErr?.name === 'AbortError'
-        ) {
-          throw err
-        }
-
-        if (attempt < maxRetries && isRetryableError(err)) {
-          const backoffDelay =
-            CONSTANTS.MESSAGE_SEND_RETRY_DELAY_MS * Math.pow(2, attempt)
-
-          logInfo('Retrying dev simulator request', {
-            component: 'inference-client',
-            action: 'sendChatStream.devSimulator',
-            metadata: {
-              attempt: attempt + 1,
-              maxRetries,
-              delayMs: backoffDelay,
-              error: anyErr?.message,
-            },
-          })
-
-          onRetry?.(attempt + 1, maxRetries, anyErr?.message)
-
-          await delay(backoffDelay)
-          continue
-        }
-
-        if (err instanceof ChatError) {
-          throw err
-        }
-
-        const msg = anyErr?.message || 'Unknown network error'
-        throw new ChatError(`Network request failed: ${msg}`, 'FETCH_ERROR')
-      }
-    }
-
-    // Fallback if loop completes without returning
-    const anyErr = lastError as any
-    const msg = anyErr?.message || 'Unknown network error'
-    throw new ChatError(
-      `Network request failed after ${maxRetries} retries: ${msg}`,
-      'FETCH_ERROR',
-    )
-  }
+  const routed = (autoCandidates?.length ?? 0) > 1
 
   // For Auto, the router may pick any candidate, so the single built message
-  // set must be valid for all of them. If any candidate doesn't support the
-  // system role (e.g. DeepSeek), inject the system prompt as a leading user
-  // message, a form every model understands.
+  // set must be valid for all of them. Only a candidate that genuinely cannot
+  // take a system role (e.g. DeepSeek) forces the prompt down into a leading
+  // user message; doing it for every routed request would weaken the prompt
+  // for models that accept it as a system message perfectly well.
   const forcePrependSystemPrompt = Boolean(
     autoCandidates?.some(
-      (c) => !ChatQueryBuilder.shouldUseSystemRole(c.modelName),
+      (candidate) => !ChatQueryBuilder.shouldUseSystemRole(candidate.modelName),
     ),
   )
 
+  const genUITools = genUIEnabled ? buildGenUIToolSchemas() : []
+
   const messages = ChatQueryBuilder.buildMessages({
     model,
+    autoCandidates,
     systemPrompt,
     rules,
     messages: updatedMessages,
-    autoCandidates,
     includeGenUIHint: genUIEnabled,
     forcePrependSystemPrompt,
     includeTimeReminder: true,
   })
 
-  let lastError: unknown = null
-  const maxRetries = CONSTANTS.MESSAGE_SEND_MAX_RETRIES
-  let recoverableTransportLease: RecoverableTinfoilTransportLease | null = null
-
-  const releaseRecoverableTransport = () => {
-    recoverableTransportLease?.release()
-    recoverableTransportLease = null
+  const input: RunAgentInput = {
+    threadId,
+    runId,
+    messages,
+    tools: genUITools.length > 0 ? genUITools : undefined,
+    forwardedProps: {
+      model: routed ? AUTO_REQUEST_MODEL : model.modelName,
+      reasoningEffort,
+      thinking: thinkingEnabled,
+      webSearch: webSearchEnabled,
+      piiCheck: piiCheckEnabled,
+      codeExecution,
+    },
   }
 
+  const simulated = model.modelName === DEV_SIMULATOR_MODEL.modelName
+  let lastError: unknown = null
+  const maxRetries = CONSTANTS.MESSAGE_SEND_MAX_RETRIES
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    let recoverySessionId: string | null = null
     if (signal.aborted) {
-      releaseRecoverableTransport()
       throw new DOMException('Aborted', 'AbortError')
     }
 
-    // Wait for connection if offline (except for first attempt)
     if (attempt > 0 && !isOnline()) {
       logInfo('Waiting for internet connection before retry', {
         component: 'inference-client',
         action: 'sendChatStream',
         metadata: { attempt, maxRetries },
       })
-      // Wait up to 10 seconds for connection to return
       const connectionWaitStart = Date.now()
       while (!isOnline() && Date.now() - connectionWaitStart < 10000) {
         if (signal.aborted) {
-          releaseRecoverableTransport()
           throw new DOMException('Aborted', 'AbortError')
         }
         await delay(500)
       }
     }
 
+    // A fresh pair per attempt: a session id belongs to exactly one run, and
+    // an attempt that failed may still own the one it was given.
+    const storage = recovery && !simulated ? newRunStorage() : null
+    if (storage) recovery?.onAttemptStarted(storage)
+    const attemptInput: RunAgentInput = storage
+      ? { ...input, ...storage }
+      : input
+
     try {
-      const requestBody: Record<string, unknown> = {
-        model: model.modelName,
-        messages,
-        stream: true,
+      if (simulated && shouldRetryTestFail(lastUserText(updatedMessages))) {
+        throw new TypeError('Simulated network error for retry testing')
       }
-      if (webSearchEnabled) {
-        requestBody.web_search_options = {}
-      }
-      if (codeExecutionEnabled) {
-        if (
-          !codeExecutionAccessToken ||
-          !codeExecutionEncryptionKey ||
-          !codeExecutionContainerAuthToken
-        ) {
-          throw new ChatError(
-            'Code execution requested without an accessToken, encryption key, or container auth token',
-            'FETCH_ERROR',
-          )
-        }
-        requestBody.code_execution_options = {
-          accessToken: codeExecutionAccessToken,
-          encryptionKey: codeExecutionEncryptionKey,
-          containerAuthToken: codeExecutionContainerAuthToken,
-        }
-      }
-      if (piiCheckEnabled) {
-        requestBody.pii_check_options = {}
-      }
-      if (genUITools.length > 0) {
-        requestBody.tools = genUITools
-        requestBody.tool_choice = 'auto'
-      }
-
-      const modelParamOpts = { thinkingEnabled, reasoningEffort }
-      if (autoCandidates && autoCandidates.length > 0) {
-        // Auto: defer the model choice to the router. Each candidate carries
-        // its own model-specific param block so whichever one the router picks
-        // gets exactly the right reasoning/requestParams applied.
-        requestBody.model = AUTO_REQUEST_MODEL
-        requestBody[AUTO_MODEL_OPTIONS_FIELD] = autoCandidates.map((c) => ({
-          model: c.modelName,
-          params: buildModelBodyParams(c, modelParamOpts),
-        }))
-      } else {
-        // Single model: merge its params straight into the body.
-        const params = buildModelBodyParams(model, modelParamOpts)
-        for (const [key, value] of Object.entries(params)) {
-          requestBody[key] = value
-        }
-      }
-
       const streamStartedAt = startPerformanceTimer()
-      let client
-      let waitForTokenCapture: (() => Promise<void>) | undefined
-      let recoverySessionCleanup: (() => Promise<void>) | undefined
-      if (recovery) {
-        if (!recoverableTransportLease) {
-          recoverableTransportLease = await acquireRecoverableTinfoilTransport()
-        }
-        const recoverableTransport = recoverableTransportLease.transport
-        recoverySessionId = generateRecoverySessionId()
-        recovery.onAttemptStarted(recoverySessionId)
-        const recoverable = await createRecoverableTinfoilClient(
-          recoverableTransport,
-          recoverySessionId,
-          (token) =>
-            recovery.onTokenCaptured(recoverySessionId as string, token),
-        )
-        client = recoverable.client
-        waitForTokenCapture = recoverable.waitForTokenCapture
-        let cleanupPromise: Promise<void> | null = null
-        recoverySessionCleanup = () => {
-          cleanupPromise ??= recovery.onAttemptAbandoned(
-            recoverySessionId as string,
-          )
-          return cleanupPromise
-        }
-      } else {
-        client = await getTinfoilClient()
-      }
-
-      // This loop owns retry policy with typed error classification; the
-      // SDK's internal retries would stack under it and delay terminal
-      // errors such as quota-exhausted 429s.
-      const stream = await (client.chat.completions.create as Function)(
-        requestBody,
-        { signal, maxRetries: 0 },
-      )
+      const stream = simulated
+        ? await runSimulatedAgent(attemptInput, signal)
+        : await runAgent(attemptInput, signal)
       recordPerformanceDuration(
         PERFORMANCE_METRICS.INFERENCE_STREAM_READY,
         streamStartedAt,
       )
-      if (!waitForTokenCapture || !recoverySessionCleanup) {
-        releaseRecoverableTransport()
-        return stream as ChatChunkStream
-      }
-      const abandonRecovery = recoverySessionCleanup
-      const recoveryReady = waitForTokenCapture().catch(async (error) => {
-        try {
-          await abandonRecovery()
-        } catch (cleanupError) {
-          logError(
-            'Failed to clean up recovery after token capture error',
-            cleanupError,
-            {
-              component: 'inference-client',
-              action: 'sendChatStream.recoveryTokenCleanup',
-              metadata: { sessionId: recoverySessionId },
-            },
-          )
-        }
-        throw error
-      })
-      void recoveryReady.catch(() => undefined)
-      return {
-        recoveryReady,
-        abandonRecovery: async () => {
+      if (!recovery || !storage) return stream
+      // The pair was minted before the request, but the run only exists once
+      // the harness has answered: registering it any earlier would leave an
+      // envelope pointing at a run that was never started.
+      const attemptStorage = storage
+      let abandonment: Promise<void> | null = null
+      const abandonRecovery = () =>
+        (abandonment ??= recovery.onAttemptAbandoned(attemptStorage))
+      const recoveryReady = recovery
+        .onRunRecoverable(attemptStorage)
+        .catch(async (error: unknown) => {
           try {
             await abandonRecovery()
-          } finally {
-            releaseRecoverableTransport()
+          } catch (cleanupError) {
+            logError(
+              'Failed to clean up recovery after registration error',
+              cleanupError,
+              {
+                component: 'inference-client',
+                action: 'sendChatStream.recoveryCleanup',
+                metadata: { sessionId: attemptStorage.sessionId },
+              },
+            )
           }
-        },
-        async *[Symbol.asyncIterator]() {
-          try {
-            for await (const chunk of stream as ChatChunkStream) {
-              yield chunk
-            }
-          } finally {
-            releaseRecoverableTransport()
-          }
-        },
-      }
+          throw error
+        })
+      void recoveryReady.catch(() => undefined)
+      return Object.assign(stream, { recoveryReady, abandonRecovery })
     } catch (err: unknown) {
-      if (recoverySessionId && recovery) {
+      if (storage && recovery) {
         try {
-          await recovery.onAttemptAbandoned(recoverySessionId)
+          await recovery.onAttemptAbandoned(storage, false)
         } catch (cleanupError) {
           logError('Failed to abandon chat recovery attempt', cleanupError, {
             component: 'inference-client',
             action: 'sendChatStream.recoveryCleanup',
-            metadata: { sessionId: recoverySessionId },
+            metadata: { sessionId: storage.sessionId },
           })
         }
       }
       lastError = err
-      const anyErr = err as any
 
-      // Don't retry aborted requests
-      if (
-        (typeof DOMException !== 'undefined' &&
-          anyErr instanceof DOMException &&
-          anyErr.name === 'AbortError') ||
-        anyErr?.name === 'AbortError'
-      ) {
-        releaseRecoverableTransport()
+      if ((err as { name?: unknown })?.name === 'AbortError') {
         throw err
-      }
-
-      const refreshAuthentication =
-        recovery && err instanceof AuthenticationError
-      if (refreshAuthentication) {
-        resetTinfoilClient()
       }
 
       // A 429 caused by an exhausted quota cannot succeed on retry; surface
@@ -640,15 +398,11 @@ export async function sendChatStream(
       if (getHttpStatus(err) === 429) {
         const quotaError = await classifyQuotaExhausted429(err)
         if (quotaError) {
-          releaseRecoverableTransport()
           throw quotaError
         }
       }
 
-      if (
-        attempt < maxRetries &&
-        (refreshAuthentication || isRetryableError(err))
-      ) {
+      if (attempt < maxRetries && isRetryableError(err)) {
         const backoffDelay =
           CONSTANTS.MESSAGE_SEND_RETRY_DELAY_MS * Math.pow(2, attempt)
 
@@ -659,7 +413,7 @@ export async function sendChatStream(
             attempt: attempt + 1,
             maxRetries,
             delayMs: backoffDelay,
-            error: anyErr?.message,
+            error: (err as { message?: string })?.message,
           },
         })
 
@@ -675,20 +429,23 @@ export async function sendChatStream(
         metadata: {
           model: model.modelName,
           attempts: attempt + 1,
-          error: anyErr?.message,
-          stack: anyErr?.stack,
+          error: (err as { message?: string })?.message,
         },
       })
 
-      releaseRecoverableTransport()
       throw toTerminalChatError(err)
     }
   }
 
   // Fallback: every branch above should already have thrown, but if the
   // retry loop exits without doing so we still need to surface an error.
-  releaseRecoverableTransport()
   throw toTerminalChatError(lastError, maxRetries)
+}
+
+function lastUserText(messages: Message[]): string {
+  return (
+    messages.filter((message) => message.role === 'user').pop()?.content ?? ''
+  )
 }
 
 /**
@@ -780,8 +537,7 @@ export async function sendStructuredCompletion<T>(
       )
     : messages
 
-  const requestBody: ChatCompletionCreateParamsNonStreaming &
-    Record<string, unknown> = {
+  const requestBody: Record<string, unknown> = {
     model: model.modelName,
     messages: requestMessages,
     stream: false,
@@ -804,28 +560,45 @@ export async function sendStructuredCompletion<T>(
     },
   }
 
-  let response
+  let response: Response
   try {
-    const client = await getTinfoilClient()
-    response = await client.chat.completions.create(requestBody, { signal })
+    response = await inferenceRequest(
+      '/chat/completions',
+      JSON.stringify(requestBody),
+      { headers: { 'Content-Type': 'application/json' }, signal },
+    )
   } catch (error) {
     if (
-      error instanceof APIUserAbortError ||
-      (typeof DOMException !== 'undefined' &&
-        error instanceof DOMException &&
-        error.name === 'AbortError')
+      typeof DOMException !== 'undefined' &&
+      error instanceof DOMException &&
+      error.name === 'AbortError'
     ) {
       throw error
     }
-    const requestCode = (error as { code?: unknown })?.code
     throw new StructuredCompletionError('request_failed', {
       cause: error,
       status: getHttpStatus(error),
+    })
+  }
+
+  if (!response.ok) {
+    // Classify by status and the server's own code; never by message text,
+    // which varies with locale and deployment.
+    const body = await response.json().catch(() => null)
+    const requestCode = (body as { error?: { code?: unknown } })?.error?.code
+    throw new StructuredCompletionError('request_failed', {
+      status: response.status,
       requestCode: typeof requestCode === 'string' ? requestCode : undefined,
     })
   }
 
-  const choice = response.choices[0]
+  const payload = (await response.json()) as {
+    choices?: Array<{
+      finish_reason?: string | null
+      message?: { content?: string | null; refusal?: string | null }
+    }>
+  }
+  const choice = payload.choices?.[0]
   const finishReason =
     typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined
   if (choice?.message?.refusal) {

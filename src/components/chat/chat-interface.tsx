@@ -1,3 +1,4 @@
+import type { VerificationStatus } from '@/components/verification-sidebar'
 import {
   findSelectableModel,
   getAIModels,
@@ -68,7 +69,7 @@ import {
 import { GridTexture } from '@/components/ui/grid-texture'
 import { LogoLoading } from '@/components/ui/logo-loading'
 import { cn } from '@/components/ui/utils'
-import { CLOUD_SYNC } from '@/config'
+import { CLOUD_SYNC, IS_DEV } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { usePasskeyBackup } from '@/hooks/use-passkey-backup'
 import { usePinnedChats } from '@/hooks/use-pinned-chats'
@@ -667,9 +668,8 @@ export function ChatInterface({
 
   // State for tracking verification document
   const [verificationDocument, setVerificationDocument] = useState<any>(null)
-  const [verificationStatus, setVerificationStatus] = useState<
-    'pending' | 'verified' | 'failed'
-  >('pending')
+  const [verificationStatus, setVerificationStatus] =
+    useState<VerificationStatus>('pending')
 
   const userEmail = user?.primaryEmailAddress?.emailAddress || ''
 
@@ -1506,9 +1506,9 @@ export function ChatInterface({
     let active = true
     const initTinfoil = async () => {
       try {
-        const { getVerificationDocument } =
-          await import('@/services/inference/tinfoil-client')
-        const doc = await getVerificationDocument()
+        const { getHarnessVerificationDocument } =
+          await import('@/services/inference/agui/client')
+        const doc = await getHarnessVerificationDocument()
         if (active && doc) {
           setVerificationDocument(doc)
           setVerificationStatus(
@@ -1519,7 +1519,9 @@ export function ChatInterface({
                 : 'pending',
           )
         } else if (active) {
-          setVerificationStatus('failed')
+          // Dev attests nothing: that is not a failure, but nothing was
+          // verified either — resolve it so the badge stops spinning.
+          setVerificationStatus(IS_DEV ? 'unverified' : 'failed')
         }
       } catch (error) {
         logError('Failed to initialize tinfoil client', error, {
@@ -3803,6 +3805,13 @@ export function ChatInterface({
                     Verified
                   </span>
                 </>
+              ) : verificationStatus === 'unverified' ? (
+                <>
+                  <BiSolidLockOpen className="h-4 w-4 text-content-muted" />
+                  <span className="text-sm leading-none text-content-muted">
+                    Unverified
+                  </span>
+                </>
               ) : (
                 <>
                   <BiSolidLockOpen className="h-4 w-4 text-red-500" />
@@ -4014,9 +4023,7 @@ export function ChatInterface({
         <VerifierSidebarLazy
           isOpen={isVerifierSidebarOpen}
           setIsOpen={handleSetVerifierSidebarOpen}
-          onVerificationComplete={(success) =>
-            setVerificationStatus(success ? 'verified' : 'failed')
-          }
+          onVerificationComplete={setVerificationStatus}
           onVerificationUpdate={setVerificationDocument}
           isDarkMode={isDarkMode}
           isClient={isClient}

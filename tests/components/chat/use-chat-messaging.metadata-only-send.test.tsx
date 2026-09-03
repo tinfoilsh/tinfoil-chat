@@ -1,6 +1,6 @@
 import { useChatMessaging } from '@/components/chat/hooks/use-chat-messaging'
 import type { Chat } from '@/components/chat/types'
-import type { ChatChunk } from '@/services/inference/chat-stream'
+import type { AguiEvent } from '@/services/inference/agui/protocol'
 import { act, renderHook } from '@testing-library/react'
 import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -43,7 +43,7 @@ vi.mock('@/services/inference/chat-recovery', () => ({
   completeLiveChatRecovery: vi.fn(),
   markChatRecoveryTurnCancelled: vi.fn(),
   markChatRecoveryTurnSettled: vi.fn(),
-  persistChatRecoveryToken: vi.fn(),
+  persistChatRecoveryEnvelope: vi.fn(),
   releaseActiveChatRecovery: vi.fn(),
   scanPendingChatRecoveries: vi.fn(),
   startChatRecoveryAttempt: vi.fn(),
@@ -143,8 +143,12 @@ function hydratedChat(): Chat {
 }
 
 function completedStream() {
-  return (async function* (): AsyncGenerator<ChatChunk> {
-    yield { choices: [{ delta: { content: 'Response' } }] } as ChatChunk
+  return (async function* (): AsyncGenerator<AguiEvent> {
+    yield {
+      type: 'TEXT_MESSAGE_CHUNK',
+      messageId: 'm',
+      delta: 'Response',
+    } as AguiEvent
   })()
 }
 

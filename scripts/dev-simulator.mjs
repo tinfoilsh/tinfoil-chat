@@ -170,13 +170,15 @@ function delay(ms, variance = 0) {
 
 async function* simulateStream(query) {
   const pattern = getSimulatorPattern(query)
+  const messageId = `msg_${Date.now()}`
 
+  yield 'data: {"type":"RUN_STARTED","threadId":"dev","runId":"dev"}\n\n'
   await delay(1000)
 
   if (pattern.thoughts) {
     const thoughtChunks = chunkText(pattern.thoughts, pattern.chunkSize || 5)
     for (const chunk of thoughtChunks) {
-      yield `data: {"choices":[{"delta":{"reasoning_content":"${escapeJson(chunk)}"}}]}\n\n`
+      yield `data: {"type":"REASONING_MESSAGE_CHUNK","messageId":"${messageId}","delta":"${escapeJson(chunk)}"}\n\n`
       await delay(pattern.streamDelayMs || 40)
     }
 
@@ -187,12 +189,12 @@ async function* simulateStream(query) {
 
   const contentChunks = chunkText(pattern.content, pattern.chunkSize || 7)
   for (const chunk of contentChunks) {
-    yield `data: {"choices":[{"delta":{"content":"${escapeJson(chunk)}"}}]}\n\n`
+    yield `data: {"type":"TEXT_MESSAGE_CHUNK","messageId":"${messageId}","delta":"${escapeJson(chunk)}"}\n\n`
     const variance = pattern.chunkSize === 1 ? pattern.streamDelayMs || 0 : 0
     await delay(pattern.streamDelayMs || 40, variance)
   }
 
-  yield 'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n'
+  yield 'data: {"type":"RUN_FINISHED"}\n\n'
   yield 'data: [DONE]\n\n'
 }
 

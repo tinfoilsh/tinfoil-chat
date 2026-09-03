@@ -54,7 +54,11 @@ describe('ChatQueryBuilder', () => {
     })
 
     expect(messages).toHaveLength(2)
-    expect(messages[0]).toEqual({ role: 'user', content: 'b'.repeat(1600) })
+    expect(messages[0]).toEqual({
+      id: 'm0',
+      role: 'user',
+      content: 'b'.repeat(1600),
+    })
   })
 
   it('omits system messages when there is no prompt content', () => {
@@ -66,7 +70,7 @@ describe('ChatQueryBuilder', () => {
       includeGenUIHint: false,
     })
 
-    expect(messages).toEqual([{ role: 'user', content: 'hello' }])
+    expect(messages).toEqual([{ id: 'm0', role: 'user', content: 'hello' }])
   })
 
   it('omits synthetic system wrappers when there is no prompt content', () => {
@@ -78,7 +82,7 @@ describe('ChatQueryBuilder', () => {
       includeGenUIHint: false,
     })
 
-    expect(messages).toEqual([{ role: 'user', content: 'hello' }])
+    expect(messages).toEqual([{ id: 'm0', role: 'user', content: 'hello' }])
   })
 
   it('uses the system role for system-role models by default', () => {
@@ -90,7 +94,11 @@ describe('ChatQueryBuilder', () => {
       includeGenUIHint: false,
     })
 
-    expect(messages[0]).toEqual({ role: 'system', content: 'be helpful' })
+    expect(messages[0]).toEqual({
+      id: 'm0',
+      role: 'system',
+      content: 'be helpful',
+    })
   })
 
   it('prepends the system prompt as a user message when forced', () => {
@@ -105,6 +113,7 @@ describe('ChatQueryBuilder', () => {
 
     expect(messages.some((m) => m.role === 'system')).toBe(false)
     expect(messages[0]).toEqual({
+      id: 'm0',
       role: 'user',
       content: '<system>\nbe helpful\n</system>',
     })
@@ -126,6 +135,7 @@ describe('ChatQueryBuilder', () => {
       /^<system-reminder>Current time: .+<\/system-reminder>$/,
     )
     expect(messages[messages.length - 2]).toEqual({
+      id: 'm1',
       role: 'user',
       content: 'hello',
     })
@@ -199,13 +209,51 @@ describe('ChatQueryBuilder', () => {
     expect(messages[0]).toMatchObject({
       role: 'assistant',
       content: 'answer',
-      reasoning_content: '  exact reasoning  ',
-      tool_calls: [{ id: 'call_1' }],
+      reasoningContent: '  exact reasoning  ',
+      toolCalls: [{ id: 'call_1' }],
     })
     expect(messages[1]).toEqual({
+      id: 'm1',
       role: 'tool',
-      tool_call_id: 'call_1',
+      toolCallId: 'call_1',
       content: 'executed',
+    })
+  })
+
+  it('carries the citations and search notes an earlier answer was built on', () => {
+    // A follow-up question about the previous answer -- which source said that,
+    // how it got there -- needs the previous answer's own history.
+    const messages = ChatQueryBuilder.buildMessages({
+      model,
+      systemPrompt: '',
+      messages: [
+        {
+          role: 'assistant',
+          content: 'AMD publishes its root CA there.',
+          annotations: [
+            {
+              type: 'url_citation',
+              url_citation: { title: 'AMD', url: 'https://amd.com' },
+            },
+          ],
+          searchReasoning: 'searched amd.com, read the root CA page',
+          timestamp: new Date(),
+        },
+      ],
+      includeGenUIHint: false,
+    })
+
+    expect(messages[0]).toEqual({
+      id: 'm0',
+      role: 'assistant',
+      content: 'AMD publishes its root CA there.',
+      annotations: [
+        {
+          type: 'url_citation',
+          url_citation: { title: 'AMD', url: 'https://amd.com' },
+        },
+      ],
+      searchReasoning: 'searched amd.com, read the root CA page',
     })
   })
 
@@ -226,9 +274,10 @@ describe('ChatQueryBuilder', () => {
 
     expect(messages).toEqual([
       {
+        id: 'm0',
         role: 'assistant',
         content: '',
-        reasoning_content: 'reasoning only',
+        reasoningContent: 'reasoning only',
       },
     ])
   })
@@ -248,7 +297,11 @@ describe('ChatQueryBuilder', () => {
       includeGenUIHint: false,
     })
 
-    expect(messages[0]).toEqual({ role: 'assistant', content: 'answer' })
+    expect(messages[0]).toEqual({
+      id: 'm0',
+      role: 'assistant',
+      content: 'answer',
+    })
   })
 
   it('preserves reasoning only on tool-call messages for tool-call policy models', () => {
@@ -274,13 +327,14 @@ describe('ChatQueryBuilder', () => {
     })
 
     expect(messages[0]).toEqual({
+      id: 'm0',
       role: 'assistant',
       content: 'ordinary answer',
     })
     expect(messages[1]).toMatchObject({
       role: 'assistant',
-      reasoning_content: 'keep this',
-      tool_calls: [{ id: 'call_1' }],
+      reasoningContent: 'keep this',
+      toolCalls: [{ id: 'call_1' }],
     })
   })
 
@@ -300,6 +354,6 @@ describe('ChatQueryBuilder', () => {
       includeGenUIHint: false,
     })
 
-    expect(messages[0]).toMatchObject({ reasoning_content: 'reasoning' })
+    expect(messages[0]).toMatchObject({ reasoningContent: 'reasoning' })
   })
 })

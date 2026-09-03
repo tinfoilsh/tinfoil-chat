@@ -3,7 +3,7 @@ import { useProject } from '@/components/project'
 import { cn } from '@/components/ui/utils'
 import { getProjectColor } from '@/constants/project-colors'
 import { useToast } from '@/hooks/use-toast'
-import { getTinfoilClient } from '@/services/inference/tinfoil-client'
+import { inferenceRequest } from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
 import {
   FolderIcon,
@@ -508,19 +508,23 @@ export function ChatInput({
           throw new Error('No audio model available for transcription')
         }
 
-        const client = await getTinfoilClient()
-        const file = new File([blob], 'audio.webm', { type: 'audio/webm' })
+        const transcription = new FormData()
+        transcription.append(
+          'file',
+          new File([blob], 'audio.webm', { type: 'audio/webm' }),
+        )
+        transcription.append('model', audioModel)
+        transcription.append('response_format', 'text')
+        const response = await inferenceRequest(
+          '/audio/transcriptions',
+          transcription,
+        )
+        if (!response.ok) {
+          throw new Error(`Transcription failed: ${response.status}`)
+        }
 
-        const transcription = await client.audio.transcriptions.create({
-          file,
-          model: audioModel,
-          response_format: 'text',
-        })
-
-        const text =
-          typeof transcription === 'string'
-            ? transcription
-            : (transcription as any).text
+        // `response_format: 'text'` means the body is the transcript itself.
+        const text = await response.text()
 
         if (text) {
           const currentInput = input.trim()

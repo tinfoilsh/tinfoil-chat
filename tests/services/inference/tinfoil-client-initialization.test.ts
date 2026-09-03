@@ -1,7 +1,5 @@
 import {
-  getCachedVerificationDocument,
-  getVerificationDocument,
-  invalidateSessionCache,
+  getSecureFetch,
   resetTinfoilClient,
   TinfoilClientInitializationTimeoutError,
 } from '@/services/inference/tinfoil-client'
@@ -9,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   ready: vi.fn<() => Promise<void>>(),
-  getVerificationDocument: vi.fn(() => ({ securityVerified: true })),
   secureClientConstructed: vi.fn(),
 }))
 
@@ -31,11 +28,6 @@ vi.mock('@/utils/error-handling', () => ({
   logError: vi.fn(),
 }))
 
-vi.mock('openai', () => ({
-  default: class OpenAI {},
-  AuthenticationError: class AuthenticationError extends Error {},
-}))
-
 vi.mock('tinfoil', () => ({
   AuthenticationError: class AuthenticationError extends Error {},
   SecureClient: class SecureClient {
@@ -44,7 +36,6 @@ vi.mock('tinfoil', () => ({
     }
 
     ready = mocks.ready
-    getVerificationDocument = mocks.getVerificationDocument
     getBaseURL = () => 'https://enclave.example.com'
     fetch = vi.fn()
   },
@@ -58,7 +49,6 @@ describe('tinfoil client initialization', () => {
     resetTinfoilClient()
     mocks.ready.mockReset()
     mocks.ready.mockResolvedValue()
-    mocks.getVerificationDocument.mockClear()
     mocks.secureClientConstructed.mockClear()
     vi.stubGlobal(
       'fetch',
@@ -72,13 +62,8 @@ describe('tinfoil client initialization', () => {
   })
 
   it('shares one attestation across concurrent callers', async () => {
-    const first = getVerificationDocument()
-    const second = getVerificationDocument()
+    await Promise.all([getSecureFetch(), getSecureFetch()])
 
-    await expect(Promise.all([first, second])).resolves.toEqual([
-      { securityVerified: true },
-      { securityVerified: true },
-    ])
     expect(mocks.secureClientConstructed).toHaveBeenCalledTimes(1)
     expect(mocks.ready).toHaveBeenCalledTimes(1)
     expect(fetch).toHaveBeenCalledTimes(1)
@@ -92,7 +77,7 @@ describe('tinfoil client initialization', () => {
       }),
     )
 
-    const concurrentWaiter = getVerificationDocument()
+    const concurrentWaiter = getSecureFetch()
     await vi.waitFor(() => expect(mocks.ready).toHaveBeenCalledTimes(1))
 
     resetTinfoilClient()
@@ -100,9 +85,7 @@ describe('tinfoil client initialization', () => {
 
     // The waiter must not surface an abort: it re-initializes against the
     // post-reset generation (a second SecureClient) and resolves.
-    await expect(concurrentWaiter).resolves.toEqual({
-      securityVerified: true,
-    })
+    await expect(concurrentWaiter).resolves.toBeTypeOf('function')
     expect(mocks.secureClientConstructed).toHaveBeenCalledTimes(2)
     expect(mocks.ready).toHaveBeenCalledTimes(2)
   })
@@ -111,28 +94,12 @@ describe('tinfoil client initialization', () => {
     vi.useFakeTimers()
     mocks.ready.mockReturnValueOnce(new Promise<void>(() => {}))
 
-    const initialization = getVerificationDocument()
+    const initialization = getSecureFetch()
     const timeoutRejection = expect(initialization).rejects.toBeInstanceOf(
       TinfoilClientInitializationTimeoutError,
     )
     await vi.advanceTimersByTimeAsync(20_000)
 
     await timeoutRejection
-  })
-
-  it('exposes verification only from the current cache generation', async () => {
-    expect(getCachedVerificationDocument()).toBeNull()
-
-    const document = await getVerificationDocument()
-    expect(getCachedVerificationDocument()).toBe(document)
-
-    invalidateSessionCache()
-    expect(getCachedVerificationDocument()).toBeNull()
-
-    await getVerificationDocument()
-    expect(getCachedVerificationDocument()).toEqual({ securityVerified: true })
-
-    resetTinfoilClient()
-    expect(getCachedVerificationDocument()).toBeNull()
   })
 })

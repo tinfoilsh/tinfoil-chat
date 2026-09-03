@@ -3,17 +3,17 @@ import {
   sendStructuredCompletion,
   StructuredCompletionError,
 } from '@/services/inference/inference-client'
-import { APIUserAbortError } from 'openai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { createMock } = vi.hoisted(() => ({ createMock: vi.fn() }))
+const { inferenceRequest } = vi.hoisted(() => ({
+  inferenceRequest:
+    vi.fn<
+      (path: string, body: BodyInit, options?: unknown) => Promise<Response>
+    >(),
+}))
 
 vi.mock('@/services/inference/tinfoil-client', () => ({
-  acquireRecoverableTinfoilTransport: vi.fn(),
-  getTinfoilClient: vi.fn(async () => ({
-    chat: { completions: { create: createMock } },
-  })),
-  createRecoverableTinfoilClient: vi.fn(),
+  inferenceRequest,
   discardRateLimitSnapshot: vi.fn(),
   getRateLimitInfo: vi.fn(),
   refreshRateLimit: vi.fn(),
@@ -35,20 +35,22 @@ function response(
   content: string | null,
   finishReason: string | null = 'stop',
   refusal: string | null = null,
-) {
-  return {
-    choices: [
-      {
-        finish_reason: finishReason,
-        message: { content, refusal },
-      },
-    ],
-  }
+): Response {
+  return new Response(
+    JSON.stringify({
+      choices: [{ finish_reason: finishReason, message: { content, refusal } }],
+    }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  )
+}
+
+function sentBody(): Record<string, unknown> {
+  return JSON.parse(inferenceRequest.mock.calls[0][1] as string)
 }
 
 describe('sendStructuredCompletion', () => {
   beforeEach(() => {
-    createMock.mockReset()
+    inferenceRequest.mockReset()
   })
 
   it('preserves Auto candidate params and protects response_format', async () => {
@@ -67,7 +69,7 @@ describe('sendStructuredCompletion', () => {
         },
       },
     } as BaseModel
-    createMock.mockResolvedValueOnce(response('{"value":"ok"}'))
+    inferenceRequest.mockResolvedValueOnce(response('{"value":"ok"}'))
 
     await sendStructuredCompletion({
       model: candidate,
@@ -78,7 +80,8 @@ describe('sendStructuredCompletion', () => {
       thinkingEnabled: true,
     })
 
-    const body = createMock.mock.calls[0][0]
+    expect(inferenceRequest.mock.calls[0][0]).toBe('/chat/completions')
+    const body = sentBody()
     expect(body.model).toBe('auto')
     expect(body.auto_model_options).toEqual([
       {
@@ -90,7 +93,6 @@ describe('sendStructuredCompletion', () => {
       type: 'json_schema',
       json_schema: { name: 'response', schema },
     })
-    expect(createMock.mock.calls[0][1]).not.toHaveProperty('maxRetries')
   })
 
   it.each([
@@ -101,7 +103,7 @@ describe('sendStructuredCompletion', () => {
   ])(
     'classifies malformed structured responses',
     async (apiResponse: ReturnType<typeof response>, code: string) => {
-      createMock.mockResolvedValueOnce(apiResponse)
+      inferenceRequest.mockResolvedValueOnce(apiResponse)
       await expect(
         sendStructuredCompletion({
           model: { modelName: 'gpt-oss-120b' } as BaseModel,
@@ -113,11 +115,14 @@ describe('sendStructuredCompletion', () => {
   )
 
   it('preserves request status and code without message matching', async () => {
-    createMock.mockRejectedValueOnce({
-      status: 503,
-      code: 'service_unavailable',
-      message: 'localized message',
-    })
+    inferenceRequest.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: { code: 'service_unavailable', message: 'localized message' },
+        }),
+        { status: 503 },
+      ),
+    )
 
     await expect(
       sendStructuredCompletion({
@@ -134,11 +139,9 @@ describe('sendStructuredCompletion', () => {
     )
   })
 
-  it.each([
-    new APIUserAbortError(),
-    new DOMException('cancelled', 'AbortError'),
-  ])('preserves abort errors without wrapping', async (abortError) => {
-    createMock.mockRejectedValueOnce(abortError)
+  it('preserves abort errors without wrapping', async () => {
+    const abortError = new DOMException('cancelled', 'AbortError')
+    inferenceRequest.mockRejectedValueOnce(abortError)
 
     await expect(
       sendStructuredCompletion({

@@ -1,26 +1,12 @@
-import {
-  APIConnectionError,
-  APIConnectionTimeoutError,
-  APIError,
-  APIUserAbortError,
-} from 'openai'
+import { ChatError } from '@/components/chat/chat-utils'
+import { isRetryableError } from '@/services/inference/inference-client'
 import { describe, expect, it } from 'vitest'
 
-import {
-  generateRecoverySessionId,
-  isRetryableError,
-} from '@/services/inference/inference-client'
-
 function statusError(status: number) {
-  return APIError.generate(status, undefined, undefined, new Headers())
+  return new ChatError(`failed with ${status}`, 'SERVER_ERROR', { status })
 }
 
 describe('isRetryableError', () => {
-  it('retries SDK transport failures, including request timeouts', () => {
-    expect(isRetryableError(new APIConnectionError({}))).toBe(true)
-    expect(isRetryableError(new APIConnectionTimeoutError())).toBe(true)
-  })
-
   it('retries browser fetch network failures', () => {
     // fetch() rejects with a TypeError on network failure
     expect(isRetryableError(new TypeError('Failed to fetch'))).toBe(true)
@@ -31,13 +17,22 @@ describe('isRetryableError', () => {
     expect(isRetryableError(statusError(409))).toBe(true)
     expect(isRetryableError(statusError(429))).toBe(true)
     expect(isRetryableError(statusError(503))).toBe(true)
+    // A plain object carrying a status is classified the same way.
+    expect(isRetryableError({ status: 503 })).toBe(true)
   })
 
   it('does not retry user aborts', () => {
-    expect(isRetryableError(new APIUserAbortError())).toBe(false)
     expect(isRetryableError(new DOMException('Aborted', 'AbortError'))).toBe(
       false,
     )
+  })
+
+  it('does not retry an exhausted hourly quota', () => {
+    expect(
+      isRetryableError(
+        new ChatError('over cap', 'HOURLY_LIMIT', { status: 429 }),
+      ),
+    ).toBe(false)
   })
 
   it('does not retry client errors or unclassified errors', () => {
@@ -46,16 +41,5 @@ describe('isRetryableError', () => {
     // A bare Error carrying a transport-sounding message is not enough
     expect(isRetryableError(new Error('Connection error.'))).toBe(false)
     expect(isRetryableError(undefined)).toBe(false)
-  })
-
-  it('generates fresh 128-bit recovery capabilities', () => {
-    const sessionIds = new Set(
-      Array.from({ length: 100 }, () => generateRecoverySessionId()),
-    )
-
-    expect(sessionIds.size).toBe(100)
-    for (const sessionId of sessionIds) {
-      expect(sessionId).toMatch(/^[0-9a-f]{32}$/)
-    }
   })
 })
