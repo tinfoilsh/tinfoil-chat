@@ -12,6 +12,7 @@ import {
   isPersonalizationEnabled,
   type PersonalizationSettings,
 } from '@/utils/personalization-settings'
+import { escapePromptContent } from '@/utils/prompt-escaping'
 import {
   normalizeResponseLanguage,
   resolveResponseLanguage,
@@ -188,23 +189,23 @@ export const useCustomSystemPrompt = (
       'The user has provided personal preferences for this conversation. Adapt your responses according to these settings while maintaining accuracy and helpfulness.\n\n<user_preferences>'
 
     if (personalization.nickname.trim()) {
-      userPreferencesXML += `\n  <nickname>${personalization.nickname.trim()}</nickname>`
+      userPreferencesXML += `\n  <nickname>${escapePromptContent(personalization.nickname.trim())}</nickname>`
     }
 
     if (personalization.profession.trim()) {
-      userPreferencesXML += `\n  <profession>${personalization.profession.trim()}</profession>`
+      userPreferencesXML += `\n  <profession>${escapePromptContent(personalization.profession.trim())}</profession>`
     }
 
     if (personalization.traits.length > 0) {
       userPreferencesXML += '\n  <traits>'
       personalization.traits.forEach((trait) => {
-        userPreferencesXML += `\n    <trait>${trait}</trait>`
+        userPreferencesXML += `\n    <trait>${escapePromptContent(trait)}</trait>`
       })
       userPreferencesXML += '\n  </traits>'
     }
 
     if (personalization.additionalContext.trim()) {
-      userPreferencesXML += `\n  <additional_context>\n    ${personalization.additionalContext.trim()}\n  </additional_context>`
+      userPreferencesXML += `\n  <additional_context>\n    ${escapePromptContent(personalization.additionalContext.trim())}\n  </additional_context>`
     }
 
     userPreferencesXML += '\n</user_preferences>'
