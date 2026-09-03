@@ -752,7 +752,7 @@ export function ChatSidebar({
 
     try {
       const result = await loadMorePage()
-      if (!result) return
+      if (!result || result.saved === 0) return
 
       setPendingChatsRender(true)
       try {
