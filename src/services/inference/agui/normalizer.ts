@@ -1,4 +1,4 @@
-import { ChatError } from '@/components/chat/chat-utils'
+import { ChatError, type ChatErrorCode } from '@/components/chat/chat-utils'
 import { isGenUIToolName } from '@/components/chat/genui/registry'
 import type { NormalizedEvent } from '@/components/chat/hooks/streaming/types'
 import { logError } from '@/utils/error-handling'
@@ -23,6 +23,7 @@ interface PendingCall {
 export function createAguiNormalizer(): AguiNormalizer {
   let isInThinking = false
   let thinkingClosedByContent = false
+  let reasoningMessageId: string | null = null
   let finished = false
   const calls = new Map<string, PendingCall>()
   // The notes already taken from each activity log, so a snapshot -- which
@@ -50,6 +51,10 @@ export function createAguiNormalizer(): AguiNormalizer {
 
         case 'REASONING_MESSAGE_CHUNK':
           if (!event.delta) break
+          if (event.messageId !== reasoningMessageId) {
+            reasoningMessageId = event.messageId
+            thinkingClosedByContent = false
+          }
           if (isInThinking) {
             events.push({ type: 'thinking_delta', content: event.delta })
           } else if (thinkingClosedByContent) {
@@ -123,25 +128,28 @@ export function createAguiNormalizer(): AguiNormalizer {
         case 'TOOL_CALL_RESULT': {
           const call = calls.get(event.toolCallId)
           if (!call || isGenUIToolName(call.name)) break
-          const result = parseJson<SearchResult>(event.content)
-          const failed = !result || typeof result.error === 'string'
-          if (call.name === WEB_SEARCH_TOOL) {
-            events.push({
-              type: 'web_search',
-              id: event.toolCallId,
-              status: failed ? 'failed' : 'completed',
-              sources: failed ? undefined : sourcesOf(result),
-            })
-          } else if (call.name === WEB_FETCH_TOOL) {
-            events.push({
-              type: 'url_fetch',
-              id: event.toolCallId,
-              url: '',
-              status: failed ? 'failed' : 'completed',
-            })
+          if (call.name === WEB_SEARCH_TOOL || call.name === WEB_FETCH_TOOL) {
+            const result = parseJson<SearchResult>(event.content)
+            const failed = !result || typeof result.error === 'string'
+            events.push(
+              call.name === WEB_SEARCH_TOOL
+                ? {
+                    type: 'web_search',
+                    id: event.toolCallId,
+                    status: failed ? 'failed' : 'completed',
+                    sources: failed ? undefined : sourcesOf(result),
+                  }
+                : {
+                    type: 'url_fetch',
+                    id: event.toolCallId,
+                    url: '',
+                    status: failed ? 'failed' : 'completed',
+                  },
+            )
           } else {
             // Unlike a search result, this content is the tool's own output and
             // need not be JSON: only a reported error means the call failed.
+            const result = readJson<SearchResult>(event.content)
             events.push({
               type: 'code_exec_tool_call',
               id: event.toolCallId,
@@ -177,7 +185,7 @@ export function createAguiNormalizer(): AguiNormalizer {
         case 'RUN_ERROR':
           throw new ChatError(
             event.message || 'The agent run failed',
-            'SERVER_ERROR',
+            runErrorCode(event.code),
           )
       }
 
@@ -194,11 +202,19 @@ export function createAguiNormalizer(): AguiNormalizer {
       if (!finished) {
         throw new ChatError(
           'Chat response ended before its completion marker',
-          'FETCH_ERROR',
+          'SERVER_ERROR',
         )
       }
     },
   }
+}
+
+const RUN_ERROR_CODES = new Set<ChatErrorCode>(['RATE_LIMIT', 'HOURLY_LIMIT'])
+
+function runErrorCode(code: string | undefined): ChatErrorCode {
+  return RUN_ERROR_CODES.has(code as ChatErrorCode)
+    ? (code as ChatErrorCode)
+    : 'SERVER_ERROR'
 }
 
 interface SearchResult {
@@ -232,6 +248,15 @@ function appended(patch: AguiJsonPatch[]): string[] {
     }
   }
   return notes
+}
+
+function readJson<T>(raw: string): T | null {
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return null
+  }
 }
 
 function parseJson<T>(raw: string): T | null {

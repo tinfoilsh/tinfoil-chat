@@ -532,7 +532,8 @@ export function isChatRecoveryAvailable(): boolean {
 
 /**
  * Resolve the inference endpoint (attesting the enclave on prod) the first
- * time anything needs it, and again on session-token rotation.
+ * time anything needs it. A rotated session token reuses the endpoint already
+ * resolved; only a full client reset attests again.
  */
 async function ensureInitialized(): Promise<void> {
   while (true) {
@@ -589,12 +590,14 @@ export async function inferenceRequest(
 ): Promise<Response> {
   const send = async (): Promise<Response> => {
     await ensureInitialized()
+    const baseURL = inferenceBaseURL
+    const dispatch = secureClient?.fetch ?? fetch
     const apiKey = await getSessionToken(options.signal)
-    return (secureClient?.fetch ?? fetch)(`${inferenceBaseURL}${path}`, {
+    return dispatch(`${baseURL}${path}`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         ...options.headers,
+        Authorization: `Bearer ${apiKey}`,
       },
       body,
       signal: options.signal,

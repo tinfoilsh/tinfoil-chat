@@ -134,7 +134,19 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
       { headers: { 'Content-Type': 'application/json' } },
     )
     if (!response.ok) {
-      throw new Error(`Image description failed: ${response.status}`)
+      const errorText = await response.text()
+      logError(
+        `Image description failed with status: ${response.status}`,
+        undefined,
+        {
+          component: 'DocumentUploader',
+          action: 'describeImage',
+          metadata: { status: response.status, errorText },
+        },
+      )
+      throw new Error(
+        `Image description failed: ${response.status}. ${errorText}`,
+      )
     }
 
     const payload = (await response.json()) as {
@@ -283,8 +295,18 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
           transcription,
         )
         if (!response.ok) {
+          const errorText = await response.text()
+          logError(
+            `Transcription failed with status: ${response.status}`,
+            undefined,
+            {
+              component: 'DocumentUploader',
+              action: 'transcribeAudio',
+              metadata: { status: response.status, errorText },
+            },
+          )
           onError(
-            new Error(`Transcription failed: ${response.status}`),
+            new Error(`Transcription failed: ${response.status}. ${errorText}`),
             documentId,
           )
           return

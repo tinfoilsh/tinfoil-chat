@@ -16,8 +16,9 @@ if (isHostedBuild && process.env.NEXT_PUBLIC_DEV === 'true') {
   )
 }
 
-const harnessDevTarget =
+const harnessDevTarget = (
   process.env.HARNESS_DEV_TARGET || 'http://localhost:8090'
+).replace(/\/+$/, '')
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -54,7 +55,7 @@ const nextConfig = {
       },
       {
         source: '/api/local-router/:path*',
-        destination: 'http://localhost:8090/:path*',
+        destination: `${harnessDevTarget}/:path*`,
       },
     ]
   },

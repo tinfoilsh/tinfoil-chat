@@ -68,6 +68,7 @@ export async function processStreamingResponse(
     const message = session.interruptedSnapshot(ctx.turnId)
     if (!hasVisibleAssistantMessage(message)) throw error
     await publisher.finish(message)
+    if (ctx.signal?.aborted) throw error
     publicationCompleted = true
     streamLogger?.flush(streamingChatId)
     return message

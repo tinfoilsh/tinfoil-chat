@@ -137,6 +137,13 @@ describe('sseJsonStream', () => {
     expect(ids).toEqual([4])
   })
 
+  it('reports no id for a frame whose id is blank', async () => {
+    const ids = await collectIds(
+      mockResponse(['id:\ndata: {"id":"a"}\n\nid:   \ndata: {"id":"b"}\n\n']),
+    )
+    expect(ids).toEqual([])
+  })
+
   it('reports the id of a frame that carries it after the data', async () => {
     const ids = await collectIds(
       mockResponse(['data: {"id":"first"}\nid: 7\n\n']),

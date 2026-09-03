@@ -1,5 +1,7 @@
 import { logError } from '@/utils/error-handling'
 
+const SSE_DONE = '[DONE]'
+
 export async function* sseJsonStream<T>(
   response: Response,
   component: string,
@@ -12,7 +14,6 @@ export async function* sseJsonStream<T>(
 
   const decoder = new TextDecoder()
   let buffer = ''
-  let exhausted = false
   // A frame's fields may arrive in any order, so neither field is acted on
   // until the blank line that closes the frame. Reading `id:` only when it
   // happens to precede `data:` would silently lose the resume point.
@@ -25,7 +26,6 @@ export async function* sseJsonStream<T>(
       if (done) {
         // Whatever `buffer` still holds is an event the stream was cut off
         // mid-way; the spec discards it, and a resume replays it in full.
-        exhausted = true
         break
       }
       buffer += decoder.decode(value, { stream: true })
@@ -40,9 +40,12 @@ export async function* sseJsonStream<T>(
 
         if (line) {
           if (line.startsWith('id:')) {
-            const parsed = Number(line.slice(3).trim())
+            const raw = line.slice(3).trim()
+            const parsed = Number(raw)
             eventId =
-              Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null
+              raw !== '' && Number.isSafeInteger(parsed) && parsed >= 0
+                ? parsed
+                : null
           } else if (line.startsWith('data:')) {
             const chunk = line.replace(/^data:\s*/, '')
             data = data === null ? chunk : `${data}\n${chunk}`
@@ -55,7 +58,7 @@ export async function* sseJsonStream<T>(
         data = null
         eventId = null
         if (frame === null) continue
-        if (frame === '[DONE]') return
+        if (frame === SSE_DONE) return
 
         let payload: unknown
         try {
@@ -83,7 +86,7 @@ export async function* sseJsonStream<T>(
       }
     }
   } finally {
-    if (!exhausted) await reader.cancel().catch(() => undefined)
+    await reader.cancel().catch(() => undefined)
     reader.releaseLock()
   }
 }

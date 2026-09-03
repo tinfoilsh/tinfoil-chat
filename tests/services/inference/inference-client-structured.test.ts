@@ -44,7 +44,6 @@ function response(
   )
 }
 
-/** The body sent on the one request the call under test made. */
 function sentBody(): Record<string, unknown> {
   return JSON.parse(inferenceRequest.mock.calls[0][1] as string)
 }

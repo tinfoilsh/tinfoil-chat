@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   ready: vi.fn<() => Promise<void>>(),
-  getVerificationDocument: vi.fn(() => ({ securityVerified: true })),
   secureClientConstructed: vi.fn(),
 }))
 
@@ -37,7 +36,6 @@ vi.mock('tinfoil', () => ({
     }
 
     ready = mocks.ready
-    getVerificationDocument = mocks.getVerificationDocument
     getBaseURL = () => 'https://enclave.example.com'
     fetch = vi.fn()
   },
@@ -51,7 +49,6 @@ describe('tinfoil client initialization', () => {
     resetTinfoilClient()
     mocks.ready.mockReset()
     mocks.ready.mockResolvedValue()
-    mocks.getVerificationDocument.mockClear()
     mocks.secureClientConstructed.mockClear()
     vi.stubGlobal(
       'fetch',

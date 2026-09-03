@@ -68,7 +68,7 @@ describe('inferenceRequest', () => {
     vi.unstubAllGlobals()
   })
 
-  it('posts to the attested enclave with the session key and event opt-in', async () => {
+  it('posts to the attested enclave with the session key', async () => {
     mocks.enclaveFetch.mockResolvedValue(new Response('{}', { status: 200 }))
 
     await inferenceRequest('/chat/completions', '{"model":"m"}', {

@@ -2,7 +2,6 @@ import { ChatError } from '@/components/chat/chat-utils'
 import { isRetryableError } from '@/services/inference/inference-client'
 import { describe, expect, it } from 'vitest'
 
-/** What a failed request carries once classified: a status and nothing else. */
 function statusError(status: number) {
   return new ChatError(`failed with ${status}`, 'SERVER_ERROR', { status })
 }

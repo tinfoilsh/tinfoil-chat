@@ -75,7 +75,9 @@ const TOOL_COPY: Record<
 }
 
 function getToolLabel(call: ToolCallState): string {
-  const copy = TOOL_COPY[call.toolName]
+  const copy = Object.hasOwn(TOOL_COPY, call.toolName)
+    ? TOOL_COPY[call.toolName]
+    : undefined
   if (!copy) {
     if (call.status === 'failed') return `${call.toolName} failed`
     return call.status === 'running'

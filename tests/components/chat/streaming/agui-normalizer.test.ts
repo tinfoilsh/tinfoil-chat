@@ -356,11 +356,33 @@ describe('agui normalizer', () => {
     ).toThrow(ChatError)
   })
 
+  it('keeps a structured run error code the chat flow acts on', () => {
+    const normalizer = createAguiNormalizer()
+    expect(() =>
+      normalizer.processEvent({
+        type: 'RUN_ERROR',
+        message: 'too many requests',
+        code: 'RATE_LIMIT',
+      }),
+    ).toThrow(expect.objectContaining({ code: 'RATE_LIMIT' }))
+  })
+
+  it('reports an unrecognized run error code as a server failure', () => {
+    const normalizer = createAguiNormalizer()
+    expect(() =>
+      normalizer.processEvent({
+        type: 'RUN_ERROR',
+        message: 'upstream exploded',
+        code: 'SOMETHING_NEW',
+      }),
+    ).toThrow(expect.objectContaining({ code: 'SERVER_ERROR' }))
+  })
+
   it('refuses a run that ended without finishing', () => {
     const normalizer = createAguiNormalizer()
     normalizer.processEvent(text('m', 'partial'))
     expect(() => normalizer.assertComplete()).toThrow(
-      expect.objectContaining({ name: 'ChatError', code: 'FETCH_ERROR' }),
+      expect.objectContaining({ name: 'ChatError', code: 'SERVER_ERROR' }),
     )
     normalizer.processEvent({ type: 'RUN_FINISHED' })
     expect(() => normalizer.assertComplete()).not.toThrow()

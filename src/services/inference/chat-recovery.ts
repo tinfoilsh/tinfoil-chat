@@ -505,8 +505,11 @@ async function processEnvelope(
   // resumed here, so it goes now rather than failing to open on every scan
   // until it expires. The version is read off persisted JSON, which the type
   // describes but does not enforce.
-  if ((envelope.v as number) !== RECOVERY_ENVELOPE_VERSION) {
-    await removePendingRecovery(chatId, envelope, isCurrent, signal)
+  const version = envelope.v as number
+  if (version !== RECOVERY_ENVELOPE_VERSION) {
+    if (Number.isSafeInteger(version) && version < RECOVERY_ENVELOPE_VERSION) {
+      await removePendingRecovery(chatId, envelope, isCurrent, signal)
+    }
     return
   }
 

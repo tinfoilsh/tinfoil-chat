@@ -7,8 +7,13 @@ import {
   startPerformanceTimer,
 } from '@/utils/performance-metrics'
 import { SecureClient, type VerificationDocument } from 'tinfoil'
+import { INFERENCE_CLIENT_INITIALIZATION_TIMEOUT_MS } from '../constants'
 import { sseJsonStream } from '../sse'
-import { getSessionToken, invalidateSessionCache } from '../tinfoil-client'
+import {
+  TinfoilClientInitializationTimeoutError,
+  getSessionToken,
+  invalidateSessionCache,
+} from '../tinfoil-client'
 import type {
   AguiEvent,
   AguiEventStream,
@@ -16,6 +21,7 @@ import type {
   RunStorage,
 } from './protocol'
 
+const COMPONENT = 'agui-client'
 const DEV_AGUI_URL = '/api/local-router/agui'
 const DEV_SIMULATOR_URL = '/api/dev/simulator'
 // How many times a resume may come back with nothing new before the recovery
@@ -40,8 +46,7 @@ function harnessClient(): Promise<SecureClient> {
       configRepo: HARNESS_REPO,
     })
     const attestationStartedAt = startPerformanceTimer()
-    ready = candidate
-      .ready()
+    ready = withTimeout(candidate.ready())
       .then(() => {
         recordPerformanceDuration(
           PERFORMANCE_METRICS.INFERENCE_ATTESTATION,
@@ -55,6 +60,16 @@ function harnessClient(): Promise<SecureClient> {
       })
   }
   return ready
+}
+
+function withTimeout(attestation: Promise<void>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new TinfoilClientInitializationTimeoutError()),
+      INFERENCE_CLIENT_INITIALIZATION_TIMEOUT_MS,
+    )
+    attestation.then(resolve, reject).finally(() => clearTimeout(timer))
+  })
 }
 
 export async function getHarnessVerificationDocument(): Promise<VerificationDocument | null> {
@@ -81,24 +96,22 @@ export async function runAgent(
     throw await refusal(response)
   }
 
-  return sseJsonStream<AguiEvent>(response, 'agui-client')
+  return sseJsonStream<AguiEvent>(response, COMPONENT)
 }
 
-async function postRun(
-  input: RunAgentInput,
-  signal: AbortSignal,
-  lastEventId?: number | null,
+async function sendToHarness(
+  method: string,
+  input: RunAgentInput | RunStorage,
+  headers: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<Response> {
   const apiKey = await getSessionToken(signal)
   const request: RequestInit = {
-    method: 'POST',
+    method,
     headers: {
       'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
       Authorization: `Bearer ${apiKey}`,
-      ...(lastEventId === null || lastEventId === undefined
-        ? {}
-        : { 'Last-Event-ID': String(lastEventId) }),
+      ...headers,
     },
     body: JSON.stringify(input),
     signal,
@@ -107,6 +120,24 @@ async function postRun(
   return IS_DEV
     ? fetch(DEV_AGUI_URL, request)
     : (await harnessClient()).fetch(`${HARNESS_URL}/agui`, request)
+}
+
+function postRun(
+  input: RunAgentInput,
+  signal: AbortSignal,
+  lastEventId?: number | null,
+): Promise<Response> {
+  return sendToHarness(
+    'POST',
+    input,
+    {
+      Accept: 'text/event-stream',
+      ...(lastEventId === null || lastEventId === undefined
+        ? {}
+        : { 'Last-Event-ID': String(lastEventId) }),
+    },
+    signal,
+  )
 }
 
 export async function runSimulatedAgent(
@@ -128,7 +159,7 @@ export async function runSimulatedAgent(
       { status: response.status },
     )
   }
-  return sseJsonStream<AguiEvent>(response, 'agui-client')
+  return sseJsonStream<AguiEvent>(response, COMPONENT)
 }
 
 /** A session key that expired in flight is worth exactly one retry. */
@@ -156,7 +187,7 @@ async function refusal(response: Response): Promise<ChatError> {
     if (typeof text === 'string' && text) message = text
   } catch (error) {
     logError('Harness error body was not JSON', error, {
-      component: 'agui-client',
+      component: COMPONENT,
       action: 'refusal',
       metadata: { status: response.status },
     })
@@ -232,7 +263,7 @@ export async function* resumeRun(
     let terminal = false
     for await (const event of sseJsonStream<AguiEvent>(
       response,
-      'agui-client',
+      COMPONENT,
       (id) => {
         from = id
         stalled = 0
@@ -252,21 +283,9 @@ export async function* resumeRun(
 }
 
 export async function dropRun(storage: RunStorage): Promise<void> {
-  const send = async (): Promise<Response> => {
-    const request: RequestInit = {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${await getSessionToken()}`,
-      },
-      body: JSON.stringify(storage),
-    }
-    return IS_DEV
-      ? fetch(DEV_AGUI_URL, request)
-      : (await harnessClient()).fetch(`${HARNESS_URL}/agui`, request)
-  }
-
-  const response = await withFreshSession(send)
+  const response = await withFreshSession(() =>
+    sendToHarness('DELETE', storage, {}),
+  )
   // A log that cannot be opened is a log the caller asked to be gone.
   if (response.status === 403) return discard(response)
   if (!response.ok) throw await refusal(response)
