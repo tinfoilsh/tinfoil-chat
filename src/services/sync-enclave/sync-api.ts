@@ -70,6 +70,13 @@ export interface PullKey {
   key_id?: string
 }
 
+/**
+ * Upper bound on `ids` per pull request, mirroring the enclave's
+ * MaxPullIDs. The enclave rejects larger batches with 400; callers
+ * that need more rows must issue multiple requests.
+ */
+export const MAX_PULL_IDS = 100
+
 export interface PullRequest {
   scope: Scope
   ids?: string[]
@@ -84,6 +91,18 @@ export interface PullRequest {
   keys: PullKey[]
 }
 
+/**
+ * Per-item `code` values the enclave sets when a pull item has
+ * `ok=false`; mirrors the enclave's internal/server/errors.go.
+ */
+export const PULL_ITEM_CODES = {
+  NotFound: 'NOT_FOUND',
+  UnknownKey: 'UNKNOWN_KEY',
+  Network: 'NETWORK',
+  BadRequest: 'BAD_REQUEST',
+  LegacyBlobNotMigrated: 'LEGACY_BLOB_NOT_MIGRATED',
+} as const
+
 export interface PullItem {
   id: string
   ok: boolean
@@ -96,7 +115,7 @@ export interface PullItem {
   project_id_set?: boolean
   project_id?: string | null
   needs_rewrap?: boolean
-  /** Error code when `ok=false` (e.g. "NEEDS_REWRAP", "NOT_FOUND"). */
+  /** One of PULL_ITEM_CODES when `ok=false`. */
   code?: string
   reason?: string
 }

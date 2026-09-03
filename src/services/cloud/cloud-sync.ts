@@ -14,7 +14,11 @@ import {
 } from '@/services/storage/indexed-db'
 import { decideRecovery } from '@/services/sync-enclave/enclave-error-recovery'
 import { passkeyEvents } from '@/services/sync-enclave/passkey-events'
-import { keyCurrent, newIdempotencyKey } from '@/services/sync-enclave/sync-api'
+import {
+  keyCurrent,
+  newIdempotencyKey,
+  PULL_ITEM_CODES,
+} from '@/services/sync-enclave/sync-api'
 import {
   abortSyncEnclaveRequests,
   resetSyncEnclaveRequestScope,
@@ -24,11 +28,11 @@ import {
   CLOUD_SYNC_SETTING_CHANGED_EVENT,
   isCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
-import { logError } from '@/utils/error-handling'
+import { logError, logWarning } from '@/utils/error-handling'
 import type { AccountOperationGuard } from './account-operation'
 import { hasPrimaryKey, primaryKeyIdHexOrNull } from './cek-encoding'
 import { processRemoteChat } from './chat-codec'
-import { ingestRemoteChats } from './chat-ingestion'
+import { ingestRemoteChats, type RemoteChatEntry } from './chat-ingestion'
 import {
   BOOTSTRAP_RECENT_CONTENT_LIMIT,
   drainChatRevisionSync,
@@ -97,6 +101,25 @@ export class CloudSyncLifecycleCanceledError extends Error {
 
 export interface PaginatedChatsResult {
   chats: StoredChat[]
+  hasMore: boolean
+  nextToken?: string
+}
+
+type ChatListEntry = ChatListResponse['conversations'][number]
+
+/** A listed chat whose content the enclave could not return. */
+export interface UnavailableRemoteChat {
+  id: string
+  /** Enclave pull item code, one of PULL_ITEM_CODES. */
+  code: string
+}
+
+interface ChatHydrationResult {
+  saved: number
+  unavailable: UnavailableRemoteChat[]
+}
+
+export interface ChatPageResult extends ChatHydrationResult {
   hasMore: boolean
   nextToken?: string
 }
@@ -895,7 +918,7 @@ export class CloudSyncService {
 
   private isLocalChatCurrent(
     local: StoredChat | null | undefined,
-    remote: ChatListResponse['conversations'][number],
+    remote: ChatListEntry,
     userId: string,
   ): boolean {
     return (
@@ -904,6 +927,87 @@ export class CloudSyncService {
       !local.decryptionFailed &&
       local.syncVersion === remote.syncVersion
     )
+  }
+
+  /**
+   * Pull and store content for the listed chats. Rows the enclave could
+   * not return are reported rather than thrown: a chat sealed under a
+   * key this device does not hold must not block access to the rest of
+   * the history, and the caller decides whether to surface it.
+   */
+  private async hydrateChats(
+    entries: readonly ChatListEntry[],
+    generation: number,
+    userId: string,
+  ): Promise<ChatHydrationResult> {
+    if (entries.length === 0) return { saved: 0, unavailable: [] }
+    const pulled = await cloudStorage.downloadChats(
+      entries.map((entry) => entry.id),
+    )
+    this.ensureCurrentAccount(generation, userId)
+    const metadata = new Map(entries.map((entry) => [entry.id, entry]))
+    const unavailable: UnavailableRemoteChat[] = []
+    const remoteChats: RemoteChatEntry[] = []
+    for (const result of pulled) {
+      if (result.status === 'unavailable') {
+        unavailable.push({ id: result.id, code: result.code })
+        continue
+      }
+      const entry = metadata.get(result.id)!
+      remoteChats.push({
+        id: result.id,
+        content: result.content,
+        syncVersion: result.syncVersion,
+        updatedAt: entry.updatedAt,
+        projectId: entry.projectId,
+      })
+    }
+    const ingest = await ingestRemoteChats(remoteChats, {
+      setLoadedAt: true,
+      eventReason: 'pagination',
+      isCurrent: () =>
+        this.isCurrentGeneration(generation) &&
+        this.readActiveUserId() === userId,
+      userId,
+    })
+    this.ensureCurrentAccount(generation, userId)
+    if (ingest.errors.length > 0) {
+      const [failure] = ingest.errors
+      throw new RemoteChatPageIncompleteError(
+        failure.chatId,
+        'storage',
+        failure.error,
+      )
+    }
+    if (unavailable.length > 0) this.reportUnavailableChats(unavailable)
+    return { saved: ingest.downloaded, unavailable }
+  }
+
+  /**
+   * Route unreadable rows into the sync health store the UI already
+   * renders from. A row sealed under a key this device does not hold
+   * needs the user to recover that key; a row that vanished between
+   * list and pull is a benign race and stays quiet.
+   */
+  private reportUnavailableChats(
+    unavailable: readonly UnavailableRemoteChat[],
+  ): void {
+    for (const row of unavailable) {
+      switch (row.code) {
+        case PULL_ITEM_CODES.NotFound:
+          break
+        case PULL_ITEM_CODES.UnknownKey:
+          reportKeyActionRequired('key-recovery')
+          break
+        default:
+          reportChatSyncFailed(row.id, "This chat couldn't be downloaded")
+      }
+    }
+    logWarning('Sync enclave could not return some chats', {
+      component: 'CloudSync',
+      action: 'hydrateChats',
+      metadata: { unavailable },
+    })
   }
 
   async loadChatsWithPagination(options: {
@@ -918,19 +1022,28 @@ export class CloudSyncService {
         : { chats: [], hasMore: false }
     }
     try {
-      const remote = await cloudStorage.listChats({
-        limit,
-        continuationToken,
-        includeContent: true,
-      })
+      const remote = await cloudStorage.listChats({ limit, continuationToken })
+      const entries = remote.conversations.filter(
+        (entry) => !deletedChatsTracker.isDeleted(entry.id),
+      )
+      const pulled = await cloudStorage.downloadChats(
+        entries.map((entry) => entry.id),
+      )
       const chats: StoredChat[] = []
-      for (const entry of remote.conversations) {
-        if (!entry.content || deletedChatsTracker.isDeleted(entry.id)) continue
+      for (const result of pulled) {
+        if (result.status === 'unavailable') {
+          if (result.code === PULL_ITEM_CODES.NotFound) continue
+          throw new RemoteChatPageIncompleteError(
+            result.id,
+            'missing-content',
+            result.code,
+          )
+        }
         try {
           const decoded = await processRemoteChat({
-            id: entry.id,
-            plaintext: entry.content,
-            syncVersion: entry.syncVersion,
+            id: result.id,
+            plaintext: result.content,
+            syncVersion: result.syncVersion,
             formatVersion: 2,
           })
           chats.push(decoded.chat)
@@ -938,9 +1051,9 @@ export class CloudSyncService {
           logError('Failed to decode paginated remote chat', error, {
             component: 'CloudSync',
             action: 'loadChatsWithPagination',
-            metadata: { chatId: entry.id },
+            metadata: { chatId: result.id },
           })
-          throw new RemoteChatPageIncompleteError(entry.id, 'decode', error)
+          throw new RemoteChatPageIncompleteError(result.id, 'decode', error)
         }
       }
       return {
@@ -959,6 +1072,35 @@ export class CloudSyncService {
     }
   }
 
+  /**
+   * Fetch the next metadata page that carries at least one chat. The
+   * server pages chat updates and chat deletions under one cursor, so
+   * a page may legitimately hold only deletions with a cursor that still
+   * advances; those pages are skipped here so callers only ever see a
+   * page with conversations or the end of history.
+   */
+  private async listNextChatPage(options: {
+    limit: number
+    continuationToken?: string
+  }): Promise<ChatListResponse> {
+    const visitedTokens = new Set<string>()
+    let continuationToken = options.continuationToken
+    for (;;) {
+      if (continuationToken !== undefined) {
+        if (visitedTokens.has(continuationToken)) {
+          throw new Error('Cloud pagination cursor did not advance')
+        }
+        visitedTokens.add(continuationToken)
+      }
+      const page = await cloudStorage.listChats({
+        limit: options.limit,
+        continuationToken,
+      })
+      if (page.conversations.length > 0 || !page.hasMore) return page
+      continuationToken = page.nextContinuationToken
+    }
+  }
+
   async initializeChatPaginationCursor(): Promise<{
     hasMore: boolean
     nextToken?: string
@@ -971,15 +1113,14 @@ export class CloudSyncService {
     }
     this.ensureCurrentAccount(generation, userId)
     if (!userId) throw new Error('Authenticated user ID is unavailable')
-    const remote = await cloudStorage.listChats({
+    const remote = await this.listNextChatPage({
       limit: BOOTSTRAP_RECENT_CONTENT_LIMIT,
-      includeContent: false,
     })
     this.ensureCurrentAccount(generation, userId)
     const prefix = remote.conversations.filter(
       (entry) => !deletedChatsTracker.isDeleted(entry.id),
     )
-    const missingOrStale = []
+    const missingOrStale: ChatListEntry[] = []
     for (const entry of prefix) {
       const local = await indexedDBStorage.getChat(entry.id)
       this.ensureCurrentAccount(generation, userId)
@@ -987,30 +1128,10 @@ export class CloudSyncService {
         missingOrStale.push(entry)
       }
     }
-    if (missingOrStale.length > 0) {
-      const pulled = await cloudStorage.downloadChats(
-        missingOrStale.map((entry) => entry.id),
-      )
-      this.ensureCurrentAccount(generation, userId)
-      const metadata = new Map(missingOrStale.map((entry) => [entry.id, entry]))
-      await ingestRemoteChats(
-        pulled.map((entry) => ({
-          ...entry,
-          updatedAt: metadata.get(entry.id)!.updatedAt,
-          projectId: metadata.get(entry.id)!.projectId,
-        })),
-        {
-          setLoadedAt: true,
-          eventReason: 'pagination',
-          isCurrent: () =>
-            this.isCurrentGeneration(generation) &&
-            this.readActiveUserId() === userId,
-          userId,
-        },
-      )
-      this.ensureCurrentAccount(generation, userId)
-    }
+    const hydrated = await this.hydrateChats(missingOrStale, generation, userId)
+    const unavailableIds = new Set(hydrated.unavailable.map((row) => row.id))
     for (const entry of prefix) {
+      if (unavailableIds.has(entry.id)) continue
       const local = await indexedDBStorage.getChat(entry.id)
       this.ensureCurrentAccount(generation, userId)
       if (!this.isLocalChatCurrent(local, entry, userId)) {
@@ -1019,17 +1140,11 @@ export class CloudSyncService {
     }
 
     let nextToken = remote.nextContinuationToken
-    const visitedTokens = new Set<string>()
     while (nextToken) {
-      if (visitedTokens.has(nextToken)) {
-        throw new Error('Cloud pagination cursor did not advance')
-      }
-      visitedTokens.add(nextToken)
       const pageStartToken = nextToken
-      const page = await cloudStorage.listChats({
+      const page = await this.listNextChatPage({
         limit: PAGINATION.CURSOR_SCAN_PAGE_SIZE,
         continuationToken: pageStartToken,
-        includeContent: false,
       })
       this.ensureCurrentAccount(generation, userId)
       for (const entry of page.conversations) {
@@ -1048,73 +1163,25 @@ export class CloudSyncService {
   async fetchAndStorePage(options: {
     limit: number
     continuationToken?: string
-  }): Promise<{ hasMore: boolean; nextToken?: string; saved: number }> {
+  }): Promise<ChatPageResult> {
     const generation = this.accountGeneration
     const userId = this.readActiveUserId()
     if (!(await cloudStorage.isAuthenticated())) {
       this.ensureCurrentAccount(generation, userId)
-      return { hasMore: false, saved: 0 }
+      return { hasMore: false, saved: 0, unavailable: [] }
     }
     this.ensureCurrentAccount(generation, userId)
     if (!userId) throw new Error('Authenticated user ID is unavailable')
-    const remote = await cloudStorage.listChats({
-      limit: options.limit,
-      continuationToken: options.continuationToken,
-      includeContent: true,
-    })
+    const remote = await this.listNextChatPage(options)
     this.ensureCurrentAccount(generation, userId)
-    let saved = 0
-    for (const entry of remote.conversations) {
-      if (deletedChatsTracker.isDeleted(entry.id)) continue
-      if (!entry.content) continue
-      let decoded: Awaited<ReturnType<typeof processRemoteChat>>
-      try {
-        decoded = await processRemoteChat({
-          id: entry.id,
-          plaintext: entry.content,
-          syncVersion: entry.syncVersion,
-          formatVersion: 2,
-        })
-      } catch (error) {
-        this.ensureCurrentAccount(generation, userId)
-        logError('Failed to decode paginated remote chat', error, {
-          component: 'CloudSync',
-          action: 'fetchAndStorePage',
-          metadata: { chatId: entry.id },
-        })
-        continue
-      }
-      this.ensureCurrentAccount(generation, userId)
-      try {
-        const local = await indexedDBStorage.getChat(entry.id)
-        this.ensureCurrentAccount(generation, userId)
-        const applied = await indexedDBStorage.applyRemoteChatIfFresh({
-          chat: decoded.chat,
-          syncVersion: entry.syncVersion,
-          expectedLocalUpdatedAt: local?.updatedAt ?? null,
-          setLoadedAt: true,
-          isCurrent: () =>
-            this.isCurrentGeneration(generation) &&
-            this.readActiveUserId() === userId,
-          userId,
-        })
-        this.ensureCurrentAccount(generation, userId)
-        if (applied.applied) saved++
-      } catch (error) {
-        this.ensureCurrentAccount(generation, userId)
-        logError('Failed to store paginated remote chat', error, {
-          component: 'CloudSync',
-          action: 'fetchAndStorePage',
-          metadata: { chatId: entry.id },
-        })
-        throw new RemoteChatPageIncompleteError(entry.id, 'storage', error)
-      }
-    }
-    if (saved > 0) chatEvents.emit({ reason: 'pagination', ids: [] })
+    const entries = remote.conversations.filter(
+      (entry) => !deletedChatsTracker.isDeleted(entry.id),
+    )
+    const hydrated = await this.hydrateChats(entries, generation, userId)
     return {
       hasMore: remote.hasMore,
       nextToken: remote.nextContinuationToken,
-      saved,
+      ...hydrated,
     }
   }
 

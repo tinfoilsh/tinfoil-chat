@@ -39,10 +39,15 @@ export interface IngestOptions {
   userId?: string
 }
 
+export interface IngestFailure {
+  chatId: string
+  error: unknown
+}
+
 export interface IngestResult {
   savedIds: string[]
   downloaded: number
-  errors: string[]
+  errors: IngestFailure[]
 }
 
 export async function ingestRemoteChats(
@@ -122,9 +127,7 @@ export async function ingestRemoteChats(
         result.downloaded++
       }
     } catch (error) {
-      result.errors.push(
-        `Failed to process chat ${remoteChat.id}: ${error instanceof Error ? error.message : String(error)}`,
-      )
+      result.errors.push({ chatId: remoteChat.id, error })
     }
   }
 

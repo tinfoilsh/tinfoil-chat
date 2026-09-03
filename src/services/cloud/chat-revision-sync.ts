@@ -15,18 +15,18 @@ import {
   type StoredChat,
 } from '@/services/storage/indexed-db'
 import {
+  PULL_ITEM_CODES,
   revisionEvents,
   revisionSnapshot,
   revisionSummary,
   type RevisionEvent,
   type RevisionSnapshotItem,
 } from '@/services/sync-enclave/sync-api'
-import { ingestRemoteChats } from './chat-ingestion'
-import { cloudStorage } from './cloud-storage'
+import { ingestRemoteChats, type IngestFailure } from './chat-ingestion'
+import { cloudStorage, type PulledChatResult } from './cloud-storage'
 import { isUploadableChat } from './sync-predicates'
 
 const REVISION_PAGE_LIMIT = 250
-const CONTENT_BATCH_SIZE = 100
 export const BOOTSTRAP_RECENT_CONTENT_LIMIT = 50
 const DECIMAL_REVISION_PATTERN = /^\d+$/
 
@@ -67,6 +67,31 @@ function etagToSyncVersion(etag: string | undefined): number {
     throw new Error('Sync enclave returned an invalid chat ETag')
   }
   return version
+}
+
+/**
+ * Revision sync must mirror the server exactly, so a row the enclave
+ * could not return is fatal unless the row was deleted between the
+ * event and the pull; a later delete event will reconcile that case.
+ */
+function requirePulledContent(
+  results: PulledChatResult[],
+): Extract<PulledChatResult, { status: 'ok' }>[] {
+  const pulled: Extract<PulledChatResult, { status: 'ok' }>[] = []
+  for (const result of results) {
+    if (result.status === 'ok') {
+      pulled.push(result)
+    } else if (result.code !== PULL_ITEM_CODES.NotFound) {
+      throw new Error(result.code)
+    }
+  }
+  return pulled
+}
+
+function ingestFailureError(failure: IngestFailure): Error {
+  return new Error(`Failed to process chat ${failure.chatId}`, {
+    cause: failure.error,
+  })
 }
 
 function toRemoteState(
@@ -126,14 +151,9 @@ async function applyPulledUpserts(
   }
 
   let downloaded = 0
-  for (
-    let offset = 0;
-    offset < idsToPull.length;
-    offset += CONTENT_BATCH_SIZE
-  ) {
-    const pulled = await cloudStorage.downloadChats(
-      idsToPull.slice(offset, offset + CONTENT_BATCH_SIZE),
-      { tolerateNotFound: true },
+  if (idsToPull.length > 0) {
+    const pulled = requirePulledContent(
+      await cloudStorage.downloadChats(idsToPull),
     )
     ensureCurrent(isCurrent)
     const eventById = new Map(latest.map((event) => [event.id, event]))
@@ -141,7 +161,8 @@ async function applyPulledUpserts(
       pulled.map((chat) => {
         const event = eventById.get(chat.id)!
         return {
-          ...chat,
+          id: chat.id,
+          content: chat.content,
           updatedAt: event.updated_at,
           syncVersion: etagToSyncVersion(event.etag),
           projectId: event.project_id,
@@ -149,8 +170,8 @@ async function applyPulledUpserts(
       }),
       { isCurrent, userId },
     )
-    if (ingest.errors.length > 0) throw new Error(ingest.errors[0])
-    downloaded += ingest.downloaded
+    if (ingest.errors.length > 0) throw ingestFailureError(ingest.errors[0])
+    downloaded = ingest.downloaded
   }
   return {
     downloaded,
@@ -213,29 +234,24 @@ async function bootstrapFromSnapshot(
   const candidates = [...staleExisting, ...recentMissing]
 
   let downloaded = 0
-  for (
-    let offset = 0;
-    offset < candidates.length;
-    offset += CONTENT_BATCH_SIZE
-  ) {
-    const batch = candidates.slice(offset, offset + CONTENT_BATCH_SIZE)
-    const pulled = await cloudStorage.downloadChats(
-      batch.map((item) => item.id),
-      { tolerateNotFound: true },
+  if (candidates.length > 0) {
+    const pulled = requirePulledContent(
+      await cloudStorage.downloadChats(candidates.map((item) => item.id)),
     )
     ensureCurrent(isCurrent)
-    const metadata = new Map(batch.map((item) => [item.id, item]))
+    const metadata = new Map(candidates.map((item) => [item.id, item]))
     const ingest = await ingestRemoteChats(
       pulled.map((chat) => ({
-        ...chat,
+        id: chat.id,
+        content: chat.content,
         updatedAt: metadata.get(chat.id)!.updated_at,
         syncVersion: etagToSyncVersion(metadata.get(chat.id)!.etag),
         projectId: metadata.get(chat.id)!.project_id,
       })),
       { isCurrent, userId },
     )
-    if (ingest.errors.length > 0) throw new Error(ingest.errors[0])
-    downloaded += ingest.downloaded
+    if (ingest.errors.length > 0) throw ingestFailureError(ingest.errors[0])
+    downloaded = ingest.downloaded
   }
 
   ensureCurrent(isCurrent)

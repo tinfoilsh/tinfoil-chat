@@ -1,5 +1,5 @@
 import { PAGINATION } from '@/config'
-import { cloudSync } from '@/services/cloud/cloud-sync'
+import { cloudSync, type ChatPageResult } from '@/services/cloud/cloud-sync'
 import {
   CLOUD_SYNC_SETTING_CHANGED_EVENT,
   isCloudSyncEnabled,
@@ -20,14 +20,7 @@ interface UseCloudPaginationReturn {
   hasAttempted: boolean
   isInitialized: boolean
   canRetryInitialization: boolean
-  loadMore: () => Promise<
-    | {
-        hasMore: boolean
-        nextToken?: string
-        saved: number
-      }
-    | undefined
-  >
+  loadMore: () => Promise<ChatPageResult | undefined>
 }
 
 export function useCloudPagination(

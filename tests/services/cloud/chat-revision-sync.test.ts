@@ -58,7 +58,10 @@ vi.mock('@/services/storage/indexed-db', () => ({
   },
 }))
 
-vi.mock('@/services/sync-enclave/sync-api', () => ({
+vi.mock('@/services/sync-enclave/sync-api', async () => ({
+  ...(await vi.importActual<typeof import('@/services/sync-enclave/sync-api')>(
+    '@/services/sync-enclave/sync-api',
+  )),
   revisionSummary,
   revisionEvents,
   revisionSnapshot,
@@ -256,12 +259,7 @@ describe('chat revision synchronization', () => {
     })
     getChat.mockResolvedValue(null)
     downloadChats.mockResolvedValue([
-      {
-        id: 'remote-chat',
-        updatedAt: '',
-        syncVersion: 4,
-        content: '{}',
-      },
+      { status: 'ok', id: 'remote-chat', syncVersion: 4, content: '{}' },
     ])
     ingestRemoteChats.mockResolvedValue({
       savedIds: ['remote-chat'],
@@ -486,7 +484,7 @@ describe('chat revision synchronization', () => {
         : null,
     )
     downloadChats.mockImplementation(async (ids: string[]) =>
-      ids.map((id) => ({ id, content: '{}', syncVersion: 2, updatedAt: '' })),
+      ids.map((id) => ({ status: 'ok', id, content: '{}', syncVersion: 2 })),
     )
 
     await drainChatRevisionSync(adapter, userId)
@@ -523,14 +521,42 @@ describe('chat revision synchronization', () => {
       locallyModified: false,
     })
     downloadChats.mockResolvedValue([
-      { id: 'failed-chat', content: '{}', syncVersion: 4, updatedAt: '' },
+      { status: 'ok', id: 'failed-chat', content: '{}', syncVersion: 4 },
     ])
 
     await drainChatRevisionSync(adapter, userId)
 
-    expect(downloadChats).toHaveBeenCalledWith(['failed-chat'], {
-      tolerateNotFound: true,
+    expect(downloadChats).toHaveBeenCalledWith(['failed-chat'])
+  })
+
+  it('refuses to advance the checkpoint past a row it cannot read', async () => {
+    getSyncState.mockResolvedValue(null)
+    revisionSummary.mockResolvedValue({
+      current_revision: '10',
+      oldest_replayable_revision: '1',
     })
+    revisionSnapshot.mockResolvedValue({
+      snapshot_revision: '10',
+      items: [
+        {
+          id: 'locked-chat',
+          etag: '4',
+          key_id: 'other-key',
+          project_id: null,
+          updated_at: '2026-01-01T00:00:00Z',
+        },
+      ],
+    })
+    getChat.mockResolvedValue(null)
+    downloadChats.mockResolvedValue([
+      { status: 'unavailable', id: 'locked-chat', code: 'UNKNOWN_KEY' },
+    ])
+
+    await expect(drainChatRevisionSync(adapter, userId)).rejects.toThrow(
+      'UNKNOWN_KEY',
+    )
+    expect(ingestRemoteChats).not.toHaveBeenCalled()
+    expect(reconcileRevisionSnapshot).not.toHaveBeenCalled()
   })
 
   it('does not pull content for a dirty event row', async () => {
@@ -594,13 +620,13 @@ describe('chat revision synchronization', () => {
       ],
     })
     getChat.mockResolvedValue(null)
-    downloadChats.mockResolvedValue([])
+    downloadChats.mockResolvedValue([
+      { status: 'unavailable', id: 'gone-chat', code: 'NOT_FOUND' },
+    ])
 
     await drainChatRevisionSync(adapter, userId)
 
-    expect(downloadChats).toHaveBeenCalledWith(['gone-chat'], {
-      tolerateNotFound: true,
-    })
+    expect(downloadChats).toHaveBeenCalledWith(['gone-chat'])
     expect(applyRemoteDeletion).toHaveBeenCalledWith(
       'gone-chat',
       userId,

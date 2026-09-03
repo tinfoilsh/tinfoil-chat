@@ -28,6 +28,7 @@ const {
   getAllChats,
   deleteStoredChat,
   clearRevisionCheckpoint,
+  reportKeyActionRequired,
 } = vi.hoisted(() => ({
   drainChatRevisionSync: vi.fn(),
   isAuthenticated: vi.fn(),
@@ -45,6 +46,7 @@ const {
   getAllChats: vi.fn(),
   deleteStoredChat: vi.fn(),
   clearRevisionCheckpoint: vi.fn(),
+  reportKeyActionRequired: vi.fn(),
 }))
 
 vi.mock('@/services/cloud/chat-revision-sync', () => ({
@@ -95,12 +97,13 @@ vi.mock('@/services/cloud/streaming-tracker', () => ({
 vi.mock('@/services/cloud/sync-health', () => ({
   reportChatSynced: vi.fn(),
   reportChatSyncFailed: vi.fn(),
-  reportKeyActionRequired: vi.fn(),
+  reportKeyActionRequired,
   reportSyncPaused: vi.fn(),
 }))
 vi.mock('@/utils/error-handling', () => ({
   logError: vi.fn(),
   logInfo: vi.fn(),
+  logWarning: vi.fn(),
 }))
 
 describe('CloudSyncService revision coordinator routing', () => {
@@ -390,9 +393,12 @@ describe('CloudSyncService revision coordinator routing', () => {
 
   it('prevents a pagination write after the active account changes', async () => {
     listChats.mockResolvedValue({
-      conversations: [{ id: 'chat-1', content: '{}', syncVersion: 1 }],
+      conversations: [{ id: 'chat-1', syncVersion: 1, updatedAt: '' }],
       hasMore: false,
     })
+    downloadChats.mockResolvedValue([
+      { status: 'ok', id: 'chat-1', syncVersion: 1, content: '{}' },
+    ])
     processRemoteChat.mockImplementationOnce(async () => {
       localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-2')
       return { chat: { id: 'chat-1', messages: [] } }
@@ -440,7 +446,7 @@ describe('CloudSyncService revision coordinator routing', () => {
     ).resolves.toEqual({ hasMore: true, nextToken: 'page-2' })
     expect(listChats).toHaveBeenCalledWith({
       limit: 50,
-      includeContent: false,
+      continuationToken: undefined,
     })
     expect(downloadChats).not.toHaveBeenCalled()
     expect(processRemoteChat).not.toHaveBeenCalled()
@@ -488,8 +494,8 @@ describe('CloudSyncService revision coordinator routing', () => {
         hasMore: false,
       })
     downloadChats.mockResolvedValue([
-      { ...metadata[1], content: '{"id":"missing-chat"}' },
-      { ...metadata[2], content: '{"id":"stale-chat"}' },
+      { status: 'ok', ...metadata[1], content: '{"id":"missing-chat"}' },
+      { status: 'ok', ...metadata[2], content: '{"id":"stale-chat"}' },
     ])
     getChat.mockImplementation(async (id: string) => localChats.get(id))
     processRemoteChat.mockImplementation(async ({ id, syncVersion }) => ({
@@ -547,9 +553,12 @@ describe('CloudSyncService revision coordinator routing', () => {
         hasMore: false,
       })
       .mockResolvedValueOnce({
-        conversations: [{ ...unseen, content: '{}' }],
+        conversations: [unseen],
         hasMore: false,
       })
+    downloadChats.mockResolvedValue([
+      { status: 'ok', ...unseen, content: '{}' },
+    ])
     getChat.mockImplementation(async (id: string) => cachedChats.get(id))
     processRemoteChat.mockResolvedValue({
       chat: { ...unseen, syncUserId: 'user-1', messages: [] },
@@ -560,26 +569,76 @@ describe('CloudSyncService revision coordinator routing', () => {
       hasMore: true,
       nextToken: 'unseen-page',
     })
-    await service.fetchAndStorePage({
-      limit: 20,
-      continuationToken: 'unseen-page',
+    await expect(
+      service.fetchAndStorePage({
+        limit: 20,
+        continuationToken: 'unseen-page',
+      }),
+    ).resolves.toEqual({
+      hasMore: false,
+      nextToken: undefined,
+      saved: 1,
+      unavailable: [],
     })
 
-    expect(downloadChats).not.toHaveBeenCalled()
+    expect(downloadChats).toHaveBeenCalledTimes(1)
+    expect(downloadChats).toHaveBeenCalledWith([unseen.id])
     expect(listChats).toHaveBeenNthCalledWith(2, {
       limit: PAGINATION.CURSOR_SCAN_PAGE_SIZE,
       continuationToken: 'cached-page',
-      includeContent: false,
     })
     expect(listChats).toHaveBeenNthCalledWith(3, {
       limit: PAGINATION.CURSOR_SCAN_PAGE_SIZE,
       continuationToken: 'unseen-page',
-      includeContent: false,
     })
     expect(listChats).toHaveBeenNthCalledWith(4, {
       limit: 20,
       continuationToken: 'unseen-page',
-      includeContent: true,
+    })
+  })
+
+  it('skips metadata pages that carry only deletions', async () => {
+    const chat = {
+      id: 'older-chat',
+      syncVersion: 3,
+      updatedAt: '2026-01-01T00:00:00Z',
+    }
+    listChats
+      .mockResolvedValueOnce({
+        conversations: [],
+        hasMore: true,
+        nextContinuationToken: 'tombstones-2',
+      })
+      .mockResolvedValueOnce({
+        conversations: [],
+        hasMore: true,
+        nextContinuationToken: 'tombstones-3',
+      })
+      .mockResolvedValueOnce({
+        conversations: [chat],
+        hasMore: false,
+      })
+    downloadChats.mockResolvedValue([{ status: 'ok', ...chat, content: '{}' }])
+    processRemoteChat.mockResolvedValue({
+      chat: { ...chat, syncUserId: 'user-1', messages: [] },
+    })
+    getChat.mockResolvedValue(undefined)
+
+    await expect(
+      new CloudSyncService().fetchAndStorePage({
+        limit: 20,
+        continuationToken: 'tombstones-1',
+      }),
+    ).resolves.toEqual({
+      hasMore: false,
+      nextToken: undefined,
+      saved: 1,
+      unavailable: [],
+    })
+    expect(listChats).toHaveBeenCalledTimes(3)
+    expect(listChats).toHaveBeenNthCalledWith(3, {
+      limit: 20,
+      continuationToken: 'tombstones-3',
     })
   })
 
@@ -591,26 +650,19 @@ describe('CloudSyncService revision coordinator routing', () => {
         updatedAt: '2026-01-01T00:00:00Z',
       },
     ]
-    const cachedPage = [
-      {
-        id: 'cached-chat',
-        syncVersion: 2,
-        updatedAt: '2025-12-31T00:00:00Z',
-      },
-    ]
     listChats
       .mockResolvedValueOnce({
         conversations: boundary,
         hasMore: true,
         nextContinuationToken: 'repeated-page',
       })
-      .mockResolvedValueOnce({
-        conversations: cachedPage,
+      .mockResolvedValue({
+        conversations: [],
         hasMore: true,
         nextContinuationToken: 'repeated-page',
       })
-    getChat.mockImplementation(async (id: string) => ({
-      ...(id === 'boundary-chat' ? boundary[0] : cachedPage[0]),
+    getChat.mockImplementation(async () => ({
+      ...boundary[0],
       syncUserId: 'user-1',
       messages: [],
     }))
@@ -635,12 +687,7 @@ describe('CloudSyncService revision coordinator routing', () => {
     })
     getChat.mockResolvedValue(undefined)
     downloadChats.mockResolvedValue([
-      {
-        id: 'new-boundary-chat',
-        syncVersion: 2,
-        updatedAt: '',
-        content: '{}',
-      },
+      { status: 'ok', id: 'new-boundary-chat', syncVersion: 2, content: '{}' },
     ])
     processRemoteChat.mockResolvedValue({
       chat: { id: 'new-boundary-chat', syncVersion: 2, messages: [] },
@@ -671,61 +718,102 @@ describe('CloudSyncService revision coordinator routing', () => {
     ).rejects.toThrow('Cloud account changed during synchronization')
   })
 
-  it('skips unavailable rows and continues into later history', async () => {
+  it('keeps paginating past chats the enclave cannot return', async () => {
+    listChats.mockResolvedValue({
+      conversations: [
+        {
+          id: 'gone-chat',
+          syncVersion: 1,
+          updatedAt: '2026-01-03T00:00:00Z',
+        },
+        {
+          id: 'locked-chat',
+          syncVersion: 2,
+          updatedAt: '2026-01-02T00:00:00Z',
+        },
+        {
+          id: 'readable-chat',
+          syncVersion: 3,
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+      hasMore: true,
+      nextContinuationToken: 'page-3',
+    })
+    downloadChats.mockResolvedValue([
+      { status: 'unavailable', id: 'gone-chat', code: 'NOT_FOUND' },
+      { status: 'unavailable', id: 'locked-chat', code: 'UNKNOWN_KEY' },
+      { status: 'ok', id: 'readable-chat', syncVersion: 3, content: '{}' },
+    ])
+    processRemoteChat.mockResolvedValue({
+      chat: { id: 'readable-chat', syncVersion: 3, messages: [] },
+    })
+    getChat.mockResolvedValue(undefined)
+
+    await expect(
+      new CloudSyncService().fetchAndStorePage({
+        limit: 20,
+        continuationToken: 'page-2',
+      }),
+    ).resolves.toEqual({
+      hasMore: true,
+      nextToken: 'page-3',
+      saved: 1,
+      unavailable: [
+        { id: 'gone-chat', code: 'NOT_FOUND' },
+        { id: 'locked-chat', code: 'UNKNOWN_KEY' },
+      ],
+    })
+    expect(applyRemoteChatIfFresh).toHaveBeenCalledOnce()
+    expect(reportKeyActionRequired).toHaveBeenCalledWith('key-recovery')
+  })
+
+  it('does not block the boundary on a chat the enclave cannot return', async () => {
+    const readable = {
+      id: 'readable-chat',
+      syncVersion: 1,
+      updatedAt: '2026-01-02T00:00:00Z',
+    }
     listChats
       .mockResolvedValueOnce({
         conversations: [
+          readable,
           {
-            id: 'missing-chat',
-            syncVersion: 1,
-            updatedAt: '2026-01-03T00:00:00Z',
-          },
-          {
-            id: 'invalid-chat',
+            id: 'locked-chat',
             syncVersion: 2,
-            updatedAt: '2026-01-02T00:00:00Z',
-            content: 'invalid',
+            updatedAt: '2026-01-01T00:00:00Z',
           },
         ],
         hasMore: true,
-        nextContinuationToken: 'page-3',
+        nextContinuationToken: 'page-2',
       })
       .mockResolvedValueOnce({
         conversations: [
           {
-            id: 'older-chat',
+            id: 'uncached-chat',
             syncVersion: 3,
-            updatedAt: '2026-01-01T00:00:00Z',
-            content: '{}',
+            updatedAt: '2025-12-31T00:00:00Z',
           },
         ],
         hasMore: false,
       })
-    processRemoteChat
-      .mockRejectedValueOnce(new Error('invalid ciphertext'))
-      .mockResolvedValueOnce({
-        chat: { id: 'older-chat', syncVersion: 3, messages: [] },
-      })
-    getChat.mockResolvedValue(undefined)
+    const localChats = new Map<string, Record<string, unknown>>()
+    getChat.mockImplementation(async (id: string) => localChats.get(id))
+    downloadChats.mockResolvedValue([
+      { status: 'ok', ...readable, content: '{}' },
+      { status: 'unavailable', id: 'locked-chat', code: 'UNKNOWN_KEY' },
+    ])
+    processRemoteChat.mockResolvedValue({
+      chat: { ...readable, syncUserId: 'user-1', messages: [] },
+    })
+    applyRemoteChatIfFresh.mockImplementation(async ({ chat }) => {
+      localChats.set(chat.id, chat)
+      return { applied: true }
+    })
 
-    const service = new CloudSyncService()
     await expect(
-      service.fetchAndStorePage({ limit: 20, continuationToken: 'page-2' }),
-    ).resolves.toEqual({ hasMore: true, nextToken: 'page-3', saved: 0 })
-    await expect(
-      service.fetchAndStorePage({ limit: 20, continuationToken: 'page-3' }),
-    ).resolves.toEqual({ hasMore: false, nextToken: undefined, saved: 1 })
-    expect(listChats).toHaveBeenNthCalledWith(1, {
-      limit: 20,
-      continuationToken: 'page-2',
-      includeContent: true,
-    })
-    expect(listChats).toHaveBeenNthCalledWith(2, {
-      limit: 20,
-      continuationToken: 'page-3',
-      includeContent: true,
-    })
-    expect(applyRemoteChatIfFresh).toHaveBeenCalledOnce()
+      new CloudSyncService().initializeChatPaginationCursor(),
+    ).resolves.toEqual({ hasMore: true, nextToken: 'page-2' })
   })
 
   it('retains the page cursor for retry when storage fails', async () => {
@@ -735,11 +823,13 @@ describe('CloudSyncService revision coordinator routing', () => {
           id: 'chat-1',
           syncVersion: 2,
           updatedAt: '2026-01-01T00:00:00Z',
-          content: '{}',
         },
       ],
       hasMore: false,
     })
+    downloadChats.mockResolvedValue([
+      { status: 'ok', id: 'chat-1', syncVersion: 2, content: '{}' },
+    ])
     processRemoteChat.mockResolvedValue({
       chat: { id: 'chat-1', syncVersion: 2, messages: [] },
     })
@@ -764,24 +854,27 @@ describe('CloudSyncService revision coordinator routing', () => {
         limit: 20,
         continuationToken: 'page-2',
       }),
-    ).resolves.toEqual({ hasMore: false, nextToken: undefined, saved: 1 })
-    expect(listChats).toHaveBeenNthCalledWith(1, {
-      limit: 20,
-      continuationToken: 'page-2',
-      includeContent: true,
+    ).resolves.toEqual({
+      hasMore: false,
+      nextToken: undefined,
+      saved: 1,
+      unavailable: [],
     })
+    expect(listChats).toHaveBeenCalledTimes(2)
     expect(listChats).toHaveBeenNthCalledWith(2, {
       limit: 20,
       continuationToken: 'page-2',
-      includeContent: true,
     })
   })
 
   it('rejects an incomplete export page instead of falling back locally', async () => {
     listChats.mockResolvedValue({
-      conversations: [{ id: 'corrupt-chat', content: '{}', syncVersion: 1 }],
+      conversations: [{ id: 'corrupt-chat', syncVersion: 1, updatedAt: '' }],
       hasMore: false,
     })
+    downloadChats.mockResolvedValue([
+      { status: 'ok', id: 'corrupt-chat', syncVersion: 1, content: '{}' },
+    ])
     processRemoteChat.mockRejectedValueOnce(new Error('invalid ciphertext'))
 
     await expect(
