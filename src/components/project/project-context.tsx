@@ -8,6 +8,7 @@ import type {
   ProjectDocument,
   UpdateProjectData,
 } from '@/types/project'
+import { escapePromptContent } from '@/utils/prompt-escaping'
 import { createContext, useContext } from 'react'
 
 export interface LoadingProject {
@@ -73,21 +74,21 @@ export function buildProjectContext(
   project: Project,
   documents: ProjectDocument[],
 ): string {
-  let context = `## Project: ${project.name}\n`
+  let context = `## Project: ${escapePromptContent(project.name)}\n`
 
   if (project.description) {
-    context += `\n${project.description}\n`
+    context += `\n${escapePromptContent(project.description)}\n`
   }
 
   if (project.systemInstructions) {
-    context += `\n### Instructions\n${project.systemInstructions}\n`
+    context += `\n### Instructions\n${escapePromptContent(project.systemInstructions)}\n`
   }
 
   if (documents.length > 0) {
     context += `\n### Documents\n`
     for (const doc of documents) {
       if (doc.content) {
-        context += `--- ${doc.filename} ---\n${doc.content}\n\n`
+        context += `--- ${escapePromptContent(doc.filename)} ---\n${escapePromptContent(doc.content)}\n\n`
       }
     }
   }

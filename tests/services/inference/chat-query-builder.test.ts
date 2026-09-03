@@ -69,45 +69,31 @@ describe('ChatQueryBuilder', () => {
     expect(messages).toEqual([{ role: 'user', content: 'hello' }])
   })
 
-  it('omits synthetic system wrappers when there is no prompt content', () => {
-    const messages = ChatQueryBuilder.buildMessages({
-      model: { ...model, modelName: 'deepseek-r1' },
-      systemPrompt: '',
-      rules: '',
-      messages: [userMessage],
-      includeGenUIHint: false,
-    })
+  it('uses the system role for every model, including DeepSeek and Auto', () => {
+    const deepseek: BaseModel = {
+      ...model,
+      modelName: 'deepseek-v4-flash',
+      name: 'DeepSeek V4 Flash',
+    }
 
-    expect(messages).toEqual([{ role: 'user', content: 'hello' }])
-  })
+    for (const params of [
+      { model },
+      { model: deepseek },
+      { model, autoCandidates: [model, deepseek] },
+    ]) {
+      const messages = ChatQueryBuilder.buildMessages({
+        ...params,
+        systemPrompt: 'be helpful',
+        rules: '',
+        messages: [userMessage],
+        includeGenUIHint: false,
+      })
 
-  it('uses the system role for system-role models by default', () => {
-    const messages = ChatQueryBuilder.buildMessages({
-      model,
-      systemPrompt: 'be helpful',
-      rules: '',
-      messages: [userMessage],
-      includeGenUIHint: false,
-    })
-
-    expect(messages[0]).toEqual({ role: 'system', content: 'be helpful' })
-  })
-
-  it('prepends the system prompt as a user message when forced', () => {
-    const messages = ChatQueryBuilder.buildMessages({
-      model,
-      systemPrompt: 'be helpful',
-      rules: '',
-      messages: [userMessage],
-      includeGenUIHint: false,
-      forcePrependSystemPrompt: true,
-    })
-
-    expect(messages.some((m) => m.role === 'system')).toBe(false)
-    expect(messages[0]).toEqual({
-      role: 'user',
-      content: '<system>\nbe helpful\n</system>',
-    })
+      expect(messages).toEqual([
+        { role: 'system', content: 'be helpful' },
+        { role: 'user', content: 'hello' },
+      ])
+    }
   })
 
   it('appends a current-time reminder as the last message when requested', () => {
