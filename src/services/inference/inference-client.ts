@@ -414,16 +414,6 @@ export async function sendChatStream(
     )
   }
 
-  // For Auto, the router may pick any candidate, so the single built message
-  // set must be valid for all of them. If any candidate doesn't support the
-  // system role (e.g. DeepSeek), inject the system prompt as a leading user
-  // message, a form every model understands.
-  const forcePrependSystemPrompt = Boolean(
-    autoCandidates?.some(
-      (c) => !ChatQueryBuilder.shouldUseSystemRole(c.modelName),
-    ),
-  )
-
   const messages = ChatQueryBuilder.buildMessages({
     model,
     systemPrompt,
@@ -431,7 +421,6 @@ export async function sendChatStream(
     messages: updatedMessages,
     autoCandidates,
     includeGenUIHint: genUIEnabled,
-    forcePrependSystemPrompt,
     includeTimeReminder: true,
   })
 
@@ -769,21 +758,10 @@ export async function sendStructuredCompletion<T>(
     reasoningEffort,
     thinkingEnabled,
   } = params
-  const selectedCandidates = autoCandidates ?? [model]
-  const requestMessages = selectedCandidates.some(
-    (candidate) => !ChatQueryBuilder.shouldUseSystemRole(candidate.modelName),
-  )
-    ? messages.map((message) =>
-        message.role === 'system'
-          ? { ...message, role: 'user' as const }
-          : message,
-      )
-    : messages
-
   const requestBody: ChatCompletionCreateParamsNonStreaming &
     Record<string, unknown> = {
     model: model.modelName,
-    messages: requestMessages,
+    messages,
     stream: false,
   }
   const modelParamOpts = { thinkingEnabled, reasoningEffort }

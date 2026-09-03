@@ -21,15 +21,8 @@ import type {
 } from 'openai/resources/chat/completions'
 
 /**
- * Helper for building chat completion queries with model-specific system prompt injection
- *
- * **System Prompt Handling by Model:**
- * - **Llama** (llama3-3-70b): Uses system role with header tokens
- * - **GPT-OSS** (gpt-oss-120b): Uses system role (Harmony format)
- * - **Qwen** (qwen2-5-72b): Uses system role (ChatML format)
- * - **Mistral** (mistral-small): Uses system role (ChatML format)
- * - **DeepSeek** (deepseek-r1): Prepends to first user message (no system role support)
- * - **Unknown models**: Prepends to first user message (safe default)
+ * Helper for building chat completion queries. The system prompt is always
+ * sent with the `system` role; every hosted chat model supports it.
  */
 
 export interface ChatQueryBuilderParams {
@@ -43,13 +36,6 @@ export interface ChatQueryBuilderParams {
    * so non-chat callers (title gen, memory) stay unaffected.
    */
   includeGenUIHint?: boolean
-  /**
-   * Force injecting the system prompt as a leading user message instead of a
-   * system-role message. Used for Auto selection so a single built message set
-   * is valid for every candidate the router may pick, including models that
-   * don't support the system role (e.g. DeepSeek).
-   */
-  forcePrependSystemPrompt?: boolean
   /**
    * Append an ephemeral current-time reminder as the final message. The
    * reminder is built at request time and never persisted, keeping the
@@ -74,10 +60,8 @@ export class ChatQueryBuilder {
       messages: conversationMessages,
       autoCandidates,
       includeGenUIHint,
-      forcePrependSystemPrompt,
       includeTimeReminder,
     } = params
-    const modelId = model.modelName
     const reasoningHistoryPolicy = getReasoningHistoryPolicy({
       model,
       autoCandidates,
@@ -99,24 +83,16 @@ export class ChatQueryBuilder {
 
     const result: ChatCompletionMessageParam[] = []
 
-    // Determine if we should use system role or prepend to user message
-    const useSystemRole =
-      !forcePrependSystemPrompt && this.shouldUseSystemRole(modelId)
-
-    // Add system message/instructions based on model requirements
-    if (useSystemRole) {
-      const systemContent = this.buildSystemContent(
-        modelId,
-        processedSystemPrompt,
-        processedRules,
-        genUIHint,
-      )
-      if (systemContent) {
-        result.push({
-          role: 'system',
-          content: systemContent,
-        } as ChatCompletionSystemMessageParam)
-      }
+    const systemContent = this.buildSystemContent(
+      processedSystemPrompt,
+      processedRules,
+      genUIHint,
+    )
+    if (systemContent) {
+      result.push({
+        role: 'system',
+        content: systemContent,
+      } as ChatCompletionSystemMessageParam)
     }
 
     // Add conversation history that fits within the model's context budget
@@ -125,7 +101,6 @@ export class ChatQueryBuilder {
       contextWindowTokens,
       { reasoningHistoryPolicy },
     )
-    let addedSystemInstructions = useSystemRole
 
     for (let index = 0; index < recentMessages.length; index++) {
       const msg = recentMessages[index]
@@ -135,28 +110,9 @@ export class ChatQueryBuilder {
       )
 
       if (msg.role === 'user') {
-        let userContent = this.buildUserContent(msg, model.multimodal)
-
-        // For models that don't use system role (e.g. DeepSeek): inject system instructions as a separate user message before the first user message
-        if (!addedSystemInstructions) {
-          const rawInstructions = processedRules
-            ? `${processedSystemPrompt}\n\n${processedRules}`
-            : processedSystemPrompt
-          const withHint = genUIHint
-            ? `${rawInstructions}\n\n${genUIHint}`
-            : rawInstructions
-          if (withHint.trim()) {
-            result.push({
-              role: 'user',
-              content: `<system>\n${withHint}\n</system>`,
-            } as ChatCompletionUserMessageParam)
-          }
-          addedSystemInstructions = true
-        }
-
         result.push({
           role: 'user',
-          content: userContent,
+          content: this.buildUserContent(msg, model.multimodal),
         } as ChatCompletionUserMessageParam)
       } else if (
         msg.content ||
@@ -218,19 +174,7 @@ export class ChatQueryBuilder {
     return result
   }
 
-  /**
-   * Determine if the model should use system role or prepend to user message.
-   * Most models support system role; DeepSeek is the known exception.
-   */
-  static shouldUseSystemRole(modelId: string): boolean {
-    return !modelId.startsWith('deepseek')
-  }
-
-  /**
-   * Build system content based on model requirements
-   */
   private static buildSystemContent(
-    _modelId: string,
     systemPrompt: string,
     rules: string,
     genUIHint: string | null,
