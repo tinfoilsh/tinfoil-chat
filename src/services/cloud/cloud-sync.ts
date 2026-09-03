@@ -1079,11 +1079,13 @@ export class CloudSyncService {
    * advances; those pages are skipped here so callers only ever see a
    * page with conversations or the end of history.
    */
-  private async listNextChatPage(options: {
-    limit: number
-    continuationToken?: string
-  }): Promise<ChatListResponse> {
-    const visitedTokens = new Set<string>()
+  private async listNextChatPage(
+    options: {
+      limit: number
+      continuationToken?: string
+    },
+    visitedTokens = new Set<string>(),
+  ): Promise<ChatListResponse> {
     let continuationToken = options.continuationToken
     for (;;) {
       if (continuationToken !== undefined) {
@@ -1139,13 +1141,17 @@ export class CloudSyncService {
       }
     }
 
+    const visitedTokens = new Set<string>()
     let nextToken = remote.nextContinuationToken
     while (nextToken) {
       const pageStartToken = nextToken
-      const page = await this.listNextChatPage({
-        limit: PAGINATION.CURSOR_SCAN_PAGE_SIZE,
-        continuationToken: pageStartToken,
-      })
+      const page = await this.listNextChatPage(
+        {
+          limit: PAGINATION.CURSOR_SCAN_PAGE_SIZE,
+          continuationToken: pageStartToken,
+        },
+        visitedTokens,
+      )
       this.ensureCurrentAccount(generation, userId)
       for (const entry of page.conversations) {
         if (deletedChatsTracker.isDeleted(entry.id)) continue
