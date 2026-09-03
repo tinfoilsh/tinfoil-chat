@@ -1,6 +1,5 @@
 import { PAGINATION } from '@/config'
 import {
-  SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED,
   UI_EXPAND_PROJECTS_ON_MOUNT,
   UI_SIDEBAR_ACTIVE_TAB,
   UI_SIDEBAR_CHAT_HISTORY_EXPANDED,
@@ -21,7 +20,7 @@ import {
   hasUserSetLocalOnlyPreference,
   isCloudSyncEnabled,
   isLocalOnlyModeEnabled,
-  setCloudSyncEnabled as setCloudSyncEnabledSetting,
+  recordCloudSyncPreference,
   setLocalOnlyModeEnabled as setLocalOnlyModeSetting,
 } from '@/utils/cloud-sync-settings'
 import { logInfo } from '@/utils/error-handling'
@@ -883,17 +882,11 @@ export function ChatSidebar({
 
       // If key exists, proceed with enabling
       setCloudSyncEnabled(true)
-      setCloudSyncEnabledSetting(true)
-
-      // Clear the explicit disable flag when re-enabling
-      localStorage.removeItem(SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED)
+      recordCloudSyncPreference(true)
     } else {
       // Disabling cloud sync
       setCloudSyncEnabled(false)
-      setCloudSyncEnabledSetting(false)
-
-      // Mark that user explicitly disabled cloud sync (to prevent auto-enable)
-      localStorage.setItem(SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED, 'true')
+      recordCloudSyncPreference(false)
 
       try {
         const deletedCount = await chatStorage.deleteAllNonLocalChats()
@@ -914,14 +907,6 @@ export function ChatSidebar({
           metadata: { error },
         })
       }
-    }
-
-    if (isClient) {
-      window.dispatchEvent(
-        new CustomEvent(CLOUD_SYNC_SETTING_CHANGED_EVENT, {
-          detail: { enabled },
-        }),
-      )
     }
   }
 
