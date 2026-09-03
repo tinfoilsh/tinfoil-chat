@@ -602,6 +602,7 @@ describe('CloudSyncService revision coordinator routing', () => {
       id: 'older-chat',
       syncVersion: 3,
       updatedAt: '2026-01-01T00:00:00Z',
+      projectId: null,
     }
     listChats
       .mockResolvedValueOnce({
@@ -640,6 +641,10 @@ describe('CloudSyncService revision coordinator routing', () => {
       limit: 20,
       continuationToken: 'tombstones-3',
     })
+    expect(processRemoteChat).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'older-chat' }),
+      expect.objectContaining({ projectId: null }),
+    )
   })
 
   it('rejects a non-advancing metadata cursor', async () => {
@@ -671,6 +676,40 @@ describe('CloudSyncService revision coordinator routing', () => {
       new CloudSyncService().initializeChatPaginationCursor(),
     ).rejects.toThrow('Cloud pagination cursor did not advance')
     expect(listChats).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects a cursor cycle that spans cached metadata pages', async () => {
+    const cached = new Map<string, Record<string, unknown>>()
+    const page = (id: string) => ({
+      id,
+      syncVersion: 1,
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    for (const id of ['boundary-chat', 'cached-a', 'cached-b']) {
+      cached.set(id, { ...page(id), syncUserId: 'user-1', messages: [] })
+    }
+    listChats
+      .mockResolvedValueOnce({
+        conversations: [page('boundary-chat')],
+        hasMore: true,
+        nextContinuationToken: 'page-a',
+      })
+      .mockResolvedValueOnce({
+        conversations: [page('cached-a')],
+        hasMore: true,
+        nextContinuationToken: 'page-b',
+      })
+      .mockResolvedValueOnce({
+        conversations: [page('cached-b')],
+        hasMore: true,
+        nextContinuationToken: 'page-a',
+      })
+    getChat.mockImplementation(async (id: string) => cached.get(id))
+
+    await expect(
+      new CloudSyncService().initializeChatPaginationCursor(),
+    ).rejects.toThrow('Cloud pagination cursor did not advance')
+    expect(listChats).toHaveBeenCalledTimes(3)
   })
 
   it('withholds a cursor when a boundary mutation is not fully stored', async () => {

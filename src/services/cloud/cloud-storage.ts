@@ -27,7 +27,10 @@ import {
   SyncEnclaveError,
   SyncNetworkError,
 } from '../sync-enclave/sync-enclave-client'
-import { RESTORE_DELETED_HEADERS } from '../sync-enclave/wire-contract'
+import {
+  PULL_ITEM_CODE_UNSPECIFIED,
+  RESTORE_DELETED_HEADERS,
+} from '../sync-enclave/wire-contract'
 import type { AccountOperationGuard } from './account-operation'
 import {
   CloudBackupReadError,
@@ -66,7 +69,8 @@ export interface ChatListResponse {
     id: string
     updatedAt: string
     syncVersion: number
-    projectId?: string
+    /** Authoritative server value; null means the chat is in no project. */
+    projectId: string | null
   }>
   nextContinuationToken?: string
   hasMore: boolean
@@ -163,7 +167,7 @@ function chatUpdateToMeta(update: {
     id: update.id,
     updatedAt: update.updated_at,
     syncVersion: etagToSyncVersion(update.etag) ?? 1,
-    projectId: update.project_id ?? undefined,
+    projectId: update.project_id ?? null,
   }
 }
 
@@ -185,7 +189,11 @@ function settlePulledChatBatch(
       throw new Error('Sync enclave returned an incomplete chat batch')
     }
     if (!item.ok) {
-      return { status: 'unavailable', id, code: item.code ?? 'UNKNOWN' }
+      return {
+        status: 'unavailable',
+        id,
+        code: item.code ?? PULL_ITEM_CODE_UNSPECIFIED,
+      }
     }
     const plaintext = pullItemPlaintext(item)
     if (!plaintext) {
