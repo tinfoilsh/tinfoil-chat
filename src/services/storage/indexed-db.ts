@@ -1746,14 +1746,30 @@ export class IndexedDBStorage {
     })
   }
 
+  /**
+   * Remove every synced chat from the local mirror. The revision
+   * checkpoint asserts that the mirror reflects every remote change up
+   * to `appliedRevision`; once the mirror is emptied that assertion is
+   * false, so the checkpoint is cleared in the same transaction and the
+   * next sync re-bootstraps from a snapshot instead of replaying only
+   * the changes made since the wipe.
+   */
   async deleteAllNonLocalChats(): Promise<number> {
     return this.enqueueSave('deleteAllNonLocalChats', async () => {
       const db = await this.ensureDB()
       return new Promise((resolve, reject) => {
         const transaction = db.transaction(
-          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
+          [
+            CHATS_STORE,
+            ATTACHMENT_PAYLOADS_STORE,
+            CHAT_SUMMARIES_STORE,
+            SYNC_STATE_STORE,
+            REMOTE_CHAT_STATE_STORE,
+          ],
           'readwrite',
         )
+        transaction.objectStore(SYNC_STATE_STORE).clear()
+        transaction.objectStore(REMOTE_CHAT_STATE_STORE).clear()
         const store = transaction.objectStore(CHATS_STORE)
         const request = store.openCursor()
         let deletedCount = 0
