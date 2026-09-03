@@ -82,7 +82,6 @@ describe('inferenceRequest', () => {
     expect(init?.headers).toMatchObject({
       Authorization: 'Bearer session-key-1',
       'Content-Type': 'application/json',
-      'X-Tinfoil-Events': expect.stringContaining('web_search'),
     })
   })
 

@@ -164,7 +164,7 @@ async function classifyQuotaExhausted429(
   // a user whose last request was merely throttled, misclassifying a
   // transient 429 as exhaustion.
   discardRateLimitSnapshot()
-  await refreshRateLimit()
+  await refreshRateLimit(true)
   const limit = getRateLimitInfo()
   if (!limit || limit.remaining > 0) {
     return null
@@ -237,7 +237,7 @@ export interface SendChatStreamParams {
 export interface ChatRecoveryCallbacks {
   onAttemptStarted: (storage: RunStorage) => void
   onRunRecoverable: (storage: RunStorage) => Promise<void>
-  onAttemptAbandoned: (storage: RunStorage) => Promise<void>
+  onAttemptAbandoned: (storage: RunStorage, spilled?: boolean) => Promise<void>
 }
 
 export async function sendChatStream(
@@ -275,6 +275,8 @@ export async function sendChatStream(
     ),
   )
 
+  const genUITools = genUIEnabled ? buildGenUIToolSchemas() : []
+
   const messages = ChatQueryBuilder.buildMessages({
     model,
     autoCandidates,
@@ -290,7 +292,7 @@ export async function sendChatStream(
     threadId,
     runId,
     messages,
-    tools: genUIEnabled ? buildGenUIToolSchemas() : undefined,
+    tools: genUITools.length > 0 ? genUITools : undefined,
     forwardedProps: {
       model: routed ? AUTO_REQUEST_MODEL : model.modelName,
       reasoningEffort,
@@ -376,7 +378,7 @@ export async function sendChatStream(
     } catch (err: unknown) {
       if (storage && recovery) {
         try {
-          await recovery.onAttemptAbandoned(storage)
+          await recovery.onAttemptAbandoned(storage, false)
         } catch (cleanupError) {
           logError('Failed to abandon chat recovery attempt', cleanupError, {
             component: 'inference-client',

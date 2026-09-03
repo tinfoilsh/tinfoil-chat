@@ -16,6 +16,9 @@ if (isHostedBuild && process.env.NEXT_PUBLIC_DEV === 'true') {
   )
 }
 
+const harnessDevTarget =
+  process.env.HARNESS_DEV_TARGET || 'http://localhost:8090'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   ...(isDev ? {} : { output: 'export' }),
@@ -27,7 +30,7 @@ const nextConfig = {
   },
 
   // Performance optimizations
-  compress: true,
+  compress: false,
   poweredByHeader: false,
 
   // Optimize production builds
@@ -44,6 +47,10 @@ const nextConfig = {
       {
         source: '/api/dev/simulator',
         destination: 'http://localhost:3001/api/dev/simulator',
+      },
+      {
+        source: '/api/local-router/agui',
+        destination: `${harnessDevTarget}/agui`,
       },
       {
         source: '/api/local-router/:path*',

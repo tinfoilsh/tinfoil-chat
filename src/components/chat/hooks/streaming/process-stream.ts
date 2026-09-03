@@ -29,6 +29,7 @@ export async function processStreamingResponse(
   const publisher = new AnimationFramePublisher(ctx.onUpdate)
   let interruptionPublished = false
   let publicationCompleted = false
+  let runFailed = false
 
   const publishInterruption = () => {
     if (interruptionPublished) return
@@ -48,6 +49,7 @@ export async function processStreamingResponse(
     for await (const event of stream) {
       if (ctx.signal?.aborted) break
       streamLogger?.logParsedEvent(event)
+      runFailed ||= event.type === 'RUN_ERROR'
       if (session.processEvent(event)) {
         publisher.publishLazy(() => session.snapshot(ctx.turnId))
       }
@@ -58,6 +60,14 @@ export async function processStreamingResponse(
     const message = session.complete(ctx.turnId)
     if (session.hasChanges) await publisher.finish(message)
     if (ctx.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    publicationCompleted = true
+    streamLogger?.flush(streamingChatId)
+    return message
+  } catch (error) {
+    if (!runFailed || ctx.signal?.aborted) throw error
+    const message = session.interruptedSnapshot(ctx.turnId)
+    if (!hasVisibleAssistantMessage(message)) throw error
+    await publisher.finish(message)
     publicationCompleted = true
     streamLogger?.flush(streamingChatId)
     return message

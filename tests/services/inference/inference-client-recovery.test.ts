@@ -156,6 +156,7 @@ describe('sendChatStream recovery pair', () => {
 
     expect(recovery.onAttemptAbandoned).toHaveBeenCalledWith(
       attemptPair(recovery),
+      false,
     )
     expect(recovery.onRunRecoverable).not.toHaveBeenCalled()
   })
@@ -169,6 +170,7 @@ describe('sendChatStream recovery pair', () => {
     expect(recovery.onAttemptStarted).toHaveBeenCalledOnce()
     expect(recovery.onAttemptAbandoned).toHaveBeenCalledWith(
       attemptPair(recovery),
+      false,
     )
   })
 
@@ -198,7 +200,10 @@ describe('sendChatStream recovery pair', () => {
     expect(second.sessionId).not.toBe(first.sessionId)
     expect(second.recoveryToken).not.toBe(first.recoveryToken)
 
-    expect(recovery.onAttemptAbandoned).toHaveBeenCalledExactlyOnceWith(first)
+    expect(recovery.onAttemptAbandoned).toHaveBeenCalledExactlyOnceWith(
+      first,
+      false,
+    )
     expect(recovery.onRunRecoverable).toHaveBeenCalledExactlyOnceWith(second)
     expect(runAgent).toHaveBeenLastCalledWith(
       expect.objectContaining({

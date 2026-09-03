@@ -277,6 +277,7 @@ export async function persistChatRecoveryEnvelope(args: {
 
 export async function abandonChatRecoveryAttempt(
   storage: RunStorage,
+  spilled = true,
 ): Promise<void> {
   const active = activeRecoveries.get(storage.sessionId)
   activeRecoveries.delete(storage.sessionId)
@@ -288,7 +289,7 @@ export async function abandonChatRecoveryAttempt(
       }
     }
   } finally {
-    await dropRunQuietly(storage)
+    if (spilled) await dropRunQuietly(storage)
   }
 }
 
@@ -316,7 +317,6 @@ export async function completeLiveChatRecovery(args: {
     isCurrent,
   )
   activeRecoveries.delete(active.storage.sessionId)
-  await dropRunQuietly(active.storage)
   return {
     ...completedChat,
     createdAt: new Date(completedChat.createdAt),

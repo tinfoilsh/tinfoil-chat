@@ -7,11 +7,6 @@ import {
   recordPerformanceDuration,
   startPerformanceTimer,
 } from '@/utils/performance-metrics'
-import {
-  TINFOIL_EVENTS_HEADER,
-  TINFOIL_EVENTS_VALUE_CODE_EXECUTION,
-  TINFOIL_EVENTS_VALUE_WEB_SEARCH,
-} from '@/utils/tinfoil-events'
 import { SecureClient } from 'tinfoil'
 import { authTokenManager } from '../auth'
 import { INFERENCE_CLIENT_INITIALIZATION_TIMEOUT_MS } from './constants'
@@ -399,8 +394,11 @@ export function discardRateLimitSnapshot(): void {
  * falls back to snapshot - 1 so the UI stays accurate.
  * Concurrent calls are coalesced into a single in-flight request.
  */
-export async function refreshRateLimit(): Promise<void> {
+export async function refreshRateLimit(force = false): Promise<void> {
   if (refreshInFlight) return refreshInFlight
+  if (!force && cachedSessionToken && cachedRateLimit?.kind !== 'free_daily') {
+    return
+  }
 
   const refresh = (async () => {
     const refreshGeneration = sessionCacheGeneration
@@ -596,8 +594,6 @@ export async function inferenceRequest(
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        // Opt into the router's inline progress-marker stream.
-        [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,
         ...options.headers,
       },
       body,

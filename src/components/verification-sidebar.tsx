@@ -68,7 +68,6 @@ export function VerifierSidebar({
     isRetryingRef.current = true
     retryCountRef.current = 0
 
-    let sawDocument = false
     const attemptFetch = async (): Promise<boolean> => {
       if (!isOnline()) {
         logInfo('No internet connection, waiting to retry verification', {
@@ -82,7 +81,6 @@ export function VerifierSidebar({
       try {
         const doc = await getHarnessVerificationDocument()
         if (doc) {
-          sawDocument = true
           setVerificationDocument(doc)
           if (onVerificationUpdateRef.current) {
             onVerificationUpdateRef.current(doc)
@@ -151,8 +149,7 @@ export function VerifierSidebar({
         onVerificationCompleteRef.current('verified')
         return
       }
-      // A document that never reached a verdict is still pending, not failed.
-      onVerificationCompleteRef.current(sawDocument ? 'pending' : 'failed')
+      onVerificationCompleteRef.current('failed')
     } finally {
       isRetryingRef.current = false
     }

@@ -116,7 +116,7 @@ describe('VerifierSidebar', () => {
     expect(mocks.getCachedHarnessVerificationDocument).toHaveBeenCalledTimes(2)
   })
 
-  it('reports pending when attestation reaches no verdict', async () => {
+  it('reports failed when attestation never reaches a verdict', async () => {
     onLineSpy.mockReturnValue(true)
     mocks.getHarnessVerificationDocument.mockResolvedValue({
       securityVerified: undefined,
@@ -127,9 +127,9 @@ describe('VerifierSidebar', () => {
     requestVerificationDocument()
 
     await waitFor(() =>
-      expect(onVerificationComplete).toHaveBeenCalledWith('pending'),
+      expect(onVerificationComplete).toHaveBeenCalledWith('failed'),
     )
-    expect(onVerificationComplete).not.toHaveBeenCalledWith('failed')
+    expect(onVerificationComplete).not.toHaveBeenCalledWith('pending')
   })
 
   it('short-circuits to unverified in dev without fetching', async () => {

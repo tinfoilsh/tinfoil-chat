@@ -289,6 +289,38 @@ describe('processStreamingResponse interruption', () => {
   })
 })
 
+describe('processStreamingResponse failed runs', () => {
+  it('keeps what a failed run already said as the answer', async () => {
+    const stream = (async function* (): AguiEventStream {
+      yield { type: 'TEXT_MESSAGE_CHUNK', messageId: 'm', delta: 'Half an ' }
+      yield { type: 'TEXT_MESSAGE_CHUNK', messageId: 'm', delta: 'answer' }
+      yield { type: 'RUN_ERROR', message: 'gateway refused' }
+    })()
+
+    const message = await processStreamingResponse(
+      stream,
+      createContext({ turnId: 'turn-1' }),
+    )
+
+    expect(message).toMatchObject({
+      role: 'assistant',
+      content: 'Half an answer',
+      turnId: 'turn-1',
+      isThinking: false,
+    })
+  })
+
+  it('surfaces the failure when the run said nothing', async () => {
+    const stream = (async function* (): AguiEventStream {
+      yield { type: 'RUN_ERROR', message: 'gateway refused' }
+    })()
+
+    await expect(
+      processStreamingResponse(stream, createContext()),
+    ).rejects.toMatchObject({ name: 'ChatError', code: 'SERVER_ERROR' })
+  })
+})
+
 describe('processStreamingResponse frame publication', () => {
   let nextFrameId = 1
   let frames: Map<number, FrameRequestCallback>
