@@ -250,24 +250,24 @@ function appended(patch: AguiJsonPatch[]): string[] {
   return notes
 }
 
-function readJson<T>(raw: string): T | null {
+function readJson<T>(
+  raw: string,
+  onFailure?: (error: unknown) => void,
+): T | null {
   if (!raw) return null
   try {
     return JSON.parse(raw) as T
-  } catch {
+  } catch (error) {
+    onFailure?.(error)
     return null
   }
 }
 
 function parseJson<T>(raw: string): T | null {
-  if (!raw) return null
-  try {
-    return JSON.parse(raw) as T
-  } catch (error) {
+  return readJson<T>(raw, (error) =>
     logError('Failed to parse tool payload', error, {
       component: 'agui-normalizer',
       metadata: { length: raw.length },
-    })
-    return null
-  }
+    }),
+  )
 }
