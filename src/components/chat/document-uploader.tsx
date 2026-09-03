@@ -135,15 +135,6 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
     )
     if (!response.ok) {
       const errorText = await response.text()
-      logError(
-        `Image description failed with status: ${response.status}`,
-        undefined,
-        {
-          component: 'DocumentUploader',
-          action: 'describeImage',
-          metadata: { status: response.status, errorText },
-        },
-      )
       throw new Error(
         `Image description failed: ${response.status}. ${errorText}`,
       )

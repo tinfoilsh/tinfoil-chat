@@ -635,14 +635,16 @@ describe('useChatMessaging stopped streams', () => {
         { role: 'user', content: 'Earlier', timestamp: new Date() },
         { role: 'assistant', content: 'Earlier reply', timestamp: new Date() },
       ],
+      codeExecutionAccessToken: 'token',
     }
     let finishContainerAuth!: () => void
     containerAuthTokenMock.mockImplementationOnce(
       () =>
-        new Promise<null>((resolve) => {
-          finishContainerAuth = () => resolve(null)
+        new Promise<string>((resolve) => {
+          finishContainerAuth = () => resolve('container-auth')
         }),
     )
+    sendChatStreamMock.mockResolvedValue(createOpenStream().stream)
 
     const { result } = renderHook(() => {
       const [currentChat, setCurrentChat] = useState(initialChat)
@@ -657,6 +659,7 @@ describe('useChatMessaging stopped streams', () => {
         setChats,
         setCurrentChat,
         codeExecutionEnabled: true,
+        codeExecutionEncryptionKey: 'encryption-key',
       })
       return { messaging }
     })

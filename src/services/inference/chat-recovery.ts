@@ -72,6 +72,7 @@ const RECOVERY_SCAN_CONCURRENCY = 4
 // would otherwise absorb every future scan and silently disable recovery
 // for the rest of the session.
 const RECOVERY_SCAN_MAX_AGE_MS = 120_000
+const REMOVABLE_RECOVERY_ENVELOPE_VERSIONS = new Set([1])
 let recoveryGeneration = 0
 let recoveryScanGeneration = 0
 let queuedScanUserId: string | null = null
@@ -505,9 +506,8 @@ async function processEnvelope(
   // resumed here, so it goes now rather than failing to open on every scan
   // until it expires. The version is read off persisted JSON, which the type
   // describes but does not enforce.
-  const version = envelope.v as number
-  if (version !== RECOVERY_ENVELOPE_VERSION) {
-    if (Number.isSafeInteger(version) && version < RECOVERY_ENVELOPE_VERSION) {
+  if ((envelope.v as number) !== RECOVERY_ENVELOPE_VERSION) {
+    if (REMOVABLE_RECOVERY_ENVELOPE_VERSIONS.has(envelope.v as number)) {
       await removePendingRecovery(chatId, envelope, isCurrent, signal)
     }
     return
