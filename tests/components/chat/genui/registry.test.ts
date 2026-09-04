@@ -1,11 +1,28 @@
+import { setGenUIConfig } from '@/components/chat/genui/config'
 import {
   buildGenUIToolSchemas,
   GENUI_WIDGETS,
   GENUI_WIDGETS_BY_NAME,
 } from '@/components/chat/genui/registry'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+
+beforeEach(() => {
+  setGenUIConfig({
+    header: 'h',
+    enabledWidgets: GENUI_WIDGETS.map((w) => w.name),
+  })
+})
+
+afterEach(() => {
+  setGenUIConfig(null)
+})
 
 describe('GenUI registry', () => {
+  it('builds no tool schemas without controlplane config', () => {
+    setGenUIConfig(null)
+    expect(buildGenUIToolSchemas()).toHaveLength(0)
+  })
+
   it('has unique render_* tool names', () => {
     const names = GENUI_WIDGETS.map((w) => w.name)
     expect(names).toEqual(Array.from(new Set(names)))

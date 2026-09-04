@@ -121,7 +121,7 @@ export default function SharePage() {
           return
         }
 
-        const models = await getAIModels()
+        const models = (await getAIModels()) ?? []
         const chatModel = models.find((m) => m.type === 'chat') || models[0]
         if (!chatModel) {
           setErrorMessage('Failed to load model configuration')

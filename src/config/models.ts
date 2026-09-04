@@ -1,4 +1,7 @@
-import { setGenUIConfig } from '@/components/chat/genui/config'
+import {
+  setGenUIConfig,
+  type GenUIConfig,
+} from '@/components/chat/genui/config'
 import { API_BASE_URL, IS_DEV } from '@/config'
 import {
   CONFIG_CACHED_MODELS,
@@ -337,13 +340,14 @@ const isLocalDevelopment = (): boolean => {
   )
 }
 
-const CONFIG_CACHE_VERSION = 1
-const CONFIG_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+// The cache only seeds the first render while the controlplane request is in
+// flight. A successful response always overwrites it and a failed response
+// blocks the app, so entries never serve as an offline fallback.
+const CONFIG_CACHE_VERSION = 2
 const CONFIG_REQUEST_TIMEOUT_MS = 10_000
 
 type CachedConfig<T> = {
   version: number
-  cachedAt: number
   value: T
 }
 
@@ -352,8 +356,8 @@ type SystemPromptAndRules = {
   rules: string
 }
 
-type CachedSystemPromptAndRules = SystemPromptAndRules & {
-  genUI?: unknown
+type SystemPromptResponse = SystemPromptAndRules & {
+  genUI: GenUIConfig
 }
 
 function readCachedConfig<T>(
@@ -365,13 +369,7 @@ function readCachedConfig<T>(
     const parsed = JSON.parse(localStorage.getItem(key) ?? '') as Partial<
       CachedConfig<unknown>
     >
-    if (
-      parsed.version !== CONFIG_CACHE_VERSION ||
-      typeof parsed.cachedAt !== 'number' ||
-      Date.now() - parsed.cachedAt < 0 ||
-      Date.now() - parsed.cachedAt > CONFIG_CACHE_MAX_AGE_MS ||
-      !validate(parsed.value)
-    ) {
+    if (parsed.version !== CONFIG_CACHE_VERSION || !validate(parsed.value)) {
       return null
     }
     return parsed.value
@@ -386,7 +384,6 @@ function writeCachedConfig<T>(key: string, value: T): void {
       key,
       JSON.stringify({
         version: CONFIG_CACHE_VERSION,
-        cachedAt: Date.now(),
         value,
       } satisfies CachedConfig<T>),
     )
@@ -410,15 +407,25 @@ function isBaseModelArray(value: unknown): value is BaseModel[] {
   )
 }
 
-function isSystemPromptAndRules(
-  value: unknown,
-): value is CachedSystemPromptAndRules {
+function isGenUIConfig(value: unknown): value is GenUIConfig {
+  const candidate = value as Record<string, unknown> | null
+  return (
+    typeof candidate === 'object' &&
+    candidate !== null &&
+    typeof candidate.header === 'string' &&
+    Array.isArray(candidate.enabledWidgets) &&
+    candidate.enabledWidgets.every((w) => typeof w === 'string')
+  )
+}
+
+function isSystemPromptResponse(value: unknown): value is SystemPromptResponse {
   const candidate = value as Record<string, unknown> | null
   return (
     typeof candidate === 'object' &&
     candidate !== null &&
     typeof candidate.systemPrompt === 'string' &&
-    typeof candidate.rules === 'string'
+    typeof candidate.rules === 'string' &&
+    isGenUIConfig(candidate.genUI)
   )
 }
 
@@ -443,20 +450,20 @@ export function getCachedAIModels(): BaseModel[] | null {
 export function getCachedSystemPromptAndRules(): SystemPromptAndRules | null {
   const cached = readCachedConfig(
     CONFIG_CACHED_SYSTEM_PROMPT,
-    isSystemPromptAndRules,
+    isSystemPromptResponse,
   )
   if (!cached) return null
-  applyGenUIConfigFromResponse(cached.genUI)
+  setGenUIConfig(cached.genUI)
   return {
     systemPrompt: cached.systemPrompt,
     rules: cached.rules,
   }
 }
 
-// Fetch models from the API
-export const getAIModels = async (): Promise<BaseModel[]> => {
+// Fetch models from the API. Returns null when the controlplane is
+// unreachable so callers can block rather than proceed without config.
+export const getAIModels = async (): Promise<BaseModel[] | null> => {
   const isLocalDev = isLocalDevelopment()
-  const cachedModels = getCachedAIModels()
 
   // In dev mode on localhost, return hardcoded models instead of fetching
   if (IS_DEV && isLocalDev) {
@@ -490,14 +497,15 @@ export const getAIModels = async (): Promise<BaseModel[]> => {
     logError('Failed to fetch AI models', error, {
       component: 'getAIModels',
     })
-    return cachedModels ?? []
+    return null
   }
 }
 
-// Fetch system prompt and rules from the API
+// Fetch system prompt and rules from the API. Returns null when the
+// controlplane is unreachable so callers can block rather than proceed
+// without config.
 export const getSystemPromptAndRules =
-  async (): Promise<SystemPromptAndRules> => {
-    const cachedPrompt = getCachedSystemPromptAndRules()
+  async (): Promise<SystemPromptAndRules | null> => {
     try {
       const url = `${API_BASE_URL}/api/config/system-prompt`
       const response = await fetchConfig(url)
@@ -506,57 +514,25 @@ export const getSystemPromptAndRules =
         throw new Error(`Failed to fetch system prompt: ${response.status}`)
       }
 
-      const data = await response.json()
-      const result: CachedSystemPromptAndRules = {
-        systemPrompt: data.systemPrompt,
-        rules: data.rules,
-        genUI: data?.genUI,
-      }
-      if (!isSystemPromptAndRules(result)) {
+      const data: unknown = await response.json()
+      if (!isSystemPromptResponse(data)) {
         throw new Error('System prompt response is malformed')
       }
-      applyGenUIConfigFromResponse(result.genUI)
+      const result: SystemPromptResponse = {
+        systemPrompt: data.systemPrompt,
+        rules: data.rules,
+        genUI: data.genUI,
+      }
+      setGenUIConfig(result.genUI)
       writeCachedConfig(CONFIG_CACHED_SYSTEM_PROMPT, result)
-      return result
+      return { systemPrompt: result.systemPrompt, rules: result.rules }
     } catch (error) {
       logError('Failed to fetch system prompt', error, {
         component: 'getSystemPromptAndRules',
       })
-      if (!cachedPrompt) {
-        setGenUIConfig(null)
-      }
-      return (
-        cachedPrompt ?? {
-          systemPrompt:
-            'You are an intelligent and helpful assistant named Tin.',
-          rules: '',
-        }
-      )
+      return null
     }
   }
-
-/**
- * Validates the optional `genUI` block from the system-prompt response and
- * pushes it into the runtime config used by the GenUI prompt and tool
- * builders. Malformed or missing payloads clear the runtime config so the
- * bundled defaults take over, rather than leaving stale config from an
- * earlier successful fetch active.
- */
-export function applyGenUIConfigFromResponse(raw: unknown): void {
-  if (!raw || typeof raw !== 'object') {
-    setGenUIConfig(null)
-    return
-  }
-  const obj = raw as Record<string, unknown>
-  if (typeof obj.header !== 'string' || !Array.isArray(obj.enabledWidgets)) {
-    setGenUIConfig(null)
-    return
-  }
-  const enabledWidgets = obj.enabledWidgets.filter(
-    (w): w is string => typeof w === 'string',
-  )
-  setGenUIConfig({ header: obj.header, enabledWidgets })
-}
 
 // Fetch memory prompt from the API
 export const getMemoryPrompt = async (): Promise<string> => {

@@ -8,8 +8,8 @@
  * `/api/config/system-prompt` response).
  *
  * Semantics:
- *   - No controlplane config yet → expose every registered widget. Keeps
- *     the first-render path working before the network response arrives.
+ *   - No controlplane config → no widgets enabled. The allowlist is the
+ *     kill switch, so its absence fails closed.
  *   - Controlplane config present → intersect with the local registry.
  *     Widgets the controlplane lists but the webapp doesn't have are
  *     ignored (lets the controlplane reference future widget names without
@@ -23,7 +23,7 @@ import type { GenUIWidget } from './types'
 
 export function resolveEnabledWidgets(): GenUIWidget[] {
   const config = getGenUIConfig()
-  if (!config) return GENUI_WIDGETS
+  if (!config) return []
   const allowed = new Set(config.enabledWidgets)
   return GENUI_WIDGETS.filter((w) => allowed.has(w.name))
 }

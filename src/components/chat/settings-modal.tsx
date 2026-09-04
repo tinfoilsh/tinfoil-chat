@@ -2654,7 +2654,7 @@ ${encryptionKey.replace('key_', '')}
                               Generative UI
                             </div>
                             <div className="font-aeonik-fono text-xs text-content-muted">
-                              Let Tin render interactive widgets like charts and
+                              Let Al render interactive widgets like charts and
                               timelines. When off, no tool capabilities are sent
                               to the model.
                             </div>
@@ -2953,8 +2953,8 @@ ${encryptionKey.replace('key_', '')}
                           Personalize responses
                         </div>
                         <div className="font-aeonik-fono text-xs text-content-muted">
-                          Tailor Tin&apos;s replies using the details below.
-                          When off, none of these are sent to the model.
+                          Tailor Al&apos;s replies using the details below. When
+                          off, none of these are sent to the model.
                         </div>
                       </div>
                       <label className="relative inline-flex cursor-pointer items-center">
@@ -2986,7 +2986,7 @@ ${encryptionKey.replace('key_', '')}
                               Name
                             </div>
                             <div className="font-aeonik-fono text-xs text-content-muted">
-                              How should Tin call you?
+                              How should Al call you?
                             </div>
                           </div>
                           <input
@@ -3052,7 +3052,7 @@ ${encryptionKey.replace('key_', '')}
                               Conversational Traits
                             </div>
                             <div className="font-aeonik-fono text-xs text-content-muted">
-                              What traits should Tin have?
+                              What traits should Al have?
                             </div>
                           </div>
                           <div className="flex flex-wrap gap-1.5">
@@ -3090,7 +3090,7 @@ ${encryptionKey.replace('key_', '')}
                               Additional Context
                             </div>
                             <div className="font-aeonik-fono text-xs text-content-muted">
-                              Anything else Tin should know about you?
+                              Anything else Al should know about you?
                             </div>
                           </div>
                           <textarea
@@ -3098,7 +3098,7 @@ ${encryptionKey.replace('key_', '')}
                             onChange={(e) =>
                               handleContextChange(e.target.value)
                             }
-                            placeholder="Interests and other preferences you'd like Tin to know about you."
+                            placeholder="Interests and other preferences you'd like Al to know about you."
                             rows={3}
                             className={cn(
                               'w-full resize-none rounded-md border px-3 py-2 text-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-border-strong',
