@@ -321,7 +321,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
       <div className="flex w-full justify-center">
         <div className="w-full max-w-2xl">
           <motion.h1
-            className="flex items-center justify-center gap-3 text-2xl font-medium tracking-tight text-content-primary md:justify-start md:text-3xl"
+            className="flex items-center justify-center gap-3 text-2xl font-medium tracking-tight text-content-primary md:text-3xl"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{
@@ -335,7 +335,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
 
           {/* Privacy explainer */}
           <motion.div
-            className="mt-3"
+            className="mt-4 flex justify-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{
@@ -347,7 +347,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
             <button
               type="button"
               onClick={() => setIsPrivacyOpen(true)}
-              className="group flex w-full items-center justify-center gap-1.5 py-1.5 text-sm text-content-secondary transition-colors hover:text-content-primary sm:gap-2 sm:text-base md:justify-start"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background px-3 py-1.5 text-sm text-content-secondary transition-colors hover:bg-surface-chat hover:text-content-primary"
             >
               <BiSolidLock
                 className="h-4 w-4 text-brand-accent-dark dark:text-brand-accent-light"
@@ -401,7 +401,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
             {/* Centered Chat Input - Desktop only */}
             {onSubmit && input !== undefined && setInput && (
               <motion.div
-                className="mt-8 hidden md:block"
+                className="hidden md:block"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{
@@ -523,7 +523,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                 transition={{
                   duration: 0.5,
                   ease: 'easeOut',
-                  delay: 0.45,
+                  delay: 0.4,
                 }}
               >
                 <PromptPresetSuggestions
