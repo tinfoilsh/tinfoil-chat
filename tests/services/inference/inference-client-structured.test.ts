@@ -58,11 +58,13 @@ describe('sendStructuredCompletion', () => {
         temperature: 0.25,
         response_format: { type: 'text' },
       },
-      reasoningConfig: {
-        supportsEffort: true,
-        params: {
-          '/v1/chat/completions': {
-            enable: { reasoning_effort: '$EFFORT' },
+      chatConfig: {
+        reasoningConfig: {
+          supportsEffort: true,
+          params: {
+            '/v1/chat/completions': {
+              enable: { reasoning_effort: '$EFFORT' },
+            },
           },
         },
       },

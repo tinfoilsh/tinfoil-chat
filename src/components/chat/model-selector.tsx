@@ -424,11 +424,11 @@ export function ModelSelector({
             </>
           )}
         </div>
-        {!model.isAuto && model.descriptionShort ? (
+        {!model.isAuto && model.chatConfig?.descriptionShort ? (
           <div className="flex min-w-0 flex-1 flex-col">
             <span className="font-medium">{model.name}</span>
             <span className="text-xs text-content-muted">
-              {model.descriptionShort}
+              {model.chatConfig.descriptionShort}
             </span>
           </div>
         ) : (

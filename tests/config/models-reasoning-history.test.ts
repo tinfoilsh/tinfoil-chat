@@ -22,8 +22,10 @@ const model = (
   description: '',
   type: 'chat',
   chat: true,
-  contextWindowTokens,
-  reasoningConfig: policy ? { reasoningHistoryPolicy: policy } : undefined,
+  chatConfig: {
+    contextWindowTokens,
+    reasoningConfig: policy ? { reasoningHistoryPolicy: policy } : undefined,
+  },
 })
 
 describe('getReasoningHistoryPolicy', () => {
@@ -53,8 +55,8 @@ describe('getReasoningHistoryPolicy', () => {
 
   it('falls back safely for unknown future policies', () => {
     const futureModel = model('future')
-    futureModel.reasoningConfig = {
-      reasoningHistoryPolicy: 'future-policy' as never,
+    futureModel.chatConfig = {
+      reasoningConfig: { reasoningHistoryPolicy: 'future-policy' as never },
     }
 
     expect(getReasoningHistoryPolicy({ model: futureModel })).toBe(
@@ -68,7 +70,7 @@ describe('getReasoningHistoryPolicy', () => {
       model('small', undefined, 32000),
     ]
     candidates.forEach((candidate) => {
-      candidate.attributes = ['smart']
+      candidate.chatConfig = { ...candidate.chatConfig, attributes: ['smart'] }
     })
 
     expect(
@@ -77,6 +79,8 @@ describe('getReasoningHistoryPolicy', () => {
         autoCandidates: candidates,
       }),
     ).toBe(32000)
-    expect(getAutoModels(candidates)[0].contextWindowTokens).toBe(32000)
+    expect(getAutoModels(candidates)[0].chatConfig?.contextWindowTokens).toBe(
+      32000,
+    )
   })
 })

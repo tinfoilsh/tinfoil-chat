@@ -39,7 +39,7 @@ vi.mock('@/utils/error-handling', () => ({ logError: logErrorMock }))
 
 const model = {
   modelName: 'gpt-oss-120b',
-  contextWindowTokens: 64000,
+  chatConfig: { contextWindowTokens: 64000 },
 } as BaseModel
 
 function message(role: Message['role'], content: string): Message {

@@ -11,8 +11,9 @@ export const CONTEXT_WINDOW_USAGE_RATIO = 0.8
 
 export const DEFAULT_CONTEXT_WINDOW_TOKENS = 128000
 
-export type ContextWindowConfig = {
-  contextWindowTokens?: number
+/** The slice of a model the context budget is derived from. */
+export type ContextWindowSource = {
+  chatConfig?: { contextWindowTokens?: number }
 }
 
 // Roughly estimate token count based on character length (≈4 chars per token)
@@ -22,16 +23,16 @@ export function estimateTokenCount(text: string | undefined): number {
 }
 
 export function resolveContextWindowTokens(
-  config: ContextWindowConfig | undefined,
+  model: ContextWindowSource | undefined,
 ): number {
-  return config?.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS
+  return model?.chatConfig?.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS
 }
 
 export function getSmallestContextWindowTokens(
-  configs: ContextWindowConfig[],
+  models: ContextWindowSource[],
 ): number | undefined {
-  if (configs.length === 0) return undefined
-  return Math.min(...configs.map(resolveContextWindowTokens))
+  if (models.length === 0) return undefined
+  return Math.min(...models.map(resolveContextWindowTokens))
 }
 
 export type TokenEstimationOptions = {

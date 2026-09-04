@@ -27,21 +27,23 @@ const DEV_MODELS: BaseModel[] = [
     name: 'Gemma 4 31B',
     nameShort: 'Gemma 4',
     description: 'Google Gemma 4 31B',
-    descriptionShort: 'Best for everyday tasks with images',
     type: 'chat',
     chat: true,
     multimodal: true,
-    reasoningConfig: {
-      supportsToggle: true,
-      defaultEnabled: true,
-      params: {
-        '/v1/chat/completions': {
-          enable: { chat_template_kwargs: { enable_thinking: true } },
-          disable: { chat_template_kwargs: { enable_thinking: false } },
-        },
-        '/v1/responses': {
-          enable: { chat_template_kwargs: { enable_thinking: true } },
-          disable: { chat_template_kwargs: { enable_thinking: false } },
+    chatConfig: {
+      descriptionShort: 'Best for everyday tasks with images',
+      reasoningConfig: {
+        supportsToggle: true,
+        defaultEnabled: true,
+        params: {
+          '/v1/chat/completions': {
+            enable: { chat_template_kwargs: { enable_thinking: true } },
+            disable: { chat_template_kwargs: { enable_thinking: false } },
+          },
+          '/v1/responses': {
+            enable: { chat_template_kwargs: { enable_thinking: true } },
+            disable: { chat_template_kwargs: { enable_thinking: false } },
+          },
         },
       },
     },
@@ -52,10 +54,12 @@ const DEV_MODELS: BaseModel[] = [
     name: 'Kimi K2.6',
     nameShort: 'Kimi K2.6',
     description: 'Moonshot Kimi K2.6',
-    descriptionShort: 'Best for coding and visual tasks',
     type: 'chat',
     chat: true,
     multimodal: true,
+    chatConfig: {
+      descriptionShort: 'Best for coding and visual tasks',
+    },
   },
   {
     modelName: 'gpt-oss-120b',
@@ -63,9 +67,11 @@ const DEV_MODELS: BaseModel[] = [
     name: 'GPT-OSS 120B',
     nameShort: 'GPT-OSS',
     description: 'OpenAI GPT-OSS 120B',
-    descriptionShort: 'Best for quick reasoning tasks',
     type: 'chat',
     chat: true,
+    chatConfig: {
+      descriptionShort: 'Best for quick reasoning tasks',
+    },
   },
 ]
 
@@ -125,6 +131,23 @@ export type ReasoningConfig = {
 
 export type AutoTier = 'smart' | 'fast'
 
+/**
+ * Settings the chat clients read for a model. Present only on chat models; the
+ * controlplane keeps everything a chat client needs under this block.
+ */
+export type ChatConfig = {
+  /**
+   * Token budget the chat archives history against. May be lower than the
+   * model's raw capability advertised to API consumers.
+   */
+  contextWindowTokens?: number
+  /** Open set of model tags, including Auto routing tiers ("smart", "fast"). */
+  attributes?: string[]
+  /** Short "Best for x" blurb shown under the name in the model picker. */
+  descriptionShort?: string
+  reasoningConfig?: ReasoningConfig
+}
+
 // Base model type with all possible properties
 export type BaseModel = {
   modelName: string
@@ -132,11 +155,8 @@ export type BaseModel = {
   name: string
   nameShort: string
   description: string
-  /** Short "Best for x" blurb shown under the name in the model picker. */
-  descriptionShort?: string
   details?: string
   parameters?: string
-  contextWindowTokens?: number
   recommendedUse?: string
   supportedLanguages?: string
   type: 'chat' | 'code' | 'embedding' | 'audio' | 'tts' | 'document' | 'title'
@@ -144,13 +164,11 @@ export type BaseModel = {
   paid?: boolean
   multimodal?: boolean
   toolCalling?: boolean
-  /** Open set of model tags, including Auto routing tiers ("smart", "fast"). */
-  attributes?: string[]
+  chatConfig?: ChatConfig
   /** True for the synthetic Auto picker entries; never a real backend model. */
   isAuto?: boolean
   /** Routing tier an Auto entry resolves; only set when isAuto is true. */
   tier?: AutoTier
-  reasoningConfig?: ReasoningConfig
   endpoint?: string
   /** Extra fields merged into the chat completion request body */
   requestParams?: Record<string, unknown>
@@ -181,8 +199,8 @@ const tierModels = (models: BaseModel[], tier: AutoTier): BaseModel[] =>
   models.filter(
     (m) =>
       isChatModel(m) &&
-      Array.isArray(m.attributes) &&
-      m.attributes.includes(tier),
+      Array.isArray(m.chatConfig?.attributes) &&
+      m.chatConfig.attributes.includes(tier),
   )
 
 /**
@@ -214,7 +232,9 @@ export const getAutoModels = (models: BaseModel[]): BaseModel[] => {
       isAuto: true,
       tier,
       multimodal: members.some((m) => m.multimodal === true),
-      contextWindowTokens: resolveContextWindowTokens(smallestMember),
+      chatConfig: {
+        contextWindowTokens: resolveContextWindowTokens(smallestMember),
+      },
     })
   }
   add('smart', AUTO_SMART_ID, 'Auto · Smart')
@@ -282,7 +302,7 @@ export const getReasoningHistoryPolicy = (
       getStrongerReasoningHistoryPolicy(
         strongest,
         normalizeReasoningHistoryPolicy(
-          candidate.reasoningConfig?.reasoningHistoryPolicy,
+          candidate.chatConfig?.reasoningConfig?.reasoningHistoryPolicy,
         ),
       ),
     REASONING_HISTORY_POLICIES.none,

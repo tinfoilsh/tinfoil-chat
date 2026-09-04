@@ -93,8 +93,8 @@ function buildModelBodyParams(
   const out: Record<string, unknown> = {}
 
   if (isReasoningModel(model)) {
-    const endpointParams =
-      model.reasoningConfig?.params?.[CHAT_COMPLETIONS_ENDPOINT]
+    const reasoningConfig = model.chatConfig?.reasoningConfig
+    const endpointParams = reasoningConfig?.params?.[CHAT_COMPLETIONS_ENDPOINT]
     if (endpointParams) {
       const rawBlock = supportsThinkingToggle(model)
         ? opts.thinkingEnabled
@@ -106,7 +106,7 @@ function buildModelBodyParams(
           supportsReasoningEffort(model) && opts.reasoningEffort
             ? opts.reasoningEffort
             : 'medium'
-        const effort = model.reasoningConfig?.effortMap?.[uiEffort] ?? uiEffort
+        const effort = reasoningConfig?.effortMap?.[uiEffort] ?? uiEffort
         const block = substituteEffort(rawBlock, effort) as Record<
           string,
           unknown
