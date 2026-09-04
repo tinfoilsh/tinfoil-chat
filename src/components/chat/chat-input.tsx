@@ -951,6 +951,9 @@ export function ChatInput({
               button groups become flex siblings of the textarea and can be
               ordered around it. */}
           <div className={cn(isCompact && 'flex items-end gap-2')}>
+            {/* The button groups are sized to the send button so a one-line
+                textarea centers against them; when it grows they stay pinned
+                to the bottom via items-end. */}
             <textarea
               id="chat-input"
               aria-label="Message"
@@ -1206,7 +1209,7 @@ export function ChatInput({
               rows={1}
               className={cn(
                 'w-full resize-none bg-transparent font-chat text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none',
-                isCompact && 'min-w-0 flex-1 self-center py-1',
+                isCompact && 'min-w-0 flex-1 self-center',
               )}
               style={{
                 minHeight: inputMinHeight,
@@ -1227,7 +1230,7 @@ export function ChatInput({
               <div
                 className={cn(
                   'flex items-center gap-1',
-                  isCompact && 'order-first',
+                  isCompact && 'order-first h-10 md:h-8',
                 )}
               >
                 {/* Unified + button opening the input options menu */}
@@ -1338,7 +1341,12 @@ export function ChatInput({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div
+                className={cn(
+                  'flex items-center gap-2',
+                  isCompact && 'h-10 md:h-8',
+                )}
+              >
                 {/* Once a conversation is underway these move to the footer
                   below the card so the card itself stays focused on composing. */}
                 {!hasMessages && contextUsage && (
@@ -1420,7 +1428,10 @@ export function ChatInput({
                           }
                         }
                       }}
-                      className="group ml-2 flex h-10 w-10 items-center justify-center rounded-site-control bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50 md:h-8 md:w-8"
+                      className={cn(
+                        'group flex h-10 w-10 items-center justify-center rounded-site-control bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50 md:h-8 md:w-8',
+                        !isCompact && 'ml-2',
+                      )}
                       style={{ WebkitTapHighlightColor: 'transparent' }}
                       disabled={
                         showStopAction
