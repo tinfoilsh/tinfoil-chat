@@ -337,13 +337,14 @@ const isLocalDevelopment = (): boolean => {
   )
 }
 
-const CONFIG_CACHE_VERSION = 1
-const CONFIG_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+// The cache only seeds the first render while the controlplane request is in
+// flight. A successful response always overwrites it and a failed response
+// blocks the app, so entries never serve as an offline fallback.
+const CONFIG_CACHE_VERSION = 2
 const CONFIG_REQUEST_TIMEOUT_MS = 10_000
 
 type CachedConfig<T> = {
   version: number
-  cachedAt: number
   value: T
 }
 
@@ -365,13 +366,7 @@ function readCachedConfig<T>(
     const parsed = JSON.parse(localStorage.getItem(key) ?? '') as Partial<
       CachedConfig<unknown>
     >
-    if (
-      parsed.version !== CONFIG_CACHE_VERSION ||
-      typeof parsed.cachedAt !== 'number' ||
-      Date.now() - parsed.cachedAt < 0 ||
-      Date.now() - parsed.cachedAt > CONFIG_CACHE_MAX_AGE_MS ||
-      !validate(parsed.value)
-    ) {
+    if (parsed.version !== CONFIG_CACHE_VERSION || !validate(parsed.value)) {
       return null
     }
     return parsed.value
@@ -386,7 +381,6 @@ function writeCachedConfig<T>(key: string, value: T): void {
       key,
       JSON.stringify({
         version: CONFIG_CACHE_VERSION,
-        cachedAt: Date.now(),
         value,
       } satisfies CachedConfig<T>),
     )
@@ -453,10 +447,10 @@ export function getCachedSystemPromptAndRules(): SystemPromptAndRules | null {
   }
 }
 
-// Fetch models from the API
-export const getAIModels = async (): Promise<BaseModel[]> => {
+// Fetch models from the API. Returns null when the controlplane is
+// unreachable so callers can block rather than proceed without config.
+export const getAIModels = async (): Promise<BaseModel[] | null> => {
   const isLocalDev = isLocalDevelopment()
-  const cachedModels = getCachedAIModels()
 
   // In dev mode on localhost, return hardcoded models instead of fetching
   if (IS_DEV && isLocalDev) {
@@ -490,14 +484,15 @@ export const getAIModels = async (): Promise<BaseModel[]> => {
     logError('Failed to fetch AI models', error, {
       component: 'getAIModels',
     })
-    return cachedModels ?? []
+    return null
   }
 }
 
-// Fetch system prompt and rules from the API
+// Fetch system prompt and rules from the API. Returns null when the
+// controlplane is unreachable so callers can block rather than proceed
+// without config.
 export const getSystemPromptAndRules =
-  async (): Promise<SystemPromptAndRules> => {
-    const cachedPrompt = getCachedSystemPromptAndRules()
+  async (): Promise<SystemPromptAndRules | null> => {
     try {
       const url = `${API_BASE_URL}/api/config/system-prompt`
       const response = await fetchConfig(url)
@@ -522,16 +517,7 @@ export const getSystemPromptAndRules =
       logError('Failed to fetch system prompt', error, {
         component: 'getSystemPromptAndRules',
       })
-      if (!cachedPrompt) {
-        setGenUIConfig(null)
-      }
-      return (
-        cachedPrompt ?? {
-          systemPrompt:
-            'You are an intelligent and helpful assistant named Tin.',
-          rules: '',
-        }
-      )
+      return null
     }
   }
 

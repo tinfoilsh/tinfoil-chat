@@ -49,20 +49,13 @@ describe('applyGenUIConfigFromResponse', () => {
     })
   })
 
-  it('clears stale config when the system prompt request falls back', async () => {
-    setGenUIConfig({ header: 'stale', enabledWidgets: ['render_chart'] })
+  it('returns null when the system prompt request fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
 
-    const result = await getSystemPromptAndRules()
-
-    expect(result).toEqual({
-      systemPrompt: 'You are an intelligent and helpful assistant named Tin.',
-      rules: '',
-    })
-    expect(getGenUIConfig()).toBeNull()
+    await expect(getSystemPromptAndRules()).resolves.toBeNull()
   })
 
-  it('restores cached configuration while the network refreshes', async () => {
+  it('seeds the cache from a successful response without serving it as a fallback', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -88,17 +81,10 @@ describe('applyGenUIConfigFromResponse', () => {
       enabledWidgets: ['render_chart'],
     })
 
-    await expect(getSystemPromptAndRules()).resolves.toEqual({
-      systemPrompt: 'Cached prompt',
-      rules: 'Cached rules',
-    })
-    expect(getGenUIConfig()).toEqual({
-      header: 'cached',
-      enabledWidgets: ['render_chart'],
-    })
+    await expect(getSystemPromptAndRules()).resolves.toBeNull()
   })
 
-  it('restores a cached model list after a request failure', async () => {
+  it('returns null for models after a request failure even when cached', async () => {
     const model = {
       modelName: 'gpt-oss-120b',
       image: 'openai.png',
@@ -120,6 +106,6 @@ describe('applyGenUIConfigFromResponse', () => {
     const fetchedModels = await getAIModels()
     expect(fetchedModels).toContainEqual(model)
     expect(getCachedAIModels()).toEqual(fetchedModels)
-    await expect(getAIModels()).resolves.toEqual(fetchedModels)
+    await expect(getAIModels()).resolves.toBeNull()
   })
 })

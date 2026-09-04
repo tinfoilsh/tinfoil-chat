@@ -43,7 +43,7 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
     modelName: string
   }> => {
     try {
-      const models = await getAIModels()
+      const models = (await getAIModels()) ?? []
       const doclingModel = models.find(
         (model) => model.modelName === 'docling' || model.type === 'document',
       )
@@ -92,7 +92,7 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
     base64: string,
     mimeType: string,
   ): Promise<string> => {
-    const models = await getAIModels()
+    const models = (await getAIModels()) ?? []
     const fastTier: AutoTier = 'fast'
     const isMultimodalChat = (m: BaseModel) =>
       Boolean(m.multimodal && m.chat && m.type === 'chat')
@@ -254,7 +254,7 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
 
       // For audio files, transcribe via audio model
       if (isAudioFile(file)) {
-        const models = await getAIModels()
+        const models = (await getAIModels()) ?? []
         const audioModel = (
           models.find((m) => m.modelName === CONSTANTS.DEFAULT_AUDIO_MODEL) ||
           models.find((m) => m.type === 'audio')

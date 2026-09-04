@@ -98,7 +98,7 @@ export async function extractFacts(params: {
     return { operations: [], processedCount: 0 }
   }
 
-  const models = await getAIModels()
+  const models = (await getAIModels()) ?? []
   // Structured outputs require a model that supports it - use gpt-oss-120b specifically
   const structuredModel =
     models.find((m) => m.modelName === 'gpt-oss-120b') || models[0]

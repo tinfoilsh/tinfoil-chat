@@ -524,6 +524,7 @@ export function ChatInterface({
   const [systemPrompt, setSystemPrompt] = useState<string>('')
   const [rules, setRules] = useState<string>('')
   const [isLoadingConfig, setIsLoadingConfig] = useState(true)
+  const [configLoadFailed, setConfigLoadFailed] = useState(false)
   const [logoAnimDone, setLogoAnimDone] = useState(false)
   const handleLogoAnimFinished = useCallback(() => {
     setLogoAnimDone(true)
@@ -802,7 +803,9 @@ export function ChatInterface({
     initializeRenderers()
   }, [])
 
-  // Load models and system prompt immediately in parallel.
+  // Load models and system prompt immediately in parallel. Cached values
+  // seed the first render, but the controlplane response is authoritative:
+  // a failed fetch blocks the app even when a cache exists.
   useEffect(() => {
     let cancelled = false
     const configStartedAt = startPerformanceTimer()
@@ -836,21 +839,25 @@ export function ChatInterface({
           getAIModels(),
         ])
 
-        if (!cancelled) {
-          setSystemPrompt(promptData.systemPrompt)
-          setRules(promptData.rules)
-          setModels(models)
+        if (cancelled) return
+        if (!promptData || !models) {
+          setConfigLoadFailed(true)
           setIsLoadingConfig(false)
-          recordConfigReady()
+          return
         }
+        setSystemPrompt(promptData.systemPrompt)
+        setRules(promptData.rules)
+        setModels(models)
+        setIsLoadingConfig(false)
+        recordConfigReady()
       } catch (error) {
         logError('Failed to load chat configuration', error, {
           component: 'ChatInterface',
           action: 'loadConfig',
         })
         if (!cancelled) {
+          setConfigLoadFailed(true)
           setIsLoadingConfig(false)
-          recordConfigReady()
         }
       }
     }
@@ -3548,7 +3555,7 @@ export function ChatInterface({
   }
 
   // Show error state if no models are available (configuration error)
-  if (!isLoadingConfig && models.length === 0) {
+  if (!isLoadingConfig && (configLoadFailed || models.length === 0)) {
     return (
       <div className="flex h-screen items-center justify-center bg-surface-chat-background px-4 font-aeonik">
         <div className="max-w-md text-center">
