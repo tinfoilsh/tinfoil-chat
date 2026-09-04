@@ -42,6 +42,19 @@ const EFFORT_FLYOUT_WIDTH_PX = 240
 const EFFORT_FLYOUT_GAP_PX = 8
 const VIEWPORT_MARGIN_PX = 10
 
+// The top section grows to fill the available height so tall screens see
+// more models before the "Other models" fold. Row heights are estimated from
+// the Tailwind classes below (padding plus text line heights) rather than
+// measured, so the count is known before the first paint.
+const MIN_TOP_MODEL_COUNT = 3
+const MENU_PADDING_PX = 16
+const MENU_DIVIDER_HEIGHT_PX = 9
+const AUTO_MODEL_ROW_HEIGHT_PX = 40
+const MODEL_ROW_HEIGHT_PX = 56
+const EFFORT_ROW_HEIGHT_PX = 40
+const THINKING_ROW_HEIGHT_PX = 56
+const OTHER_MODELS_ROW_HEIGHT_PX = 40
+
 type ModelSelectorProps = {
   selectedModel: AIModel
   onSelect: (model: AIModel) => void
@@ -286,9 +299,22 @@ export function ModelSelector({
       (model.type === 'chat' || model.type === 'code') && model.chat === true,
   )
 
-  const TOP_MODEL_COUNT = 3
-  const topModels = displayModels.slice(0, TOP_MODEL_COUNT)
-  const otherModels = displayModels.slice(TOP_MODEL_COUNT)
+  const availableHeight = Number.parseInt(dynamicStyles.maxHeight, 10) || 0
+  const fixedHeight =
+    MENU_PADDING_PX +
+    autoModels.length * AUTO_MODEL_ROW_HEIGHT_PX +
+    (autoModels.length > 0 ? MENU_DIVIDER_HEIGHT_PX : 0) +
+    (showEffort || showThinkingToggle ? MENU_DIVIDER_HEIGHT_PX : 0) +
+    (showEffort ? EFFORT_ROW_HEIGHT_PX : 0) +
+    (showThinkingToggle ? THINKING_ROW_HEIGHT_PX : 0) +
+    MENU_DIVIDER_HEIGHT_PX +
+    OTHER_MODELS_ROW_HEIGHT_PX
+  const topModelCount = Math.max(
+    MIN_TOP_MODEL_COUNT,
+    Math.floor((availableHeight - fixedHeight) / MODEL_ROW_HEIGHT_PX),
+  )
+  const topModels = displayModels.slice(0, topModelCount)
+  const otherModels = displayModels.slice(topModelCount)
 
   const getModelIcon = (model: BaseModel) => {
     if (failedImages[model.modelName]) return '/icon.png'
