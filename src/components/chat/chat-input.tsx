@@ -1310,13 +1310,17 @@ export function ChatInput({
             </div>
 
             <div className="flex items-center gap-2">
-              {contextUsage && (
+              {/* Once a conversation is underway these move to the footer
+                  below the card so the card itself stays focused on composing. */}
+              {!hasMessages && contextUsage && (
                 <ContextUsageIndicator
                   usage={contextUsage}
                   className="hidden md:flex"
                 />
               )}
-              {modelSelectorButton && <div>{modelSelectorButton}</div>}
+              {!hasMessages && modelSelectorButton && (
+                <div>{modelSelectorButton}</div>
+              )}
               {isPremium && audioModel && (
                 <button
                   type="button"
@@ -1406,10 +1410,19 @@ export function ChatInput({
       </div>
 
       {hasMessages && (
-        <div className="text-center">
+        <div className="flex items-center justify-between gap-4 px-3 md:px-6">
           <p className="text-xs text-content-muted">
             AI can make mistakes. Verify important information.
           </p>
+          <div className="flex items-center gap-2">
+            {contextUsage && (
+              <ContextUsageIndicator
+                usage={contextUsage}
+                className="hidden md:flex"
+              />
+            )}
+            {modelSelectorButton}
+          </div>
         </div>
       )}
     </div>
