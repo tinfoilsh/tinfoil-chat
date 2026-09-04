@@ -333,6 +333,70 @@ export const WelcomeScreen = memo(function WelcomeScreen({
             {getGreeting()}
           </motion.h1>
 
+          {/* Privacy explainer */}
+          <motion.div
+            className="mt-3"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{
+              duration: 0.5,
+              ease: 'easeOut',
+              delay: 0.3,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setIsPrivacyOpen(true)}
+              className="group flex w-full items-center justify-center gap-1.5 py-1.5 text-sm text-content-secondary transition-colors hover:text-content-primary sm:gap-2 sm:text-base"
+            >
+              <BiSolidLock
+                className="h-4 w-4 text-brand-accent-dark dark:text-brand-accent-light"
+                aria-hidden="true"
+              />
+              <span className="shrink-0 whitespace-nowrap">
+                Your chats are private by design
+              </span>
+            </button>
+
+            <Modal
+              isOpen={isPrivacyOpen}
+              onClose={() => setIsPrivacyOpen(false)}
+              className="max-w-2xl"
+            >
+              <ModalTitle className="pr-8 font-semibold leading-none tracking-tight">
+                Your Chats Are Private by Design
+              </ModalTitle>
+
+              <div className="mt-4 text-base leading-relaxed text-content-secondary">
+                <FadeInLines
+                  segments={[
+                    {
+                      type: 'text',
+                      content:
+                        'Your messages are encrypted directly to the AI models running inside secure hardware enclaves.',
+                    },
+                    {
+                      type: 'citation',
+                      content: 'Technology',
+                      href: 'https://tinfoil.sh/technology',
+                    },
+                    {
+                      type: 'text',
+                      content:
+                        ' These are hardware-isolated environments powered by confidential computing GPUs with verifiable confidentiality and integrity guarantees. Not even Tinfoil can access your data. This applies to all chats, images, documents, and voice input. Our open-source stack lets you verify this yourself by inspecting the hardware attestation.',
+                    },
+                    {
+                      type: 'citation',
+                      content: 'Source',
+                      href: 'https://github.com/tinfoilsh',
+                    },
+                  ]}
+                />
+              </div>
+              <DataFlowDiagram />
+            </Modal>
+          </motion.div>
+
           <div className="mt-8">
             {/* Centered Chat Input - Desktop only */}
             {onSubmit && input !== undefined && setInput && (
@@ -343,7 +407,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                 transition={{
                   duration: 0.5,
                   ease: 'easeOut',
-                  delay: 0.3,
+                  delay: 0.4,
                 }}
               >
                 <ChatInput
@@ -470,70 +534,6 @@ export const WelcomeScreen = memo(function WelcomeScreen({
               </motion.div>
             )}
           </div>
-
-          {/* Privacy explainer */}
-          <motion.div
-            className="mt-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{
-              duration: 0.5,
-              ease: 'easeOut',
-              delay: 0.45,
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setIsPrivacyOpen(true)}
-              className="group flex w-full items-center justify-center gap-1.5 py-1.5 text-sm text-content-secondary transition-colors hover:text-content-primary sm:gap-2 sm:text-base"
-            >
-              <BiSolidLock
-                className="h-4 w-4 text-brand-accent-dark dark:text-brand-accent-light"
-                aria-hidden="true"
-              />
-              <span className="shrink-0 whitespace-nowrap">
-                Your chats are private by design
-              </span>
-            </button>
-
-            <Modal
-              isOpen={isPrivacyOpen}
-              onClose={() => setIsPrivacyOpen(false)}
-              className="max-w-2xl"
-            >
-              <ModalTitle className="pr-8 font-semibold leading-none tracking-tight">
-                Your Chats Are Private by Design
-              </ModalTitle>
-
-              <div className="mt-4 text-base leading-relaxed text-content-secondary">
-                <FadeInLines
-                  segments={[
-                    {
-                      type: 'text',
-                      content:
-                        'Your messages are encrypted directly to the AI models running inside secure hardware enclaves.',
-                    },
-                    {
-                      type: 'citation',
-                      content: 'Technology',
-                      href: 'https://tinfoil.sh/technology',
-                    },
-                    {
-                      type: 'text',
-                      content:
-                        ' These are hardware-isolated environments powered by confidential computing GPUs with verifiable confidentiality and integrity guarantees. Not even Tinfoil can access your data. This applies to all chats, images, documents, and voice input. Our open-source stack lets you verify this yourself by inspecting the hardware attestation.',
-                    },
-                    {
-                      type: 'citation',
-                      content: 'Source',
-                      href: 'https://github.com/tinfoilsh',
-                    },
-                  ]}
-                />
-              </div>
-              <DataFlowDiagram />
-            </Modal>
-          </motion.div>
         </div>
       </div>
     </motion.div>
