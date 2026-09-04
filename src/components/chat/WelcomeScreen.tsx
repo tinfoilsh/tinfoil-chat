@@ -347,7 +347,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
             <button
               type="button"
               onClick={() => setIsPrivacyOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-chat-background px-3.5 py-1.5 text-sm text-content-secondary transition-colors hover:bg-surface-chat hover:text-content-primary"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background px-3 py-1.5 text-sm text-content-secondary transition-colors hover:bg-surface-chat hover:text-content-primary"
             >
               <BiSolidLock
                 className="h-4 w-4 text-brand-accent-dark dark:text-brand-accent-light"
