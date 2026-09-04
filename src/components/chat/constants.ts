@@ -77,7 +77,7 @@ export const CONSTANTS = {
   MESSAGE_SEND_RETRY_DELAY_MS: 1000, // Base delay between retries (exponential backoff)
   // Placeholder for the input before a conversation has started
   INPUT_PLACEHOLDER: 'How can I help you today?',
-  // Placeholder once the assistant has replied at least once
+  // Placeholder once a conversation has started
   REPLY_PLACEHOLDER: 'Reply to Tin...',
   // Base document title used when no chat title is meaningful
   BASE_DOCUMENT_TITLE: 'Tinfoil Private Chat',
