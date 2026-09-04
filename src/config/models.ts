@@ -361,7 +361,7 @@ const isLocalDevelopment = (): boolean => {
 // The cache only seeds the first render while the controlplane request is in
 // flight. A successful response always overwrites it and a failed response
 // blocks the app, so entries never serve as an offline fallback.
-const CONFIG_CACHE_VERSION = 2
+const CONFIG_CACHE_VERSION = 3
 const CONFIG_REQUEST_TIMEOUT_MS = 10_000
 
 type CachedConfig<T> = {
