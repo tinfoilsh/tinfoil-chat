@@ -250,7 +250,7 @@ const DefaultMessageComponent = ({
       className={`relative mx-auto flex w-full max-w-3xl flex-col ${isUser ? 'items-end' : 'items-start'} group mb-6`}
       data-message-role={message.role}
       role="article"
-      aria-label={isUser ? 'You said' : 'Tin said'}
+      aria-label={isUser ? 'You said' : 'Al said'}
       tabIndex={-1}
     >
       {/* Display the quoted reply preview above the user's message */}
