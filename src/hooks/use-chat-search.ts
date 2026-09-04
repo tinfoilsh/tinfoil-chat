@@ -92,6 +92,10 @@ export function useChatSearch(
         })
         setResults([])
         setIsSearching(false)
+        // A failed run has no settle callback to clear the indexing
+        // flag, so reset it here or the "building index" indicator
+        // stays up until the user edits the term.
+        setIsIndexing(false)
       }
     }
     const timer = setTimeout(() => void run(), SEARCH_DEBOUNCE_MS)
