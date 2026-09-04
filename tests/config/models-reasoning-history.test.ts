@@ -13,7 +13,6 @@ import { describe, expect, it } from 'vitest'
 const model = (
   modelName: string,
   policy?: ReasoningHistoryPolicy,
-  contextWindow?: string,
   contextWindowTokens?: number,
 ): BaseModel => ({
   modelName,
@@ -23,7 +22,6 @@ const model = (
   description: '',
   type: 'chat',
   chat: true,
-  contextWindow,
   contextWindowTokens,
   reasoningConfig: policy ? { reasoningHistoryPolicy: policy } : undefined,
 })
@@ -65,21 +63,9 @@ describe('getReasoningHistoryPolicy', () => {
   })
 
   it('uses the smallest Auto candidate context window', () => {
-    expect(
-      getResolvedModelContextWindowTokens({
-        model: model('large', undefined, '256k tokens'),
-        autoCandidates: [
-          model('large', undefined, '256k tokens'),
-          model('small', undefined, '128k tokens'),
-        ],
-      }),
-    ).toBe(128000)
-  })
-
-  it('prefers numeric context windows for Auto candidates', () => {
     const candidates = [
-      model('large', undefined, '1k tokens', 256000),
-      model('small', undefined, '999k tokens', 128000),
+      model('large', undefined, 256000),
+      model('small', undefined, 32000),
     ]
     candidates.forEach((candidate) => {
       candidate.attributes = ['smart']
@@ -90,7 +76,7 @@ describe('getReasoningHistoryPolicy', () => {
         model: candidates[0],
         autoCandidates: candidates,
       }),
-    ).toBe(128000)
-    expect(getAutoModels(candidates)[0].contextWindowTokens).toBe(128000)
+    ).toBe(32000)
+    expect(getAutoModels(candidates)[0].contextWindowTokens).toBe(32000)
   })
 })

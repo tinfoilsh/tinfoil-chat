@@ -41,7 +41,6 @@ describe('ChatQueryBuilder', () => {
     const messages = ChatQueryBuilder.buildMessages({
       model: {
         ...model,
-        contextWindow: '256k tokens',
         contextWindowTokens: 1000,
       },
       systemPrompt: '',

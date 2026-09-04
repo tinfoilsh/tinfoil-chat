@@ -136,7 +136,6 @@ export type BaseModel = {
   descriptionShort?: string
   details?: string
   parameters?: string
-  contextWindow?: string
   contextWindowTokens?: number
   recommendedUse?: string
   supportedLanguages?: string
@@ -215,7 +214,6 @@ export const getAutoModels = (models: BaseModel[]): BaseModel[] => {
       isAuto: true,
       tier,
       multimodal: members.some((m) => m.multimodal === true),
-      contextWindow: smallestMember.contextWindow,
       contextWindowTokens: resolveContextWindowTokens(smallestMember),
     })
   }
