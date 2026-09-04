@@ -364,20 +364,6 @@ export function ChatInput({
     }
   }
 
-  // Random placeholder - use first one initially to avoid SSR hydration mismatch,
-  // then randomize after mount
-  const [placeholder, setPlaceholder] = useState<string>(
-    CONSTANTS.INPUT_PLACEHOLDERS[0],
-  )
-
-  useEffect(() => {
-    setPlaceholder(
-      CONSTANTS.INPUT_PLACEHOLDERS[
-        Math.floor(Math.random() * CONSTANTS.INPUT_PLACEHOLDERS.length)
-      ],
-    )
-  }, [])
-
   // Scroll to the end when new documents are added
   useEffect(() => {
     if (documentsScrollRef.current && processedDocuments?.length) {
@@ -1205,7 +1191,11 @@ export function ChatInput({
                   cancelGeneration()
                 }
               }}
-              placeholder={hasMessages ? 'Reply to Tin...' : placeholder}
+              placeholder={
+                hasMessages
+                  ? CONSTANTS.REPLY_PLACEHOLDER
+                  : CONSTANTS.INPUT_PLACEHOLDER
+              }
               rows={1}
               className={cn(
                 'w-full resize-none bg-transparent font-chat text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none',
