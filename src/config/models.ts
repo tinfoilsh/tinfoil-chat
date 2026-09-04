@@ -1,4 +1,7 @@
-import { setGenUIConfig } from '@/components/chat/genui/config'
+import {
+  setGenUIConfig,
+  type GenUIConfig,
+} from '@/components/chat/genui/config'
 import { API_BASE_URL, IS_DEV } from '@/config'
 import {
   CONFIG_CACHED_MODELS,
@@ -353,8 +356,8 @@ type SystemPromptAndRules = {
   rules: string
 }
 
-type CachedSystemPromptAndRules = SystemPromptAndRules & {
-  genUI?: unknown
+type SystemPromptResponse = SystemPromptAndRules & {
+  genUI: GenUIConfig
 }
 
 function readCachedConfig<T>(
@@ -404,15 +407,25 @@ function isBaseModelArray(value: unknown): value is BaseModel[] {
   )
 }
 
-function isSystemPromptAndRules(
-  value: unknown,
-): value is CachedSystemPromptAndRules {
+function isGenUIConfig(value: unknown): value is GenUIConfig {
+  const candidate = value as Record<string, unknown> | null
+  return (
+    typeof candidate === 'object' &&
+    candidate !== null &&
+    typeof candidate.header === 'string' &&
+    Array.isArray(candidate.enabledWidgets) &&
+    candidate.enabledWidgets.every((w) => typeof w === 'string')
+  )
+}
+
+function isSystemPromptResponse(value: unknown): value is SystemPromptResponse {
   const candidate = value as Record<string, unknown> | null
   return (
     typeof candidate === 'object' &&
     candidate !== null &&
     typeof candidate.systemPrompt === 'string' &&
-    typeof candidate.rules === 'string'
+    typeof candidate.rules === 'string' &&
+    isGenUIConfig(candidate.genUI)
   )
 }
 
@@ -437,10 +450,10 @@ export function getCachedAIModels(): BaseModel[] | null {
 export function getCachedSystemPromptAndRules(): SystemPromptAndRules | null {
   const cached = readCachedConfig(
     CONFIG_CACHED_SYSTEM_PROMPT,
-    isSystemPromptAndRules,
+    isSystemPromptResponse,
   )
   if (!cached) return null
-  applyGenUIConfigFromResponse(cached.genUI)
+  setGenUIConfig(cached.genUI)
   return {
     systemPrompt: cached.systemPrompt,
     rules: cached.rules,
@@ -501,18 +514,18 @@ export const getSystemPromptAndRules =
         throw new Error(`Failed to fetch system prompt: ${response.status}`)
       }
 
-      const data = await response.json()
-      const result: CachedSystemPromptAndRules = {
-        systemPrompt: data.systemPrompt,
-        rules: data.rules,
-        genUI: data?.genUI,
-      }
-      if (!isSystemPromptAndRules(result)) {
+      const data: unknown = await response.json()
+      if (!isSystemPromptResponse(data)) {
         throw new Error('System prompt response is malformed')
       }
-      applyGenUIConfigFromResponse(result.genUI)
+      const result: SystemPromptResponse = {
+        systemPrompt: data.systemPrompt,
+        rules: data.rules,
+        genUI: data.genUI,
+      }
+      setGenUIConfig(result.genUI)
       writeCachedConfig(CONFIG_CACHED_SYSTEM_PROMPT, result)
-      return result
+      return { systemPrompt: result.systemPrompt, rules: result.rules }
     } catch (error) {
       logError('Failed to fetch system prompt', error, {
         component: 'getSystemPromptAndRules',
@@ -520,29 +533,6 @@ export const getSystemPromptAndRules =
       return null
     }
   }
-
-/**
- * Validates the optional `genUI` block from the system-prompt response and
- * pushes it into the runtime config used by the GenUI prompt and tool
- * builders. Malformed or missing payloads clear the runtime config so the
- * bundled defaults take over, rather than leaving stale config from an
- * earlier successful fetch active.
- */
-export function applyGenUIConfigFromResponse(raw: unknown): void {
-  if (!raw || typeof raw !== 'object') {
-    setGenUIConfig(null)
-    return
-  }
-  const obj = raw as Record<string, unknown>
-  if (typeof obj.header !== 'string' || !Array.isArray(obj.enabledWidgets)) {
-    setGenUIConfig(null)
-    return
-  }
-  const enabledWidgets = obj.enabledWidgets.filter(
-    (w): w is string => typeof w === 'string',
-  )
-  setGenUIConfig({ header: obj.header, enabledWidgets })
-}
 
 // Fetch memory prompt from the API
 export const getMemoryPrompt = async (): Promise<string> => {

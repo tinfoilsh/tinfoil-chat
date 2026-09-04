@@ -17,9 +17,9 @@
  * controlplane.
  *
  * Until the controlplane response arrives, `getGenUIConfig()` returns
- * `null`, which the prompt/tool builders treat as "use bundled defaults"
- * (i.e. all registered widgets enabled with the bundled header). This keeps
- * the first-render path working when the network is slow or offline.
+ * `null`, which the prompt/tool builders treat as "GenUI is off". The
+ * webapp blocks on the config fetch before chat becomes interactive, so
+ * this only covers the pre-fetch window.
  */
 
 export interface GenUIConfig {

@@ -24,7 +24,7 @@ function filterAllowed<T extends { name: string }>(
   registry: readonly T[],
 ): readonly T[] {
   const config = getGenUIConfig()
-  if (!config) return registry
+  if (!config) return []
   const allowed = new Set(config.enabledWidgets)
   return registry.filter((w) => allowed.has(w.name))
 }
@@ -50,8 +50,8 @@ describe('GenUI runtime config', () => {
 })
 
 describe('widget allowlist filter', () => {
-  it('exposes every widget when no config is set', () => {
-    expect(filterAllowed(widgetFixture)).toHaveLength(widgetFixture.length)
+  it('exposes no widgets when no config is set', () => {
+    expect(filterAllowed(widgetFixture)).toHaveLength(0)
   })
 
   it('restricts widgets to the controlplane allowlist', () => {
