@@ -18,6 +18,12 @@ export interface ChatSearchState {
   /** True while the enclave rebuilds the index; results may be partial. */
   isIndexing: boolean
   /**
+   * True when the current term's search threw or the index rebuild it
+   * was waiting on did not complete, so an empty result set must not
+   * be presented as "no matches".
+   */
+  failed: boolean
+  /**
    * False when server-side search cannot run (no key loaded, enclave
    * without a search backend). Callers should fall back to filtering
    * locally loaded chats by title.
@@ -42,6 +48,7 @@ export function useChatSearch(
   const [results, setResults] = useState<SearchResultChat[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [isIndexing, setIsIndexing] = useState(false)
+  const [failed, setFailed] = useState(false)
   const [available, setAvailable] = useState(true)
   const [refreshNonce, setRefreshNonce] = useState(0)
 
@@ -50,6 +57,7 @@ export function useChatSearch(
       setResults([])
       setIsSearching(false)
       setIsIndexing(false)
+      setFailed(false)
       return
     }
     // Set on cleanup so completions from a superseded term (or an
@@ -57,6 +65,7 @@ export function useChatSearch(
     // state or schedule a refresh.
     let cancelled = false
     setIsSearching(true)
+    setFailed(false)
     const run = async () => {
       try {
         const outcome = await searchSyncedChats(trimmed, SEARCH_RESULT_LIMIT)
@@ -81,6 +90,9 @@ export function useChatSearch(
               setRefreshNonce((n) => n + 1)
             } else {
               setIsIndexing(false)
+              // 'skipped' means a recent rebuild already failed and we
+              // are inside its cooldown, so the index is still broken.
+              setFailed(true)
             }
           })
         }
@@ -96,6 +108,7 @@ export function useChatSearch(
         // flag, so reset it here or the "building index" indicator
         // stays up until the user edits the term.
         setIsIndexing(false)
+        setFailed(true)
       }
     }
     const timer = setTimeout(() => void run(), SEARCH_DEBOUNCE_MS)
@@ -105,5 +118,5 @@ export function useChatSearch(
     }
   }, [trimmed, active, includeProjectChats, refreshNonce])
 
-  return { results, isSearching, isIndexing, available }
+  return { results, isSearching, isIndexing, failed, available }
 }
