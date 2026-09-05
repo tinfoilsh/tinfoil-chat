@@ -706,7 +706,12 @@ export function ChatInput({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="relative order-2 md:order-none">
+      {hasMessages && modelSelectorButton && (
+        <div className="flex items-center self-end px-3 md:hidden">
+          {modelSelectorButton}
+        </div>
+      )}
+      <div className="relative">
         {mobileHeader}
         <div
           className={cn(
@@ -1445,11 +1450,11 @@ export function ChatInput({
       </div>
 
       {hasMessages && (
-        <div className="contents md:flex md:items-center md:justify-between md:gap-4 md:px-6">
-          <p className="order-3 px-3 text-xs text-content-muted md:order-none md:px-0">
+        <div className="flex items-center justify-between gap-4 px-3 md:px-6">
+          <p className="text-xs text-content-muted">
             AI can make mistakes. Verify important information.
           </p>
-          <div className="order-1 flex items-center gap-2 self-end px-3 md:order-none md:self-auto md:px-0">
+          <div className="hidden items-center gap-2 md:flex">
             {contextUsage && (
               <ContextUsageIndicator
                 usage={contextUsage}
