@@ -706,6 +706,11 @@ export function ChatInput({
 
   return (
     <div className="flex flex-col gap-2">
+      {hasMessages && modelSelectorButton && (
+        <div className="flex items-center self-end px-3 md:hidden">
+          {modelSelectorButton}
+        </div>
+      )}
       <div className="relative">
         {mobileHeader}
         <div
@@ -1449,7 +1454,7 @@ export function ChatInput({
           <p className="text-xs text-content-muted">
             AI can make mistakes. Verify important information.
           </p>
-          <div className="flex items-center gap-2">
+          <div className="hidden items-center gap-2 md:flex">
             {contextUsage && (
               <ContextUsageIndicator
                 usage={contextUsage}

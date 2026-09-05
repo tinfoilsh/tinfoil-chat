@@ -327,7 +327,9 @@ export function ModelSelector({
 
   const focusTrigger = () => {
     requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>('[data-model-selector]')?.focus()
+      menuRef.current?.parentElement
+        ?.querySelector<HTMLElement>('[data-model-selector]')
+        ?.focus()
     })
   }
 

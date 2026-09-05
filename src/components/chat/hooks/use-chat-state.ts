@@ -259,16 +259,21 @@ export function useChatState({
       const triggerSelector = '[data-model-selector]'
       const menuSelector = '[data-model-menu]'
 
-      const getSelectorElements = () => ({
-        trigger: document.querySelector<HTMLElement>(triggerSelector),
-        menu: document.querySelector<HTMLElement>(menuSelector),
-      })
+      const getSelectorElements = () => [
+        ...document.querySelectorAll<HTMLElement>(triggerSelector),
+        ...document.querySelectorAll<HTMLElement>(menuSelector),
+      ]
+      const getVisibleTrigger = () =>
+        [...document.querySelectorAll<HTMLElement>(triggerSelector)].find(
+          (element) => element.getClientRects().length > 0,
+        )
 
       const isOutsideSelector = (target: EventTarget | null) => {
         if (!(target instanceof Node)) return false
-        const { trigger, menu } = getSelectorElements()
+        const selectorElements = getSelectorElements()
         return (
-          trigger && menu && !trigger.contains(target) && !menu.contains(target)
+          selectorElements.length > 0 &&
+          selectorElements.every((element) => !element.contains(target))
         )
       }
 
@@ -288,7 +293,7 @@ export function useChatState({
         if (event.key === 'Escape') {
           event.preventDefault()
           setExpandedLabel(null)
-          getSelectorElements().trigger?.focus()
+          getVisibleTrigger()?.focus()
         }
       }
 
