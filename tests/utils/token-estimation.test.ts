@@ -35,10 +35,12 @@ describe('estimateTokenCount', () => {
 })
 
 describe('resolveContextWindowTokens', () => {
-  it('uses the numeric model metadata', () => {
-    expect(resolveContextWindowTokens({ contextWindowTokens: 256000 })).toBe(
-      256000,
-    )
+  it('uses the chat config budget', () => {
+    expect(
+      resolveContextWindowTokens({
+        chatConfig: { contextWindowTokens: 256000 },
+      }),
+    ).toBe(256000)
   })
 
   it('falls back to the default when the model reports no window', () => {
@@ -51,8 +53,8 @@ describe('resolveContextWindowTokens', () => {
   it('finds the smallest context window across candidates', () => {
     expect(
       getSmallestContextWindowTokens([
-        { contextWindowTokens: 256000 },
-        { contextWindowTokens: 32000 },
+        { chatConfig: { contextWindowTokens: 256000 } },
+        { chatConfig: { contextWindowTokens: 32000 } },
         {},
       ]),
     ).toBe(32000)

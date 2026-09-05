@@ -99,7 +99,8 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
     // Prefer a fast multimodal model over larger reasoning-heavy ones
     const multimodalModel =
       models.find(
-        (m) => isMultimodalChat(m) && m.attributes?.includes(fastTier),
+        (m) =>
+          isMultimodalChat(m) && m.chatConfig?.attributes?.includes(fastTier),
       ) ?? models.find(isMultimodalChat)
     if (!multimodalModel) {
       throw new Error('No multimodal model available')

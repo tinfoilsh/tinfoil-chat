@@ -33,7 +33,7 @@ const mockModels: BaseModel[] = [mockModelA, mockModelB]
 const mockFastModel: BaseModel = {
   ...mockModelB,
   modelName: 'model-fast',
-  attributes: ['fast'],
+  chatConfig: { attributes: ['fast'] },
 }
 
 const modelsWithFastTier: BaseModel[] = [mockModelA, mockFastModel]

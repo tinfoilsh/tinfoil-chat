@@ -119,13 +119,13 @@ export function useThinkingEnabled() {
 }
 
 export function isReasoningModel(model: BaseModel | undefined): boolean {
-  return !!model?.reasoningConfig
+  return !!model?.chatConfig?.reasoningConfig
 }
 
 export function supportsReasoningEffort(model: BaseModel | undefined): boolean {
-  return !!model?.reasoningConfig?.supportsEffort
+  return !!model?.chatConfig?.reasoningConfig?.supportsEffort
 }
 
 export function supportsThinkingToggle(model: BaseModel | undefined): boolean {
-  return !!model?.reasoningConfig?.supportsToggle
+  return !!model?.chatConfig?.reasoningConfig?.supportsToggle
 }

@@ -29,7 +29,9 @@ vi.mock('@/components/chat/WelcomeScreen', () => ({
   WelcomeScreen: () => null,
 }))
 
-const models = [{ id: 'model-1', contextWindowTokens: 1000 }] as any
+const models = [
+  { id: 'model-1', chatConfig: { contextWindowTokens: 1000 } },
+] as any
 
 function message(
   role: Message['role'],

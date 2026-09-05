@@ -24,15 +24,19 @@ const preservedHistoryModel: BaseModel = {
   ...model,
   modelName: 'kimi-k3',
   name: 'Kimi K3',
-  reasoningConfig: { reasoningHistoryPolicy: REASONING_HISTORY_POLICIES.all },
+  chatConfig: {
+    reasoningConfig: { reasoningHistoryPolicy: REASONING_HISTORY_POLICIES.all },
+  },
 }
 
 const toolCallHistoryModel: BaseModel = {
   ...model,
   modelName: 'gemma4-31b',
   name: 'Gemma 4',
-  reasoningConfig: {
-    reasoningHistoryPolicy: REASONING_HISTORY_POLICIES.toolCallOnly,
+  chatConfig: {
+    reasoningConfig: {
+      reasoningHistoryPolicy: REASONING_HISTORY_POLICIES.toolCallOnly,
+    },
   },
 }
 
@@ -41,7 +45,7 @@ describe('ChatQueryBuilder', () => {
     const messages = ChatQueryBuilder.buildMessages({
       model: {
         ...model,
-        contextWindowTokens: 1000,
+        chatConfig: { contextWindowTokens: 1000 },
       },
       systemPrompt: '',
       rules: '',
