@@ -2452,7 +2452,16 @@ export function ChatSidebar({
                         pinnedChatIds={pinnedChatIds}
                         onTogglePin={onToggleFavorite}
                         emptyState={
-                          isSearchActive ? (
+                          isSearchActive && chatSearch.failed ? (
+                            <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
+                              <p className="text-sm text-content-muted">
+                                Search is unavailable right now
+                              </p>
+                              <p className="mt-1 text-balance text-xs text-content-muted">
+                                Please try again in a moment
+                              </p>
+                            </div>
+                          ) : isSearchActive ? (
                             <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
                               <p className="text-sm text-content-muted">
                                 No matching chats
