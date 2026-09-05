@@ -79,7 +79,7 @@ const baseProps = {
   pendingRecoveries: [recovery],
   isDarkMode: false,
   chatId: 'chat-1',
-  models: [{ id: 'model-1', contextWindow: 1000 }] as any,
+  models: [{ id: 'model-1', contextWindowTokens: 1000 }] as any,
   selectedModel: 'model-1',
 }
 

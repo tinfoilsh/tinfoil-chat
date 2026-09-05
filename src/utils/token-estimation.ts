@@ -9,11 +9,10 @@ import {
 // the remainder is headroom for the system prompt and the model's response.
 export const CONTEXT_WINDOW_USAGE_RATIO = 0.8
 
-export const DEFAULT_CONTEXT_WINDOW_TOKENS = 64000
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 128000
 
 export type ContextWindowConfig = {
   contextWindowTokens?: number
-  contextWindow?: string
 }
 
 // Roughly estimate token count based on character length (≈4 chars per token)
@@ -22,39 +21,10 @@ export function estimateTokenCount(text: string | undefined): number {
   return Math.ceil(text.length / 4)
 }
 
-// Any parsed window below this is treated as an unrecognized format (e.g. a
-// suffix this parser predates) rather than a real limit; zeroing the budget
-// would silently archive the whole conversation.
-const MIN_PLAUSIBLE_CONTEXT_WINDOW_TOKENS = 1000
-
-// Parse values like "64k tokens" → 64000 or "1M tokens" → 1000000
-export function parseContextWindowTokens(contextWindow?: string): number {
-  if (!contextWindow) return DEFAULT_CONTEXT_WINDOW_TOKENS
-  const match = contextWindow.match(/(\d+(?:\.\d+)?)\s*([km])?/i)
-  if (!match) return DEFAULT_CONTEXT_WINDOW_TOKENS
-  let tokens = parseFloat(match[1])
-  const suffix = match[2]?.toLowerCase()
-  if (suffix === 'k') tokens *= 1_000
-  if (suffix === 'm') tokens *= 1_000_000
-  tokens = Math.round(tokens)
-  if (tokens < MIN_PLAUSIBLE_CONTEXT_WINDOW_TOKENS) {
-    return DEFAULT_CONTEXT_WINDOW_TOKENS
-  }
-  return tokens
-}
-
 export function resolveContextWindowTokens(
   config: ContextWindowConfig | undefined,
 ): number {
-  const configuredTokens = config?.contextWindowTokens
-  if (
-    Number.isFinite(configuredTokens) &&
-    configuredTokens !== undefined &&
-    configuredTokens >= MIN_PLAUSIBLE_CONTEXT_WINDOW_TOKENS
-  ) {
-    return Math.round(configuredTokens)
-  }
-  return parseContextWindowTokens(config?.contextWindow)
+  return config?.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS
 }
 
 export function getSmallestContextWindowTokens(

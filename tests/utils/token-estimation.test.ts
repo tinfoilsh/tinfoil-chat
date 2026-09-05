@@ -2,13 +2,13 @@ import type { Message } from '@/components/chat/types'
 import { REASONING_HISTORY_POLICIES } from '@/utils/reasoning-history'
 import {
   CONTEXT_WINDOW_USAGE_RATIO,
+  DEFAULT_CONTEXT_WINDOW_TOKENS,
   estimateMessageTokens,
   estimateTokenCount,
   findContextStartIndex,
   getContextTokenBudget,
   getHistoryTokenBudget,
   getSmallestContextWindowTokens,
-  parseContextWindowTokens,
   resolveContextWindowTokens,
   selectMessagesWithinBudget,
 } from '@/utils/token-estimation'
@@ -34,58 +34,29 @@ describe('estimateTokenCount', () => {
   })
 })
 
-describe('parseContextWindowTokens', () => {
-  it('parses "64k tokens" style values', () => {
-    expect(parseContextWindowTokens('64k tokens')).toBe(64000)
-    expect(parseContextWindowTokens('256K tokens')).toBe(256000)
-    expect(parseContextWindowTokens('32000')).toBe(32000)
-  })
-
-  it('parses "1M tokens" style values', () => {
-    expect(parseContextWindowTokens('1M tokens')).toBe(1000000)
-    expect(parseContextWindowTokens('1.5m tokens')).toBe(1500000)
-  })
-
-  it('falls back to a default for missing or malformed values', () => {
-    expect(parseContextWindowTokens(undefined)).toBe(64000)
-    expect(parseContextWindowTokens('unknown')).toBe(64000)
-  })
-
-  it('falls back to a default for implausibly small windows', () => {
-    expect(parseContextWindowTokens('1 tokens')).toBe(64000)
-    expect(parseContextWindowTokens('512')).toBe(64000)
-  })
-})
-
 describe('resolveContextWindowTokens', () => {
-  it('prefers numeric model metadata', () => {
-    expect(
-      resolveContextWindowTokens({
-        contextWindowTokens: 128000,
-        contextWindow: '1k tokens',
-      }),
-    ).toBe(128000)
-  })
-
-  it('falls back to legacy display metadata', () => {
-    expect(resolveContextWindowTokens({ contextWindow: '256k tokens' })).toBe(
+  it('uses the numeric model metadata', () => {
+    expect(resolveContextWindowTokens({ contextWindowTokens: 256000 })).toBe(
       256000,
     )
-    expect(
-      resolveContextWindowTokens({
-        contextWindowTokens: 0,
-        contextWindow: '32k tokens',
-      }),
-    ).toBe(32000)
   })
 
-  it('finds the smallest mixed-format context window', () => {
+  it('falls back to the default when the model reports no window', () => {
+    expect(resolveContextWindowTokens({})).toBe(DEFAULT_CONTEXT_WINDOW_TOKENS)
+    expect(resolveContextWindowTokens(undefined)).toBe(
+      DEFAULT_CONTEXT_WINDOW_TOKENS,
+    )
+  })
+
+  it('finds the smallest context window across candidates', () => {
     expect(
       getSmallestContextWindowTokens([
-        { contextWindowTokens: 256000, contextWindow: '1k tokens' },
-        { contextWindow: '128k tokens' },
+        { contextWindowTokens: 256000 },
+        { contextWindowTokens: 32000 },
+        {},
       ]),
-    ).toBe(128000)
+    ).toBe(32000)
+    expect(getSmallestContextWindowTokens([])).toBeUndefined()
   })
 })
 
