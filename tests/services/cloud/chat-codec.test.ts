@@ -182,6 +182,12 @@ describe('Chat Codec - processRemoteChat', () => {
                   fileName: 'notes.txt',
                   textContent: 'notes',
                 },
+                {
+                  id: 'legacy-image',
+                  type: 'image',
+                  fileName: 'legacy.png',
+                  key: 'legacy-key',
+                },
               ],
             },
           ],
@@ -191,6 +197,7 @@ describe('Chat Codec - processRemoteChat', () => {
       expect(result.chat.messages[0].attachments).toBeUndefined()
       expect(result.chat.messages[1].attachments).toEqual([
         expect.objectContaining({ id: 'valid-document' }),
+        expect.objectContaining({ id: 'legacy-image', key: 'legacy-key' }),
       ])
     })
 
