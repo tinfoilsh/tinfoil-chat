@@ -43,6 +43,7 @@ export interface IngestOptions {
 export interface IngestFailure {
   chatId: string
   error: unknown
+  stage: 'decode' | 'storage'
 }
 
 export interface IngestResult {
@@ -81,6 +82,7 @@ export async function ingestRemoteChats(
       continue
     }
 
+    let stage: IngestFailure['stage'] = 'decode'
     try {
       let fetchedProjectMetadata:
         { projectIdSet: boolean; projectId?: string | null } | undefined
@@ -113,6 +115,7 @@ export async function ingestRemoteChats(
       }
       const decoded = await processRemoteChat(codecInput, codecOptions)
       if (!isCurrent()) break
+      stage = 'storage'
       const applied = await indexedDBStorage.applyRemoteChatIfFresh({
         chat: decoded.chat,
         syncVersion: decoded.chat.syncVersion ?? 0,
@@ -133,7 +136,7 @@ export async function ingestRemoteChats(
         action: 'ingestRemoteChats',
         metadata: { chatId: remoteChat.id },
       })
-      result.errors.push({ chatId: remoteChat.id, error })
+      result.errors.push({ chatId: remoteChat.id, error, stage })
     }
   }
 
