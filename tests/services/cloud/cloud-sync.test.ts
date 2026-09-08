@@ -30,6 +30,7 @@ const {
   clearRevisionCheckpoint,
   reportKeyActionRequired,
   reportChatSyncFailed,
+  reportChatSyncRecovered,
 } = vi.hoisted(() => ({
   drainChatRevisionSync: vi.fn(),
   isAuthenticated: vi.fn(),
@@ -49,6 +50,7 @@ const {
   clearRevisionCheckpoint: vi.fn(),
   reportKeyActionRequired: vi.fn(),
   reportChatSyncFailed: vi.fn(),
+  reportChatSyncRecovered: vi.fn(),
 }))
 
 vi.mock('@/services/cloud/chat-revision-sync', () => ({
@@ -99,6 +101,7 @@ vi.mock('@/services/cloud/streaming-tracker', () => ({
 vi.mock('@/services/cloud/sync-health', () => ({
   reportChatSynced: vi.fn(),
   reportChatSyncFailed,
+  reportChatSyncRecovered,
   reportKeyActionRequired,
   reportSyncPaused: vi.fn(),
 }))
@@ -1004,6 +1007,37 @@ describe('CloudSyncService revision coordinator routing', () => {
       }),
     ).rejects.toThrow('Remote chat page is incomplete')
     expect(getAllChats).not.toHaveBeenCalled()
+  })
+
+  it('passes list metadata into chats decoded for export', async () => {
+    listChats.mockResolvedValue({
+      conversations: [
+        {
+          id: 'imported-chat',
+          syncVersion: 1,
+          updatedAt: '2026-01-02T00:00:00Z',
+          projectId: 'project-1',
+        },
+      ],
+      hasMore: false,
+    })
+    downloadChats.mockResolvedValue([
+      { status: 'ok', id: 'imported-chat', syncVersion: 1, content: '{}' },
+    ])
+    processRemoteChat.mockResolvedValueOnce({
+      chat: { id: 'imported-chat', syncVersion: 1, messages: [] },
+    })
+
+    await new CloudSyncService().loadChatsWithPagination({ limit: 10 })
+
+    expect(processRemoteChat).toHaveBeenCalledWith({
+      id: 'imported-chat',
+      plaintext: '{}',
+      syncVersion: 1,
+      formatVersion: 2,
+      updatedAt: '2026-01-02T00:00:00Z',
+      projectId: 'project-1',
+    })
   })
 
   it('continues decryption recovery after an individual eviction fails', async () => {

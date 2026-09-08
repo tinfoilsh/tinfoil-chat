@@ -53,6 +53,7 @@ import { streamingTracker } from './streaming-tracker'
 import {
   reportChatSynced,
   reportChatSyncFailed,
+  reportChatSyncRecovered,
   reportKeyActionRequired,
   reportSyncPaused,
 } from './sync-health'
@@ -975,6 +976,9 @@ export class CloudSyncService {
       userId,
     })
     this.ensureCurrentAccount(generation, userId)
+    for (const chatId of ingest.savedIds) {
+      reportChatSyncRecovered(chatId)
+    }
     const storageFailure = ingest.errors.find(
       (failure) => failure.stage === 'storage',
     )
@@ -1043,6 +1047,7 @@ export class CloudSyncService {
       const entries = remote.conversations.filter(
         (entry) => !deletedChatsTracker.isDeleted(entry.id),
       )
+      const metadata = new Map(entries.map((entry) => [entry.id, entry]))
       const pulled = await cloudStorage.downloadChats(
         entries.map((entry) => entry.id),
       )
@@ -1057,11 +1062,14 @@ export class CloudSyncService {
           )
         }
         try {
+          const entry = metadata.get(result.id)!
           const decoded = await processRemoteChat({
             id: result.id,
             plaintext: result.content,
             syncVersion: result.syncVersion,
             formatVersion: 2,
+            updatedAt: entry.updatedAt,
+            projectId: entry.projectId ?? undefined,
           })
           chats.push(decoded.chat)
         } catch (error) {
