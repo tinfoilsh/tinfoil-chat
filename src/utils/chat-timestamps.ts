@@ -22,7 +22,7 @@ export function getConversationTimestampFromId(
 }
 
 export function ensureValidISODate(
-  value: string | number | Date | undefined,
+  value: string | number | Date | null | undefined,
   conversationId?: string,
 ): string {
   if (value !== undefined && value !== null) {

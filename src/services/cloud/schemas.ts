@@ -98,8 +98,8 @@ export const RemoteChatPlaintextSchema = z
         }
       })
       .optional(),
-    createdAt: z.union([z.string(), z.number()]).optional(),
-    updatedAt: z.union([z.string(), z.number()]).optional(),
+    createdAt: z.union([z.string(), z.number()]).nullish(),
+    updatedAt: z.union([z.string(), z.number()]).nullish(),
     model: z.string().optional(),
     webSearchEnabled: z.boolean().optional(),
     isLocalOnly: z.boolean().optional(),

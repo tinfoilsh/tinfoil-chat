@@ -124,6 +124,40 @@ describe('Chat Codec - processRemoteChat', () => {
 
       expect(result.chat.id).toBe('remote-chat-1')
     })
+
+    it('drops imported documents that have no readable payload', async () => {
+      const result = await processRemoteChat({
+        ...baseRemoteChat,
+        plaintext: basePlaintext({
+          messages: [
+            {
+              role: 'user',
+              content: 'Read this',
+              attachments: [
+                {
+                  id: '',
+                  type: 'document',
+                  fileName: 'missing.pdf',
+                },
+              ],
+            },
+          ],
+        }),
+      })
+
+      expect(result.chat.messages[0].attachments).toEqual([])
+    })
+
+    it('accepts null imported timestamps using remote metadata', async () => {
+      const result = await processRemoteChat({
+        ...baseRemoteChat,
+        createdAt: null,
+        plaintext: basePlaintext({ createdAt: null, updatedAt: null }),
+      })
+
+      expect(result.chat.createdAt).toBe('2024-01-02T00:00:00.000Z')
+      expect(result.chat.updatedAt).toBe('2024-01-02T00:00:00.000Z')
+    })
   })
 
   describe('No content handling', () => {

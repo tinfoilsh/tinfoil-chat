@@ -21,7 +21,7 @@ export interface RemoteChatData {
    * unsealing. v2 is the only format the codec accepts.
    */
   plaintext?: string | null
-  createdAt?: string
+  createdAt?: string | null
   updatedAt?: string | null
   formatVersion?: number
   syncVersion?: number
@@ -48,6 +48,22 @@ export class RemoteChatDecodeError extends Error {
   }
 }
 
+function removePayloadlessDocuments(
+  messages: StoredChat['messages'],
+): StoredChat['messages'] {
+  return messages.map((message) => ({
+    ...message,
+    attachments: message.attachments?.filter(
+      (attachment) =>
+        attachment.type !== 'document' ||
+        typeof attachment.base64 === 'string' ||
+        typeof attachment.thumbnailBase64 === 'string' ||
+        typeof attachment.textContent === 'string' ||
+        Array.isArray(attachment.pages),
+    ),
+  }))
+}
+
 /**
  * Decode a plaintext v2 row coming back from the enclave into a
  * `StoredChat`. Failure modes:
@@ -65,7 +81,10 @@ export async function processRemoteChat(
     ? (projectId ?? undefined)
     : localChat?.projectId
 
-  const safeCreatedAt = ensureValidISODate(remote.createdAt, remote.id)
+  const safeCreatedAt = ensureValidISODate(
+    remote.createdAt ?? remote.updatedAt,
+    remote.id,
+  )
   const safeUpdatedAt = ensureValidISODate(
     remote.updatedAt ?? remote.createdAt,
     remote.id,
@@ -108,6 +127,9 @@ export async function processRemoteChat(
     })
   }
   const decrypted = validation.data
+  const messages = removePayloadlessDocuments(
+    decrypted.messages as StoredChat['messages'],
+  )
 
   // Advance the local logical clock past any remote edit clock so a
   // later local edit is guaranteed to outrank what we just observed.
@@ -118,10 +140,10 @@ export async function processRemoteChat(
     title: decrypted.title ?? DEFAULT_CHAT_TITLE,
     // MessageSchema validates the fields the app depends on and
     // passes the rest through, so the runtime shape is a Message.
-    messages: decrypted.messages as StoredChat['messages'],
+    messages,
     id: remote.id,
     createdAt: ensureValidISODate(
-      decrypted.createdAt ?? remote.createdAt,
+      decrypted.createdAt ?? remote.createdAt ?? remote.updatedAt,
       remote.id,
     ),
     updatedAt: ensureValidISODate(

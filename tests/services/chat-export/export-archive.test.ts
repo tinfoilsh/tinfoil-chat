@@ -74,6 +74,47 @@ describe('buildChatExport', () => {
     expect(att.textContent).toBe('the contents')
   })
 
+  it('exports page-backed documents with inline text', async () => {
+    const chats = [
+      chat({
+        messages: [
+          {
+            role: 'user',
+            content: 'read this',
+            timestamp: new Date('2023-11-14T22:13:21.000Z'),
+            attachments: [
+              {
+                id: 'doc-1',
+                type: 'document',
+                fileName: 'scan.pdf',
+                pages: [
+                  {
+                    page: 1,
+                    text: 'first page',
+                    image: 'page-one',
+                    is_scanned: true,
+                  },
+                  {
+                    page: 2,
+                    text: 'second page',
+                    image: 'page-two',
+                    is_scanned: true,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ]
+
+    const result = await buildChatExport(chats, async () => null)
+    const parsed = JSON.parse(result.data as string)
+    const att = parsed[0].chat_messages[0].attachments[0]
+
+    expect(att.textContent).toBe('first page\n\n---\n\nsecond page')
+  })
+
   it('produces a zip with attachments, manifest, and no key leakage', async () => {
     const imageBytes = new Uint8Array([1, 2, 3, 4, 5])
     const chats = [
