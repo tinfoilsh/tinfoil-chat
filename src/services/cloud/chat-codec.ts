@@ -12,7 +12,7 @@ import { ensureValidISODate } from '@/utils/chat-timestamps'
 import { logInfo } from '@/utils/error-handling'
 import type { ChatSyncMetadata, StoredChat } from '../storage/indexed-db'
 import { observe } from './edit-clock'
-import { RemoteChatPlaintextSchema } from './schemas'
+import { RemoteChatPlaintextSchema, type RemoteChatMessage } from './schemas'
 
 export interface RemoteChatData {
   id: string
@@ -48,20 +48,62 @@ export class RemoteChatDecodeError extends Error {
   }
 }
 
-function removePayloadlessDocuments(
-  messages: StoredChat['messages'],
+type StoredMessage = StoredChat['messages'][number]
+type StoredAttachment = NonNullable<StoredMessage['attachments']>[number]
+
+function hasNonEmptyString(
+  value: Record<string, unknown>,
+  field: string,
+): boolean {
+  return typeof value[field] === 'string' && value[field].trim().length > 0
+}
+
+function hasReadablePages(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.some(
+      (page) =>
+        page !== null &&
+        typeof page === 'object' &&
+        (hasNonEmptyString(page as Record<string, unknown>, 'text') ||
+          hasNonEmptyString(page as Record<string, unknown>, 'image')),
+    )
+  )
+}
+
+function isUsableRemoteAttachment(value: unknown): value is StoredAttachment {
+  if (value === null || typeof value !== 'object') return false
+  const attachment = value as Record<string, unknown>
+  if (
+    (attachment.type !== 'image' && attachment.type !== 'document') ||
+    typeof attachment.id !== 'string' ||
+    typeof attachment.fileName !== 'string'
+  ) {
+    return false
+  }
+  if (hasNonEmptyString(attachment, 'base64')) return true
+  if (hasNonEmptyString(attachment, 'thumbnailBase64')) return true
+  if (attachment.type === 'document') {
+    return (
+      hasNonEmptyString(attachment, 'textContent') ||
+      hasReadablePages(attachment.pages)
+    )
+  }
+  return (
+    hasNonEmptyString(attachment, 'id') &&
+    hasNonEmptyString(attachment, 'encryptionKey')
+  )
+}
+
+function sanitizeRemoteMessages(
+  messages: RemoteChatMessage[],
 ): StoredChat['messages'] {
-  return messages.map((message) => ({
-    ...message,
-    attachments: message.attachments?.filter(
-      (attachment) =>
-        attachment.type !== 'document' ||
-        typeof attachment.base64 === 'string' ||
-        typeof attachment.thumbnailBase64 === 'string' ||
-        typeof attachment.textContent === 'string' ||
-        Array.isArray(attachment.pages),
-    ),
-  }))
+  return messages.map((message) => {
+    const attachments = Array.isArray(message.attachments)
+      ? message.attachments.filter(isUsableRemoteAttachment)
+      : undefined
+    return { ...message, attachments } as StoredMessage
+  })
 }
 
 /**
@@ -127,9 +169,7 @@ export async function processRemoteChat(
     })
   }
   const decrypted = validation.data
-  const messages = removePayloadlessDocuments(
-    decrypted.messages as StoredChat['messages'],
-  )
+  const messages = sanitizeRemoteMessages(decrypted.messages)
 
   // Advance the local logical clock past any remote edit clock so a
   // later local edit is guaranteed to outrank what we just observed.

@@ -35,6 +35,8 @@ const MessageSchema = z
   })
   .passthrough()
 
+export type RemoteChatMessage = z.infer<typeof MessageSchema>
+
 export const PendingRecoveryEnvelopeSchema = z
   .object({
     v: z.literal(1),

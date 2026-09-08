@@ -148,6 +148,52 @@ describe('Chat Codec - processRemoteChat', () => {
       expect(result.chat.messages[0].attachments).toEqual([])
     })
 
+    it('sanitizes malformed and empty imported attachments', async () => {
+      const result = await processRemoteChat({
+        ...baseRemoteChat,
+        plaintext: basePlaintext({
+          messages: [
+            {
+              role: 'user',
+              content: 'Malformed collection',
+              attachments: { invalid: true },
+            },
+            {
+              role: 'user',
+              content: 'Mixed entries',
+              attachments: [
+                null,
+                {},
+                {
+                  id: 'empty-text',
+                  type: 'document',
+                  fileName: 'empty.txt',
+                  textContent: '   ',
+                },
+                {
+                  id: 'empty-pages',
+                  type: 'document',
+                  fileName: 'empty.pdf',
+                  pages: [],
+                },
+                {
+                  id: 'valid-document',
+                  type: 'document',
+                  fileName: 'notes.txt',
+                  textContent: 'notes',
+                },
+              ],
+            },
+          ],
+        }),
+      })
+
+      expect(result.chat.messages[0].attachments).toBeUndefined()
+      expect(result.chat.messages[1].attachments).toEqual([
+        expect.objectContaining({ id: 'valid-document' }),
+      ])
+    })
+
     it('accepts null imported timestamps using remote metadata', async () => {
       const result = await processRemoteChat({
         ...baseRemoteChat,
