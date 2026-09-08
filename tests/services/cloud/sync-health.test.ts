@@ -2,6 +2,7 @@ import {
   getSyncHealthSnapshot,
   reportChatSynced,
   reportChatSyncFailed,
+  reportChatSyncRecovered,
   reportKeyActionRequired,
   reportKeyHealthy,
   reportSyncPaused,
@@ -69,6 +70,19 @@ describe('sync-health store', () => {
 
     reportChatSynced('chat-2')
     expect(syncHealthNeedsAttention(getSyncHealthSnapshot())).toBe(false)
+  })
+
+  it('clears a recovered chat without lifting the account gate', () => {
+    reportChatSyncFailed('chat-1', 'nope')
+    reportKeyActionRequired('account-blocked')
+
+    reportChatSyncRecovered('chat-1')
+
+    expect(getSyncHealthSnapshot().failedChats).toEqual({})
+    expect(getSyncHealthSnapshot().gate).toMatchObject({
+      kind: 'action-required',
+      reason: 'account-blocked',
+    })
   })
 
   it('only escalates a paused gate after the attention window', () => {

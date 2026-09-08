@@ -35,6 +35,8 @@ const MessageSchema = z
   })
   .passthrough()
 
+export type RemoteChatMessage = z.infer<typeof MessageSchema>
+
 export const PendingRecoveryEnvelopeSchema = z
   .object({
     v: z.literal(1),
@@ -98,8 +100,8 @@ export const RemoteChatPlaintextSchema = z
         }
       })
       .optional(),
-    createdAt: z.union([z.string(), z.number()]).optional(),
-    updatedAt: z.union([z.string(), z.number()]).optional(),
+    createdAt: z.union([z.string(), z.number()]).nullish(),
+    updatedAt: z.union([z.string(), z.number()]).nullish(),
     model: z.string().optional(),
     webSearchEnabled: z.boolean().optional(),
     isLocalOnly: z.boolean().optional(),

@@ -12,7 +12,7 @@ import { ensureValidISODate } from '@/utils/chat-timestamps'
 import { logInfo } from '@/utils/error-handling'
 import type { ChatSyncMetadata, StoredChat } from '../storage/indexed-db'
 import { observe } from './edit-clock'
-import { RemoteChatPlaintextSchema } from './schemas'
+import { RemoteChatPlaintextSchema, type RemoteChatMessage } from './schemas'
 
 export interface RemoteChatData {
   id: string
@@ -21,7 +21,7 @@ export interface RemoteChatData {
    * unsealing. v2 is the only format the codec accepts.
    */
   plaintext?: string | null
-  createdAt?: string
+  createdAt?: string | null
   updatedAt?: string | null
   formatVersion?: number
   syncVersion?: number
@@ -48,6 +48,65 @@ export class RemoteChatDecodeError extends Error {
   }
 }
 
+type StoredMessage = StoredChat['messages'][number]
+type StoredAttachment = NonNullable<StoredMessage['attachments']>[number]
+
+function hasNonEmptyString(
+  value: Record<string, unknown>,
+  field: string,
+): boolean {
+  return typeof value[field] === 'string' && value[field].trim().length > 0
+}
+
+function hasReadablePages(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.some(
+      (page) =>
+        page !== null &&
+        typeof page === 'object' &&
+        (hasNonEmptyString(page as Record<string, unknown>, 'text') ||
+          hasNonEmptyString(page as Record<string, unknown>, 'image')),
+    )
+  )
+}
+
+function isUsableRemoteAttachment(value: unknown): value is StoredAttachment {
+  if (value === null || typeof value !== 'object') return false
+  const attachment = value as Record<string, unknown>
+  if (
+    (attachment.type !== 'image' && attachment.type !== 'document') ||
+    typeof attachment.id !== 'string' ||
+    typeof attachment.fileName !== 'string'
+  ) {
+    return false
+  }
+  if (hasNonEmptyString(attachment, 'base64')) return true
+  if (hasNonEmptyString(attachment, 'thumbnailBase64')) return true
+  if (attachment.type === 'document') {
+    return (
+      hasNonEmptyString(attachment, 'textContent') ||
+      hasReadablePages(attachment.pages)
+    )
+  }
+  return (
+    hasNonEmptyString(attachment, 'id') &&
+    (hasNonEmptyString(attachment, 'encryptionKey') ||
+      hasNonEmptyString(attachment, 'key'))
+  )
+}
+
+function sanitizeRemoteMessages(
+  messages: RemoteChatMessage[],
+): StoredChat['messages'] {
+  return messages.map((message) => {
+    const attachments = Array.isArray(message.attachments)
+      ? message.attachments.filter(isUsableRemoteAttachment)
+      : undefined
+    return { ...message, attachments } as StoredMessage
+  })
+}
+
 /**
  * Decode a plaintext v2 row coming back from the enclave into a
  * `StoredChat`. Failure modes:
@@ -65,7 +124,10 @@ export async function processRemoteChat(
     ? (projectId ?? undefined)
     : localChat?.projectId
 
-  const safeCreatedAt = ensureValidISODate(remote.createdAt, remote.id)
+  const safeCreatedAt = ensureValidISODate(
+    remote.createdAt ?? remote.updatedAt,
+    remote.id,
+  )
   const safeUpdatedAt = ensureValidISODate(
     remote.updatedAt ?? remote.createdAt,
     remote.id,
@@ -108,6 +170,7 @@ export async function processRemoteChat(
     })
   }
   const decrypted = validation.data
+  const messages = sanitizeRemoteMessages(decrypted.messages)
 
   // Advance the local logical clock past any remote edit clock so a
   // later local edit is guaranteed to outrank what we just observed.
@@ -118,10 +181,10 @@ export async function processRemoteChat(
     title: decrypted.title ?? DEFAULT_CHAT_TITLE,
     // MessageSchema validates the fields the app depends on and
     // passes the rest through, so the runtime shape is a Message.
-    messages: decrypted.messages as StoredChat['messages'],
+    messages,
     id: remote.id,
     createdAt: ensureValidISODate(
-      decrypted.createdAt ?? remote.createdAt,
+      decrypted.createdAt ?? remote.createdAt ?? remote.updatedAt,
       remote.id,
     ),
     updatedAt: ensureValidISODate(

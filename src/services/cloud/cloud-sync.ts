@@ -117,9 +117,12 @@ export interface UnavailableRemoteChat {
 interface ChatHydrationResult {
   saved: number
   unavailable: UnavailableRemoteChat[]
+  skippedIds: string[]
 }
 
-export interface ChatPageResult extends ChatHydrationResult {
+export interface ChatPageResult {
+  saved: number
+  unavailable: UnavailableRemoteChat[]
   hasMore: boolean
   nextToken?: string
 }
@@ -940,7 +943,8 @@ export class CloudSyncService {
     generation: number,
     userId: string,
   ): Promise<ChatHydrationResult> {
-    if (entries.length === 0) return { saved: 0, unavailable: [] }
+    if (entries.length === 0)
+      return { saved: 0, unavailable: [], skippedIds: [] }
     const pulled = await cloudStorage.downloadChats(
       entries.map((entry) => entry.id),
     )
@@ -971,16 +975,29 @@ export class CloudSyncService {
       userId,
     })
     this.ensureCurrentAccount(generation, userId)
-    if (ingest.errors.length > 0) {
-      const [failure] = ingest.errors
+    const storageFailure = ingest.errors.find(
+      (failure) => failure.stage === 'storage',
+    )
+    if (storageFailure) {
       throw new RemoteChatPageIncompleteError(
-        failure.chatId,
+        storageFailure.chatId,
         'storage',
-        failure.error,
+        storageFailure.error,
       )
     }
+    const skippedIds = ingest.errors.map((failure) => failure.chatId)
+    for (const chatId of skippedIds) {
+      reportChatSyncFailed(chatId, "This chat couldn't be read")
+    }
+    if (skippedIds.length > 0) {
+      logWarning('Skipped invalid chats while loading cloud history', {
+        component: 'CloudSync',
+        action: 'hydrateChats',
+        metadata: { chatIds: skippedIds },
+      })
+    }
     if (unavailable.length > 0) this.reportUnavailableChats(unavailable)
-    return { saved: ingest.downloaded, unavailable }
+    return { saved: ingest.downloaded, unavailable, skippedIds }
   }
 
   /**
@@ -1026,6 +1043,7 @@ export class CloudSyncService {
       const entries = remote.conversations.filter(
         (entry) => !deletedChatsTracker.isDeleted(entry.id),
       )
+      const metadata = new Map(entries.map((entry) => [entry.id, entry]))
       const pulled = await cloudStorage.downloadChats(
         entries.map((entry) => entry.id),
       )
@@ -1040,12 +1058,19 @@ export class CloudSyncService {
           )
         }
         try {
-          const decoded = await processRemoteChat({
-            id: result.id,
-            plaintext: result.content,
-            syncVersion: result.syncVersion,
-            formatVersion: 2,
-          })
+          const entry = metadata.get(result.id)!
+          const decoded = await processRemoteChat(
+            {
+              id: result.id,
+              plaintext: result.content,
+              syncVersion: result.syncVersion,
+              formatVersion: 2,
+              updatedAt: entry.updatedAt,
+            },
+            {
+              projectId: entry.projectId,
+            },
+          )
           chats.push(decoded.chat)
         } catch (error) {
           logError('Failed to decode paginated remote chat', error, {
@@ -1131,7 +1156,10 @@ export class CloudSyncService {
       }
     }
     const hydrated = await this.hydrateChats(missingOrStale, generation, userId)
-    const unavailableIds = new Set(hydrated.unavailable.map((row) => row.id))
+    const unavailableIds = new Set([
+      ...hydrated.unavailable.map((row) => row.id),
+      ...hydrated.skippedIds,
+    ])
     for (const entry of prefix) {
       if (unavailableIds.has(entry.id)) continue
       const local = await indexedDBStorage.getChat(entry.id)
@@ -1187,7 +1215,8 @@ export class CloudSyncService {
     return {
       hasMore: remote.hasMore,
       nextToken: remote.nextContinuationToken,
-      ...hydrated,
+      saved: hydrated.saved,
+      unavailable: hydrated.unavailable,
     }
   }
 

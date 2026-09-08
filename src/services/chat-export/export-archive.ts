@@ -1,5 +1,6 @@
 import { strToU8, zipSync } from 'fflate'
 
+import { getDocumentTextContent } from '@/components/chat/document-content'
 import type { Attachment, Chat } from '@/components/chat/types'
 
 /**
@@ -185,13 +186,16 @@ export async function buildChatExport(
           exportedAttachments.push(exported)
         } else {
           attachmentCount++
+          const textContent =
+            getDocumentTextContent(att.textContent ?? '', att.pages) ??
+            undefined
           exportedAttachments.push({
             id: att.id,
             type: 'document',
             fileName: att.fileName,
             mimeType: att.mimeType,
             fileSize: att.fileSize,
-            textContent: att.textContent,
+            textContent,
           })
         }
       }

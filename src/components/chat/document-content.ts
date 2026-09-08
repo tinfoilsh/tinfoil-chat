@@ -7,7 +7,7 @@ export function getDocumentTextContent(
   if (content.trim()) return content
 
   const pageContent = pages
-    ?.map((page) => page.text)
+    ?.map((page) => (typeof page?.text === 'string' ? page.text : ''))
     .filter((text) => text.trim())
     .join('\n\n---\n\n')
 

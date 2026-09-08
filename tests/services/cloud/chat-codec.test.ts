@@ -124,6 +124,93 @@ describe('Chat Codec - processRemoteChat', () => {
 
       expect(result.chat.id).toBe('remote-chat-1')
     })
+
+    it('drops imported documents that have no readable payload', async () => {
+      const result = await processRemoteChat({
+        ...baseRemoteChat,
+        plaintext: basePlaintext({
+          messages: [
+            {
+              role: 'user',
+              content: 'Read this',
+              attachments: [
+                {
+                  id: '',
+                  type: 'document',
+                  fileName: 'missing.pdf',
+                },
+              ],
+            },
+          ],
+        }),
+      })
+
+      expect(result.chat.messages[0].attachments).toEqual([])
+    })
+
+    it('sanitizes malformed and empty imported attachments', async () => {
+      const result = await processRemoteChat({
+        ...baseRemoteChat,
+        plaintext: basePlaintext({
+          messages: [
+            {
+              role: 'user',
+              content: 'Malformed collection',
+              attachments: { invalid: true },
+            },
+            {
+              role: 'user',
+              content: 'Mixed entries',
+              attachments: [
+                null,
+                {},
+                {
+                  id: 'empty-text',
+                  type: 'document',
+                  fileName: 'empty.txt',
+                  textContent: '   ',
+                },
+                {
+                  id: 'empty-pages',
+                  type: 'document',
+                  fileName: 'empty.pdf',
+                  pages: [],
+                },
+                {
+                  id: 'valid-document',
+                  type: 'document',
+                  fileName: 'notes.txt',
+                  textContent: 'notes',
+                },
+                {
+                  id: 'legacy-image',
+                  type: 'image',
+                  fileName: 'legacy.png',
+                  key: 'legacy-key',
+                },
+              ],
+            },
+          ],
+        }),
+      })
+
+      expect(result.chat.messages[0].attachments).toBeUndefined()
+      expect(result.chat.messages[1].attachments).toEqual([
+        expect.objectContaining({ id: 'valid-document' }),
+        expect.objectContaining({ id: 'legacy-image', key: 'legacy-key' }),
+      ])
+    })
+
+    it('accepts null imported timestamps using remote metadata', async () => {
+      const result = await processRemoteChat({
+        ...baseRemoteChat,
+        createdAt: null,
+        plaintext: basePlaintext({ createdAt: null, updatedAt: null }),
+      })
+
+      expect(result.chat.createdAt).toBe('2024-01-02T00:00:00.000Z')
+      expect(result.chat.updatedAt).toBe('2024-01-02T00:00:00.000Z')
+    })
   })
 
   describe('No content handling', () => {

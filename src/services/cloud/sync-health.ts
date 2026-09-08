@@ -162,6 +162,13 @@ export function reportChatSyncFailed(chatId: string, message: string): void {
   })
 }
 
+export function reportChatSyncRecovered(chatId: string): void {
+  if (!(chatId in snapshot.failedChats)) return
+  const failedChats = { ...snapshot.failedChats }
+  delete failedChats[chatId]
+  publish({ ...snapshot, failedChats })
+}
+
 /**
  * Clears a chat's failure entry (successful upload or deletion). A
  * successful write also proves the account is not blocked, so it

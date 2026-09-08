@@ -29,6 +29,7 @@ const {
   deleteStoredChat,
   clearRevisionCheckpoint,
   reportKeyActionRequired,
+  reportChatSyncFailed,
 } = vi.hoisted(() => ({
   drainChatRevisionSync: vi.fn(),
   isAuthenticated: vi.fn(),
@@ -47,6 +48,7 @@ const {
   deleteStoredChat: vi.fn(),
   clearRevisionCheckpoint: vi.fn(),
   reportKeyActionRequired: vi.fn(),
+  reportChatSyncFailed: vi.fn(),
 }))
 
 vi.mock('@/services/cloud/chat-revision-sync', () => ({
@@ -96,7 +98,8 @@ vi.mock('@/services/cloud/streaming-tracker', () => ({
 }))
 vi.mock('@/services/cloud/sync-health', () => ({
   reportChatSynced: vi.fn(),
-  reportChatSyncFailed: vi.fn(),
+  reportChatSyncFailed,
+  reportChatSyncRecovered: vi.fn(),
   reportKeyActionRequired,
   reportSyncPaused: vi.fn(),
 }))
@@ -855,6 +858,85 @@ describe('CloudSyncService revision coordinator routing', () => {
     ).resolves.toEqual({ hasMore: true, nextToken: 'page-2' })
   })
 
+  it('keeps paginating after an invalid chat fails to decode', async () => {
+    listChats.mockResolvedValue({
+      conversations: [
+        {
+          id: 'invalid-chat',
+          syncVersion: 2,
+          updatedAt: '2026-01-02T00:00:00Z',
+        },
+        {
+          id: 'readable-chat',
+          syncVersion: 3,
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+      hasMore: true,
+      nextContinuationToken: 'page-3',
+    })
+    downloadChats.mockResolvedValue([
+      { status: 'ok', id: 'invalid-chat', syncVersion: 2, content: 'invalid' },
+      { status: 'ok', id: 'readable-chat', syncVersion: 3, content: '{}' },
+    ])
+    processRemoteChat
+      .mockRejectedValueOnce(new Error('invalid chat'))
+      .mockResolvedValueOnce({
+        chat: { id: 'readable-chat', syncVersion: 3, messages: [] },
+      })
+    getChat.mockResolvedValue(undefined)
+
+    await expect(
+      new CloudSyncService().fetchAndStorePage({
+        limit: 20,
+        continuationToken: 'page-2',
+      }),
+    ).resolves.toEqual({
+      hasMore: true,
+      nextToken: 'page-3',
+      saved: 1,
+      unavailable: [],
+    })
+    expect(reportChatSyncFailed).toHaveBeenCalledWith(
+      'invalid-chat',
+      "This chat couldn't be read",
+    )
+  })
+
+  it('does not block the pagination boundary on an invalid chat', async () => {
+    listChats
+      .mockResolvedValueOnce({
+        conversations: [
+          {
+            id: 'invalid-chat',
+            syncVersion: 2,
+            updatedAt: '2026-01-02T00:00:00Z',
+          },
+        ],
+        hasMore: true,
+        nextContinuationToken: 'page-2',
+      })
+      .mockResolvedValueOnce({
+        conversations: [
+          {
+            id: 'uncached-chat',
+            syncVersion: 3,
+            updatedAt: '2026-01-01T00:00:00Z',
+          },
+        ],
+        hasMore: false,
+      })
+    getChat.mockResolvedValue(undefined)
+    downloadChats.mockResolvedValue([
+      { status: 'ok', id: 'invalid-chat', syncVersion: 2, content: 'invalid' },
+    ])
+    processRemoteChat.mockRejectedValue(new Error('invalid chat'))
+
+    await expect(
+      new CloudSyncService().initializeChatPaginationCursor(),
+    ).resolves.toEqual({ hasMore: true, nextToken: 'page-2' })
+  })
+
   it('retains the page cursor for retry when storage fails', async () => {
     listChats.mockResolvedValue({
       conversations: [
@@ -923,6 +1005,39 @@ describe('CloudSyncService revision coordinator routing', () => {
       }),
     ).rejects.toThrow('Remote chat page is incomplete')
     expect(getAllChats).not.toHaveBeenCalled()
+  })
+
+  it('passes list metadata into chats decoded for export', async () => {
+    listChats.mockResolvedValue({
+      conversations: [
+        {
+          id: 'imported-chat',
+          syncVersion: 1,
+          updatedAt: '2026-01-02T00:00:00Z',
+          projectId: 'project-1',
+        },
+      ],
+      hasMore: false,
+    })
+    downloadChats.mockResolvedValue([
+      { status: 'ok', id: 'imported-chat', syncVersion: 1, content: '{}' },
+    ])
+    processRemoteChat.mockResolvedValueOnce({
+      chat: { id: 'imported-chat', syncVersion: 1, messages: [] },
+    })
+
+    await new CloudSyncService().loadChatsWithPagination({ limit: 10 })
+
+    expect(processRemoteChat).toHaveBeenCalledWith(
+      {
+        id: 'imported-chat',
+        plaintext: '{}',
+        syncVersion: 1,
+        formatVersion: 2,
+        updatedAt: '2026-01-02T00:00:00Z',
+      },
+      { projectId: 'project-1' },
+    )
   })
 
   it('continues decryption recovery after an individual eviction fails', async () => {
