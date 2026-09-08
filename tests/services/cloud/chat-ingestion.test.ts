@@ -7,12 +7,14 @@ const {
   processRemoteChat,
   emit,
   fetchRawChatContent,
+  reportChatSyncRecovered,
 } = vi.hoisted(() => ({
   getChat: vi.fn(),
   applyRemoteChatIfFresh: vi.fn(),
   processRemoteChat: vi.fn(),
   emit: vi.fn(),
   fetchRawChatContent: vi.fn(),
+  reportChatSyncRecovered: vi.fn(),
 }))
 
 vi.mock('@/services/storage/indexed-db', () => ({
@@ -23,6 +25,7 @@ vi.mock('@/services/storage/chat-events', () => ({ chatEvents: { emit } }))
 vi.mock('@/services/cloud/cloud-storage', () => ({
   cloudStorage: { fetchRawChatContent },
 }))
+vi.mock('@/services/cloud/sync-health', () => ({ reportChatSyncRecovered }))
 
 describe('ingestRemoteChats', () => {
   beforeEach(() => {
@@ -51,6 +54,7 @@ describe('ingestRemoteChats', () => {
       }),
     )
     expect(emit).toHaveBeenCalledWith({ reason: 'sync', ids: ['chat-1'] })
+    expect(reportChatSyncRecovered).toHaveBeenCalledWith('chat-1')
   })
 
   it('falls back when an entry has undefined project metadata', async () => {

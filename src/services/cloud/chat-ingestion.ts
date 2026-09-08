@@ -15,6 +15,7 @@ import {
   type RemoteChatData,
 } from './chat-codec'
 import { cloudStorage } from './cloud-storage'
+import { reportChatSyncRecovered } from './sync-health'
 import { shouldIngestRemoteChat } from './sync-predicates'
 
 export interface RemoteChatEntry {
@@ -129,6 +130,7 @@ export async function ingestRemoteChats(
       if (applied.applied) {
         result.savedIds.push(decoded.chat.id)
         result.downloaded++
+        reportChatSyncRecovered(decoded.chat.id)
       }
     } catch (error) {
       logError('Failed to ingest remote chat', error, {

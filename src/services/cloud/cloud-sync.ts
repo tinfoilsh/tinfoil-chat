@@ -53,7 +53,6 @@ import { streamingTracker } from './streaming-tracker'
 import {
   reportChatSynced,
   reportChatSyncFailed,
-  reportChatSyncRecovered,
   reportKeyActionRequired,
   reportSyncPaused,
 } from './sync-health'
@@ -976,9 +975,6 @@ export class CloudSyncService {
       userId,
     })
     this.ensureCurrentAccount(generation, userId)
-    for (const chatId of ingest.savedIds) {
-      reportChatSyncRecovered(chatId)
-    }
     const storageFailure = ingest.errors.find(
       (failure) => failure.stage === 'storage',
     )
@@ -1063,14 +1059,18 @@ export class CloudSyncService {
         }
         try {
           const entry = metadata.get(result.id)!
-          const decoded = await processRemoteChat({
-            id: result.id,
-            plaintext: result.content,
-            syncVersion: result.syncVersion,
-            formatVersion: 2,
-            updatedAt: entry.updatedAt,
-            projectId: entry.projectId ?? undefined,
-          })
+          const decoded = await processRemoteChat(
+            {
+              id: result.id,
+              plaintext: result.content,
+              syncVersion: result.syncVersion,
+              formatVersion: 2,
+              updatedAt: entry.updatedAt,
+            },
+            {
+              projectId: entry.projectId,
+            },
+          )
           chats.push(decoded.chat)
         } catch (error) {
           logError('Failed to decode paginated remote chat', error, {
