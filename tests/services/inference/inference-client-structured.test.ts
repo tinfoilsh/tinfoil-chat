@@ -83,7 +83,7 @@ describe('sendStructuredCompletion', () => {
 
     const body = createMock.mock.calls[0][0]
     expect(body.model).toBe('auto')
-    expect(body.auto_model_options).toEqual({ intelligence: 75 })
+    expect(body.auto_model_options).toEqual({ intelligence: 80 })
     expect(body).not.toHaveProperty('reasoning_effort')
     expect(body).not.toHaveProperty('temperature')
     expect(body.response_format).toEqual({

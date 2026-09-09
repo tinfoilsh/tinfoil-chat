@@ -48,6 +48,7 @@ describe('Auto intelligence levels', () => {
     expect(
       AUTO_INTELLIGENCE_LEVELS.map((l) => getAutoDisplayName(l.id)),
     ).toEqual([
+      'Auto · Instant',
       'Auto · Low',
       'Auto · Med',
       'Auto · High',

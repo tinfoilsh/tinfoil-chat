@@ -198,15 +198,16 @@ export const AUTO_MODEL_OPTIONS_FIELD = 'auto_model_options'
 const LEGACY_AUTO_MODEL_IDS = ['auto-smart', 'auto-fast'] as const
 
 /**
- * The five positions of the Auto intelligence slider. Each maps to a level on
- * the router's normalized 0-100 scale, where 100 is the most capable model and
+ * The positions of the Auto intelligence slider. Each maps to a level on the
+ * router's normalized 0-100 scale, where 100 is the most capable model and
  * effort currently in the catalog.
  */
 export const AUTO_INTELLIGENCE_LEVELS = [
-  { id: 'low', label: 'Low', value: 0 },
-  { id: 'medium', label: 'Med', value: 25 },
-  { id: 'high', label: 'High', value: 50 },
-  { id: 'extra', label: 'Extra', value: 75 },
+  { id: 'instant', label: 'Instant', value: 0 },
+  { id: 'low', label: 'Low', value: 20 },
+  { id: 'medium', label: 'Med', value: 40 },
+  { id: 'high', label: 'High', value: 60 },
+  { id: 'extra', label: 'Extra', value: 80 },
   { id: 'max', label: 'Max', value: 100 },
 ] as const
 
