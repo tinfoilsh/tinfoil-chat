@@ -1,6 +1,10 @@
 import { Favicon } from '@/components/ui/favicon'
 import { Modal, ModalTitle } from '@/components/ui/modal'
-import { findSelectableModel, type BaseModel } from '@/config/models'
+import {
+  getSelectedModelLabel,
+  type AutoIntelligenceLevelId,
+  type BaseModel,
+} from '@/config/models'
 import { USER_PREFS_NICKNAME } from '@/constants/storage-keys'
 import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
@@ -205,6 +209,8 @@ interface WelcomeScreenProps {
   setReasoningEffort?: (effort: ReasoningEffort) => void
   thinkingEnabled?: boolean
   setThinkingEnabled?: (enabled: boolean) => void
+  autoIntelligence: AutoIntelligenceLevelId
+  setAutoIntelligence: (level: AutoIntelligenceLevelId) => void
   codeExecutionEnabled?: boolean
   onCodeExecutionToggle?: () => void
   isTemporaryMode?: boolean
@@ -240,6 +246,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
   setReasoningEffort,
   thinkingEnabled,
   setThinkingEnabled,
+  autoIntelligence,
+  setAutoIntelligence,
   codeExecutionEnabled,
   onCodeExecutionToggle,
   isTemporaryMode,
@@ -443,7 +451,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                           data-model-selector
                           aria-haspopup="menu"
                           aria-expanded={expandedLabel === 'model'}
-                          aria-label={`Current model ${findSelectableModel(selectedModel, models)?.name ?? ''}`}
+                          aria-label={`Current model ${getSelectedModelLabel(selectedModel, models, autoIntelligence) ?? ''}`}
                           onClick={(e) => {
                             e.preventDefault()
                             e.stopPropagation()
@@ -454,15 +462,16 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                           className="flex items-center gap-1 py-1.5 text-content-secondary transition-colors hover:text-content-primary"
                         >
                           {(() => {
-                            const model = findSelectableModel(
+                            const label = getSelectedModelLabel(
                               selectedModel,
                               models,
+                              autoIntelligence,
                             )
-                            if (!model) return null
+                            if (!label) return null
                             return (
                               <>
                                 <span className="text-xs font-medium">
-                                  {model.name}
+                                  {label}
                                 </span>
                                 <svg
                                   className={`h-3 w-3 transition-transform ${expandedLabel === 'model' ? 'rotate-180' : ''}`}
@@ -494,6 +503,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                             onEffortChange={setReasoningEffort}
                             thinkingEnabled={thinkingEnabled}
                             onThinkingEnabledChange={setThinkingEnabled}
+                            autoIntelligence={autoIntelligence}
+                            onAutoIntelligenceChange={setAutoIntelligence}
                           />
                         )}
                       </div>

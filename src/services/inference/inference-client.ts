@@ -8,8 +8,14 @@ import {
   type ReasoningEffort,
 } from '@/components/chat/hooks/use-reasoning-effort'
 import type { Message } from '@/components/chat/types'
-import type { BaseModel } from '@/config/models'
-import { AUTO_MODEL_OPTIONS_FIELD, AUTO_REQUEST_MODEL } from '@/config/models'
+import {
+  AUTO_MODEL_ID,
+  AUTO_MODEL_OPTIONS_FIELD,
+  DEFAULT_AUTO_INTELLIGENCE_LEVEL,
+  getAutoIntelligenceLevel,
+  type AutoIntelligenceLevelId,
+  type BaseModel,
+} from '@/config/models'
 import { shouldRetryTestFail } from '@/utils/dev-simulator'
 import { logError, logInfo } from '@/utils/error-handling'
 import {
@@ -243,15 +249,34 @@ export function isRetryableError(error: unknown): boolean {
   return false
 }
 
+/**
+ * Hands model selection to the router: `model` becomes the "auto" sentinel and
+ * the requested intelligence level rides in the router-only options blob. The
+ * router picks a concrete model and reasoning effort and injects that model's
+ * own reasoning params, so no per-model params are sent from here.
+ */
+function applyAutoRouting(
+  requestBody: Record<string, unknown>,
+  autoIntelligence: AutoIntelligenceLevelId = DEFAULT_AUTO_INTELLIGENCE_LEVEL,
+): void {
+  requestBody.model = AUTO_MODEL_ID
+  requestBody[AUTO_MODEL_OPTIONS_FIELD] = {
+    intelligence: getAutoIntelligenceLevel(autoIntelligence).value,
+  }
+}
+
 export interface SendChatStreamParams {
   model: BaseModel
   /**
-   * Ordered Auto candidates. When provided (an Auto option is selected), the
-   * request `model` is set to the router's "auto" sentinel and each
-   * candidate's params travel in the `auto_model_options` blob. `model` is the
-   * representative (first) candidate, used to build the shared message body.
+   * Models the router may pick from. When provided (Auto is selected), the
+   * request `model` is set to the router's "auto" sentinel and the requested
+   * intelligence level travels in the `auto_model_options` blob. `model` is
+   * the representative (first) candidate, used to build the shared message
+   * body; the router applies the chosen model's reasoning params itself.
    */
   autoCandidates?: BaseModel[]
+  /** Slider position sent with Auto requests. */
+  autoIntelligence?: AutoIntelligenceLevelId
   systemPrompt: string
   rules?: string
   onRetry?: (attempt: number, maxRetries: number, error?: string) => void
@@ -284,6 +309,7 @@ export async function sendChatStream(
   const {
     model,
     autoCandidates,
+    autoIntelligence,
     systemPrompt,
     rules,
     onRetry,
@@ -492,19 +518,14 @@ export async function sendChatStream(
         requestBody.tool_choice = 'auto'
       }
 
-      const modelParamOpts = { thinkingEnabled, reasoningEffort }
       if (autoCandidates && autoCandidates.length > 0) {
-        // Auto: defer the model choice to the router. Each candidate carries
-        // its own model-specific param block so whichever one the router picks
-        // gets exactly the right reasoning/requestParams applied.
-        requestBody.model = AUTO_REQUEST_MODEL
-        requestBody[AUTO_MODEL_OPTIONS_FIELD] = autoCandidates.map((c) => ({
-          model: c.modelName,
-          params: buildModelBodyParams(c, modelParamOpts),
-        }))
+        applyAutoRouting(requestBody, autoIntelligence)
       } else {
         // Single model: merge its params straight into the body.
-        const params = buildModelBodyParams(model, modelParamOpts)
+        const params = buildModelBodyParams(model, {
+          thinkingEnabled,
+          reasoningEffort,
+        })
         for (const [key, value] of Object.entries(params)) {
           requestBody[key] = value
         }
@@ -708,6 +729,7 @@ function toTerminalChatError(err: unknown, retries?: number): ChatError {
 export interface StructuredCompletionParams {
   model: BaseModel
   autoCandidates?: BaseModel[]
+  autoIntelligence?: AutoIntelligenceLevelId
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
   jsonSchema: Record<string, unknown>
   signal?: AbortSignal
@@ -752,6 +774,7 @@ export async function sendStructuredCompletion<T>(
   const {
     model,
     autoCandidates,
+    autoIntelligence,
     messages,
     jsonSchema,
     signal,
@@ -764,15 +787,13 @@ export async function sendStructuredCompletion<T>(
     messages,
     stream: false,
   }
-  const modelParamOpts = { thinkingEnabled, reasoningEffort }
   if (autoCandidates && autoCandidates.length > 0) {
-    requestBody.model = AUTO_REQUEST_MODEL
-    requestBody[AUTO_MODEL_OPTIONS_FIELD] = autoCandidates.map((candidate) => ({
-      model: candidate.modelName,
-      params: buildModelBodyParams(candidate, modelParamOpts),
-    }))
+    applyAutoRouting(requestBody, autoIntelligence)
   } else {
-    Object.assign(requestBody, buildModelBodyParams(model, modelParamOpts))
+    Object.assign(
+      requestBody,
+      buildModelBodyParams(model, { thinkingEnabled, reasoningEffort }),
+    )
   }
   requestBody.response_format = {
     type: 'json_schema',

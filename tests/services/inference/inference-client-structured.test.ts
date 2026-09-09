@@ -51,7 +51,7 @@ describe('sendStructuredCompletion', () => {
     createMock.mockReset()
   })
 
-  it('preserves Auto candidate params and protects response_format', async () => {
+  it('routes Auto by intelligence level and leaves per-model params to the router', async () => {
     const candidate = {
       modelName: 'candidate-a',
       requestParams: {
@@ -74,6 +74,7 @@ describe('sendStructuredCompletion', () => {
     await sendStructuredCompletion({
       model: candidate,
       autoCandidates: [candidate],
+      autoIntelligence: 'extra',
       messages: [{ role: 'user', content: 'repair' }],
       jsonSchema: schema,
       reasoningEffort: 'high',
@@ -82,12 +83,9 @@ describe('sendStructuredCompletion', () => {
 
     const body = createMock.mock.calls[0][0]
     expect(body.model).toBe('auto')
-    expect(body.auto_model_options).toEqual([
-      {
-        model: 'candidate-a',
-        params: { temperature: 0.25, reasoning_effort: 'high' },
-      },
-    ])
+    expect(body.auto_model_options).toEqual({ intelligence: 80 })
+    expect(body).not.toHaveProperty('reasoning_effort')
+    expect(body).not.toHaveProperty('temperature')
     expect(body.response_format).toEqual({
       type: 'json_schema',
       json_schema: { name: 'response', schema },

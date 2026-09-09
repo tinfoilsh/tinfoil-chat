@@ -1,6 +1,6 @@
 import type { ReasoningEffort } from '@/components/chat/hooks/use-reasoning-effort'
 import type { Chat, Message } from '@/components/chat/types'
-import type { BaseModel } from '@/config/models'
+import type { AutoIntelligenceLevelId, BaseModel } from '@/config/models'
 import {
   StructuredCompletionError,
   sendStructuredCompletion,
@@ -109,6 +109,7 @@ export async function regenerateToolCallArguments({
   autoCandidates,
   reasoningEffort,
   thinkingEnabled,
+  autoIntelligence,
 }: {
   toolName: string
   originalArguments?: string
@@ -117,6 +118,7 @@ export async function regenerateToolCallArguments({
   autoCandidates?: BaseModel[]
   reasoningEffort?: ReasoningEffort
   thinkingEnabled?: boolean
+  autoIntelligence?: AutoIntelligenceLevelId
 }): Promise<string> {
   if (!isGenUIToolName(toolName)) {
     throw new ArtifactRetryError('unavailable_target')
@@ -167,6 +169,7 @@ export async function regenerateToolCallArguments({
       jsonSchema,
       reasoningEffort,
       thinkingEnabled,
+      autoIntelligence,
     })
   } catch (error) {
     const retryError = mapStructuredError(error)

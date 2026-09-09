@@ -1,3 +1,4 @@
+import type { AutoIntelligenceLevelId } from '@/config/models'
 import { isModelNameAvailable, type BaseModel } from '@/config/models'
 import { useExecSnapshot } from '@/services/exec-snapshot/use-exec-snapshot'
 import { logWarning } from '@/utils/error-handling'
@@ -94,6 +95,7 @@ export function useChatState({
   scrollToBottom,
   reasoningEffort,
   thinkingEnabled,
+  autoIntelligence,
   initialChatId,
   isLocalChatUrl = false,
   initialNewChatIsLocalOnly = false,
@@ -110,6 +112,7 @@ export function useChatState({
   scrollToBottom?: () => void
   reasoningEffort?: ReasoningEffort
   thinkingEnabled?: boolean
+  autoIntelligence?: AutoIntelligenceLevelId
   initialChatId?: string | null
   isLocalChatUrl?: boolean
   initialNewChatIsLocalOnly?: boolean
@@ -244,6 +247,7 @@ export function useChatState({
     scrollToBottom,
     reasoningEffort,
     thinkingEnabled,
+    autoIntelligence,
     webSearchAvailable,
     // code-exec requires encryptionKey for snapshots
     codeExecutionEnabled:

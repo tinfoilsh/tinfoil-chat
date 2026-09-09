@@ -78,8 +78,16 @@ const DEV_MODELS: BaseModel[] = [
 const modelDisplayNames = new Map<string, string>()
 
 const rememberModelDisplayNames = (models: BaseModel[]): BaseModel[] => {
-  for (const model of [...models, ...getAutoModels(models)]) {
+  for (const model of models) {
     modelDisplayNames.set(model.modelName, model.name)
+  }
+  // Synced chats may still carry a legacy Auto tier id; every Auto id shows
+  // the same label.
+  const autoModel = getAutoModel(models)
+  if (autoModel) {
+    for (const id of [AUTO_MODEL_ID, ...LEGACY_AUTO_MODEL_IDS]) {
+      modelDisplayNames.set(id, autoModel.name)
+    }
   }
   return models
 }
@@ -129,8 +137,6 @@ export type ReasoningConfig = {
   reasoningHistoryPolicy?: ReasoningHistoryPolicy
 }
 
-export type AutoTier = 'smart' | 'fast'
-
 /**
  * Settings the chat clients read for a model. Present only on chat models; the
  * controlplane keeps everything a chat client needs under this block.
@@ -141,7 +147,7 @@ export type ChatConfig = {
    * model's raw capability advertised to API consumers.
    */
   contextWindowTokens?: number
-  /** Open set of model tags, including Auto routing tiers ("smart", "fast"). */
+  /** Open set of model tags (e.g. "smart", "fast") shown as picker hints. */
   attributes?: string[]
   /** Short "Best for x" blurb shown under the name in the model picker. */
   descriptionShort?: string
@@ -165,117 +171,151 @@ export type BaseModel = {
   multimodal?: boolean
   toolCalling?: boolean
   chatConfig?: ChatConfig
-  /** True for the synthetic Auto picker entries; never a real backend model. */
+  /** True for the synthetic Auto picker entry; never a real backend model. */
   isAuto?: boolean
-  /** Routing tier an Auto entry resolves; only set when isAuto is true. */
-  tier?: AutoTier
   endpoint?: string
   /** Extra fields merged into the chat completion request body */
   requestParams?: Record<string, unknown>
 }
 
-/** Selectable picker ids for the two Auto routing options. */
-export const AUTO_SMART_ID = 'auto-smart'
-export const AUTO_FAST_ID = 'auto-fast'
+/**
+ * Picker id and wire value for Auto. The router treats `model: "auto"` as a
+ * sentinel and picks a concrete model and reasoning effort from the requested
+ * intelligence level.
+ */
+export const AUTO_MODEL_ID = 'auto'
 
 /**
- * Wire value placed in the request `model` field when an Auto option is
- * selected. The router treats this as a sentinel and reads the candidate list
- * from the `auto_model_options` body blob.
+ * Router-only body field. Carries `{ intelligence: <0-100> }` so the router
+ * knows how capable a model the user asked for.
  */
-export const AUTO_REQUEST_MODEL = 'auto'
-
-/** Router-only body field carrying the ordered Auto candidate list. */
 export const AUTO_MODEL_OPTIONS_FIELD = 'auto_model_options'
 
-const isAutoId = (modelName: string): boolean =>
-  modelName === AUTO_SMART_ID || modelName === AUTO_FAST_ID
+/**
+ * Picker ids from the previous two-tier Auto design. Still present in saved
+ * settings and synced chats; both map onto the single Auto entry.
+ */
+const LEGACY_AUTO_MODEL_IDS = ['auto-smart', 'auto-fast'] as const
+
+/**
+ * The positions of the Auto intelligence slider. Each maps to a level on the
+ * router's normalized 0-100 scale, where 100 is the most capable model and
+ * effort currently in the catalog.
+ */
+export const AUTO_INTELLIGENCE_LEVELS = [
+  { id: 'instant', label: 'Instant', value: 0 },
+  { id: 'low', label: 'Low', value: 20 },
+  { id: 'medium', label: 'Med', value: 40 },
+  { id: 'high', label: 'High', value: 60 },
+  { id: 'extra', label: 'Extra', value: 80 },
+  { id: 'max', label: 'Max', value: 100 },
+] as const
+
+export type AutoIntelligenceLevel = (typeof AUTO_INTELLIGENCE_LEVELS)[number]
+export type AutoIntelligenceLevelId = AutoIntelligenceLevel['id']
+
+export const DEFAULT_AUTO_INTELLIGENCE_LEVEL: AutoIntelligenceLevelId = 'high'
+
+export const isAutoIntelligenceLevelId = (
+  value: unknown,
+): value is AutoIntelligenceLevelId =>
+  AUTO_INTELLIGENCE_LEVELS.some((level) => level.id === value)
+
+export const getAutoIntelligenceLevel = (
+  id: AutoIntelligenceLevelId,
+): AutoIntelligenceLevel =>
+  AUTO_INTELLIGENCE_LEVELS.find((level) => level.id === id) ??
+  AUTO_INTELLIGENCE_LEVELS[0]
+
+/** Collapsed picker label for Auto at the given level, e.g. "Auto · High". */
+export const getAutoDisplayName = (level: AutoIntelligenceLevelId): string =>
+  `Auto · ${getAutoIntelligenceLevel(level).label}`
+
+/**
+ * Label for the collapsed model picker trigger: "Auto · <level>" when Auto is
+ * selected, otherwise the model's name.
+ */
+export const getSelectedModelLabel = (
+  selectedModel: string,
+  models: BaseModel[],
+  autoIntelligence: AutoIntelligenceLevelId,
+): string | undefined => {
+  const model = findSelectableModel(selectedModel, models)
+  if (!model) return undefined
+  return model.isAuto ? getAutoDisplayName(autoIntelligence) : model.name
+}
+
+export const isAutoModelId = (modelName: string): boolean =>
+  modelName === AUTO_MODEL_ID ||
+  (LEGACY_AUTO_MODEL_IDS as readonly string[]).includes(modelName)
 
 const isChatModel = (m: BaseModel): boolean =>
   (m.type === 'chat' || m.type === 'code') && m.chat === true
 
-/** Real chat models belonging to the given Auto tier, in priority order. */
-const tierModels = (models: BaseModel[], tier: AutoTier): BaseModel[] =>
-  models.filter(
-    (m) =>
-      isChatModel(m) &&
-      Array.isArray(m.chatConfig?.attributes) &&
-      m.chatConfig.attributes.includes(tier),
+/**
+ * Real chat models the router may pick for Auto. The router only routes
+ * across models with published intelligence scores, which today are the chat
+ * models; the picker mirrors that so its Auto entry is offered exactly when
+ * the router can serve it.
+ */
+const autoCandidateModels = (models: BaseModel[]): BaseModel[] =>
+  models.filter(isChatModel)
+
+/**
+ * Builds the synthetic Auto picker entry when at least one chat model exists.
+ * Display-only and never sent to a backend; the request path resolves it via
+ * resolveModelSelection.
+ */
+export const getAutoModel = (models: BaseModel[]): BaseModel | undefined => {
+  const members = autoCandidateModels(models)
+  if (members.length === 0) return undefined
+  const smallestMember = members.reduce((smallest, member) =>
+    resolveContextWindowTokens(member) < resolveContextWindowTokens(smallest)
+      ? member
+      : smallest,
   )
-
-/**
- * Builds the synthetic Auto picker entries, one per tier that has at least one
- * member. These are display-only and are never sent to a backend; selection is
- * resolved to a concrete model list via resolveModelSelection.
- */
-export const getAutoModels = (models: BaseModel[]): BaseModel[] => {
-  const entries: BaseModel[] = []
-  const add = (tier: AutoTier, modelName: string, name: string): void => {
-    const members = tierModels(models, tier)
-    if (members.length === 0) return
-    const smallestMember = members.reduce((smallest, member) =>
-      resolveContextWindowTokens(member) < resolveContextWindowTokens(smallest)
-        ? member
-        : smallest,
-    )
-    entries.push({
-      modelName,
-      image: '',
-      name,
-      nameShort: name,
-      description:
-        tier === 'smart'
-          ? 'Automatically routes to the best available high-capability model'
-          : 'Automatically routes to the best available fast model',
-      type: 'chat',
-      chat: true,
-      isAuto: true,
-      tier,
-      multimodal: members.some((m) => m.multimodal === true),
-      chatConfig: {
-        contextWindowTokens: resolveContextWindowTokens(smallestMember),
-      },
-    })
+  return {
+    modelName: AUTO_MODEL_ID,
+    image: '',
+    name: 'Auto',
+    nameShort: 'Auto',
+    description:
+      'Automatically routes to the best model for the chosen intelligence level',
+    type: 'chat',
+    chat: true,
+    isAuto: true,
+    multimodal: members.some((m) => m.multimodal === true),
+    chatConfig: {
+      contextWindowTokens: resolveContextWindowTokens(smallestMember),
+    },
   }
-  add('smart', AUTO_SMART_ID, 'Auto · Smart')
-  add('fast', AUTO_FAST_ID, 'Auto · Fast')
-  return entries
 }
 
 /**
- * Default picker selection: Auto · Fast when its tier has members, otherwise
- * the first chat-capable model (e.g. local dev where models carry no tier
- * attributes). The model list also contains non-chat types (embedding, audio,
- * title, ...) which must never become the chat default. Empty string when no
- * chat models are available.
+ * Default picker selection: Auto when any chat model exists, otherwise empty.
+ * The model list also contains non-chat types (embedding, audio, title, ...)
+ * which must never become the chat default.
  */
-export const getDefaultModelId = (models: BaseModel[]): string => {
-  if (tierModels(models, 'fast').length > 0) return AUTO_FAST_ID
-  return models.find(isChatModel)?.modelName ?? ''
-}
+export const getDefaultModelId = (models: BaseModel[]): string =>
+  getAutoModel(models) ? AUTO_MODEL_ID : ''
 
 export const isModelNameAvailable = (
   modelName: string,
   models: BaseModel[],
 ): boolean => {
-  if (isAutoId(modelName)) {
-    const tier: AutoTier = modelName === AUTO_SMART_ID ? 'smart' : 'fast'
-    return tierModels(models, tier).length > 0
-  }
+  if (isAutoModelId(modelName)) return getAutoModel(models) !== undefined
   return models.some((m) => m.modelName === modelName)
 }
 
 /**
- * Resolves a selected picker id to a concrete model for display: the matching
- * Auto entry when an Auto id is selected, otherwise the real model.
+ * Resolves a selected picker id to a concrete model for display: the Auto
+ * entry for Auto (including legacy tier ids), otherwise the real model.
  */
 export const findSelectableModel = (
   modelName: string,
   models: BaseModel[],
 ): BaseModel | undefined => {
-  if (isAutoId(modelName)) {
-    return getAutoModels(models).find((m) => m.modelName === modelName)
-  }
+  if (isAutoModelId(modelName)) return getAutoModel(models)
   return models.find((m) => m.modelName === modelName)
 }
 
@@ -283,8 +323,10 @@ export type ResolvedModelSelection = {
   /** Representative model used to build the request body and the UI. */
   model: BaseModel | undefined
   /**
-   * Ordered Auto candidates (only set when an Auto option is selected). The
-   * first entry is the representative model.
+   * Every model the router may pick when Auto is selected (unset for a real
+   * model). The router makes the actual choice; the client uses this pool only
+   * for worst-case budgeting (smallest context window, strongest reasoning
+   * history policy). The first entry is the representative model.
    */
   autoCandidates?: BaseModel[]
 }
@@ -316,25 +358,22 @@ export const getResolvedModelContextWindowTokens = (
 }
 
 /**
- * Resolves the selected picker id (real model or Auto sentinel) into the model
- * used to build the request plus, for Auto, the ordered candidate list. For
- * Auto each preferred capability (multimodal / tool calling) narrows the tier
- * pool only when at least one member satisfies it, so a satisfied preference is
- * never silently dropped. When no tier member supports a preference at all the
- * incapable models are kept, which keeps the request routable (degraded)
- * rather than mis-routing past a capable candidate.
+ * Resolves the selected picker id (real model or Auto) into the model used to
+ * build the request plus, for Auto, the pool of models the router may choose
+ * from. Each preferred capability (multimodal / tool calling) narrows the pool
+ * only when at least one member satisfies it, so the client's budgeting
+ * reflects the models the router will realistically land on.
  */
 export const resolveModelSelection = (
   selectedModel: string,
   models: BaseModel[],
   opts?: { preferMultimodal?: boolean; preferToolCalling?: boolean },
 ): ResolvedModelSelection => {
-  if (!isAutoId(selectedModel)) {
+  if (!isAutoModelId(selectedModel)) {
     return { model: models.find((m) => m.modelName === selectedModel) }
   }
 
-  const tier: AutoTier = selectedModel === AUTO_SMART_ID ? 'smart' : 'fast'
-  let candidates = tierModels(models, tier)
+  let candidates = autoCandidateModels(models)
 
   if (opts?.preferMultimodal) {
     const capable = candidates.filter((m) => m.multimodal === true)

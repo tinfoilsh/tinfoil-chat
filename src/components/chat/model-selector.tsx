@@ -1,6 +1,11 @@
+import { SteppedSlider } from '@/components/ui/stepped-slider'
 import {
-  getAutoModels,
+  AUTO_INTELLIGENCE_LEVELS,
+  getAutoIntelligenceLevel,
+  getAutoModel,
+  isAutoModelId,
   resolveModelSelection,
+  type AutoIntelligenceLevelId,
   type BaseModel,
 } from '@/config/models'
 import {
@@ -37,6 +42,9 @@ const EFFORT_OPTIONS: {
 const EFFORT_EXPLAINER =
   'Higher effort means more thorough responses, but takes longer.'
 
+const INTELLIGENCE_EXPLAINER =
+  'Higher intelligence picks a more capable model and thinks longer.'
+
 const MOBILE_BREAKPOINT_PX = 768
 const EFFORT_FLYOUT_WIDTH_PX = 240
 const EFFORT_FLYOUT_GAP_PX = 8
@@ -50,6 +58,7 @@ const MIN_TOP_MODEL_COUNT = 3
 const MENU_PADDING_PX = 16
 const MENU_DIVIDER_HEIGHT_PX = 9
 const AUTO_MODEL_ROW_HEIGHT_PX = 40
+const INTELLIGENCE_SLIDER_HEIGHT_PX = 84
 const MODEL_ROW_HEIGHT_PX = 56
 const EFFORT_ROW_HEIGHT_PX = 40
 const THINKING_ROW_HEIGHT_PX = 56
@@ -65,6 +74,8 @@ type ModelSelectorProps = {
   onEffortChange?: (effort: ReasoningEffort) => void
   thinkingEnabled?: boolean
   onThinkingEnabledChange?: (enabled: boolean) => void
+  autoIntelligence?: AutoIntelligenceLevelId
+  onAutoIntelligenceChange?: (level: AutoIntelligenceLevelId) => void
 }
 
 export function ModelSelector({
@@ -77,6 +88,8 @@ export function ModelSelector({
   onEffortChange,
   thinkingEnabled,
   onThinkingEnabledChange,
+  autoIntelligence,
+  onAutoIntelligenceChange,
 }: ModelSelectorProps) {
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
   const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({})
@@ -275,13 +288,21 @@ export function ModelSelector({
     }
   }, [showEffortOptions, isMobileLayout, recalcEffortFlyout])
 
-  const autoModels = getAutoModels(models)
+  const autoModel = getAutoModel(models)
+  const isAutoSelected = isAutoModelId(selectedModel)
+  const showIntelligenceSlider =
+    isAutoSelected &&
+    autoModel !== undefined &&
+    autoIntelligence !== undefined &&
+    onAutoIntelligenceChange !== undefined
 
   // Reasoning controls live at the bottom of the menu and reflect the
-  // currently selected model (for Auto entries, the representative model the
-  // selection resolves to). They only render when the parent wires the
-  // reasoning props and the model exposes the matching capability.
-  const resolvedModel = resolveModelSelection(selectedModel, models).model
+  // currently selected model. They only render when the parent wires the
+  // reasoning props and the model exposes the matching capability. Auto hides
+  // them: the router chooses the effort from the intelligence level.
+  const resolvedModel = isAutoSelected
+    ? undefined
+    : resolveModelSelection(selectedModel, models).model
   const showEffort =
     supportsReasoningEffort(resolvedModel) &&
     reasoningEffort !== undefined &&
@@ -302,8 +323,8 @@ export function ModelSelector({
   const availableHeight = Number.parseInt(dynamicStyles.maxHeight, 10) || 0
   const fixedHeight =
     MENU_PADDING_PX +
-    autoModels.length * AUTO_MODEL_ROW_HEIGHT_PX +
-    (autoModels.length > 0 ? MENU_DIVIDER_HEIGHT_PX : 0) +
+    (autoModel ? AUTO_MODEL_ROW_HEIGHT_PX + MENU_DIVIDER_HEIGHT_PX : 0) +
+    (showIntelligenceSlider ? INTELLIGENCE_SLIDER_HEIGHT_PX : 0) +
     (showEffort || showThinkingToggle ? MENU_DIVIDER_HEIGHT_PX : 0) +
     (showEffort ? EFFORT_ROW_HEIGHT_PX : 0) +
     (showThinkingToggle ? THINKING_ROW_HEIGHT_PX : 0) +
@@ -391,7 +412,9 @@ export function ModelSelector({
   )
 
   const renderModelItem = (model: BaseModel) => {
-    const isSelected = model.modelName === selectedModel
+    const isSelected = model.isAuto
+      ? isAutoSelected
+      : model.modelName === selectedModel
     return (
       <button
         type="button"
@@ -477,9 +500,31 @@ export function ModelSelector({
           if (showEffortOptions && !isMobileLayout) recalcEffortFlyout()
         }}
       >
-        {autoModels.map((model) => renderModelItem(model))}
+        {autoModel && renderModelItem(autoModel)}
 
-        {autoModels.length > 0 && (
+        {showIntelligenceSlider && (
+          <div className="px-3 pb-2 pt-1">
+            <div className="mb-2 flex items-center justify-between text-xs">
+              <span className="font-medium text-content-secondary">
+                Intelligence
+              </span>
+              <span className="text-content-muted">
+                {getAutoIntelligenceLevel(autoIntelligence).label}
+              </span>
+            </div>
+            <SteppedSlider
+              steps={AUTO_INTELLIGENCE_LEVELS}
+              value={autoIntelligence}
+              onValueChange={onAutoIntelligenceChange}
+              aria-label="Auto intelligence"
+            />
+            <p className="mt-2 text-xs text-content-muted">
+              {INTELLIGENCE_EXPLAINER}
+            </p>
+          </div>
+        )}
+
+        {autoModel && (
           <div className="mx-3 my-1 border-t border-border-subtle" />
         )}
 

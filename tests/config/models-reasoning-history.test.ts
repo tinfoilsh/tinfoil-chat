@@ -1,5 +1,5 @@
 import {
-  getAutoModels,
+  getAutoModel,
   getReasoningHistoryPolicy,
   getResolvedModelContextWindowTokens,
   type BaseModel,
@@ -69,9 +69,6 @@ describe('getReasoningHistoryPolicy', () => {
       model('large', undefined, 256000),
       model('small', undefined, 32000),
     ]
-    candidates.forEach((candidate) => {
-      candidate.chatConfig = { ...candidate.chatConfig, attributes: ['smart'] }
-    })
 
     expect(
       getResolvedModelContextWindowTokens({
@@ -79,7 +76,7 @@ describe('getReasoningHistoryPolicy', () => {
         autoCandidates: candidates,
       }),
     ).toBe(32000)
-    expect(getAutoModels(candidates)[0].chatConfig?.contextWindowTokens).toBe(
+    expect(getAutoModel(candidates)?.chatConfig?.contextWindowTokens).toBe(
       32000,
     )
   })

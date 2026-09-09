@@ -18,6 +18,7 @@
  *   this hook are derived for the currently-viewed chat
  */
 import { useProject } from '@/components/project'
+import type { AutoIntelligenceLevelId } from '@/config/models'
 import {
   getKnownModelDisplayName,
   resolveModelSelection,
@@ -106,6 +107,7 @@ interface UseChatMessagingProps {
   scrollToBottom?: () => void
   reasoningEffort?: ReasoningEffort
   thinkingEnabled?: boolean
+  autoIntelligence?: AutoIntelligenceLevelId
   webSearchAvailable?: boolean
   codeExecutionEnabled?: boolean
   piiCheckEnabled?: boolean
@@ -208,6 +210,7 @@ export function useChatMessaging({
   scrollToBottom,
   reasoningEffort,
   thinkingEnabled,
+  autoIntelligence,
   webSearchAvailable,
   codeExecutionEnabled,
   piiCheckEnabled,
@@ -1235,6 +1238,7 @@ export function useChatMessaging({
           signal: controller.signal,
           reasoningEffort,
           thinkingEnabled,
+          autoIntelligence,
           webSearchEnabled: chatWebSearchEnabled,
           codeExecutionEnabled,
           piiCheckEnabled,
@@ -1672,6 +1676,7 @@ export function useChatMessaging({
       scrollToBottom,
       reasoningEffort,
       thinkingEnabled,
+      autoIntelligence,
       isProjectMode,
       activeProject,
       webSearchAvailable,
@@ -1842,6 +1847,7 @@ export function useChatMessaging({
           autoCandidates,
           reasoningEffort,
           thinkingEnabled,
+          autoIntelligence,
         })
       } catch (error) {
         const retryError =
@@ -1925,6 +1931,7 @@ export function useChatMessaging({
       models,
       reasoningEffort,
       thinkingEnabled,
+      autoIntelligence,
       storeHistory,
       setChats,
       setCurrentChat,
