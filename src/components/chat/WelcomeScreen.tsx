@@ -1,7 +1,6 @@
 import { Favicon } from '@/components/ui/favicon'
 import { Modal, ModalTitle } from '@/components/ui/modal'
 import {
-  DEFAULT_AUTO_INTELLIGENCE_LEVEL,
   getSelectedModelLabel,
   type AutoIntelligenceLevelId,
   type BaseModel,
@@ -210,8 +209,8 @@ interface WelcomeScreenProps {
   setReasoningEffort?: (effort: ReasoningEffort) => void
   thinkingEnabled?: boolean
   setThinkingEnabled?: (enabled: boolean) => void
-  autoIntelligence?: AutoIntelligenceLevelId
-  setAutoIntelligence?: (level: AutoIntelligenceLevelId) => void
+  autoIntelligence: AutoIntelligenceLevelId
+  setAutoIntelligence: (level: AutoIntelligenceLevelId) => void
   codeExecutionEnabled?: boolean
   onCodeExecutionToggle?: () => void
   isTemporaryMode?: boolean
@@ -452,7 +451,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                           data-model-selector
                           aria-haspopup="menu"
                           aria-expanded={expandedLabel === 'model'}
-                          aria-label={`Current model ${getSelectedModelLabel(selectedModel, models, autoIntelligence ?? DEFAULT_AUTO_INTELLIGENCE_LEVEL) ?? ''}`}
+                          aria-label={`Current model ${getSelectedModelLabel(selectedModel, models, autoIntelligence) ?? ''}`}
                           onClick={(e) => {
                             e.preventDefault()
                             e.stopPropagation()
@@ -466,8 +465,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                             const label = getSelectedModelLabel(
                               selectedModel,
                               models,
-                              autoIntelligence ??
-                                DEFAULT_AUTO_INTELLIGENCE_LEVEL,
+                              autoIntelligence,
                             )
                             if (!label) return null
                             return (

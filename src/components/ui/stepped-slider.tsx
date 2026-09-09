@@ -47,7 +47,6 @@ export function SteppedSlider<T extends string>({
         const step = steps[next]
         if (step && step.id !== value) onValueChange(step.id)
       }}
-      aria-label={ariaLabel}
     >
       <SliderPrimitive.Track className="relative h-8 w-full grow overflow-hidden rounded-full bg-content-muted/25">
         <SliderPrimitive.Range className="absolute h-full rounded-full bg-brand-accent-light" />
@@ -69,6 +68,7 @@ export function SteppedSlider<T extends string>({
       </SliderPrimitive.Track>
       <SliderPrimitive.Thumb
         className="block h-7 w-7 rounded-full bg-white shadow-md ring-offset-surface-chat transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent-light focus-visible:ring-offset-2"
+        aria-label={ariaLabel}
         aria-valuetext={steps[index]?.label}
       />
     </SliderPrimitive.Root>

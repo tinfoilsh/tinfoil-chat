@@ -503,13 +503,7 @@ export function ModelSelector({
         {autoModel && renderModelItem(autoModel)}
 
         {showIntelligenceSlider && (
-          <div
-            className="px-3 pb-2 pt-1"
-            onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            onTouchMove={(e) => e.stopPropagation()}
-            onTouchEnd={(e) => e.stopPropagation()}
-          >
+          <div className="px-3 pb-2 pt-1">
             <div className="mb-2 flex items-center justify-between text-xs">
               <span className="font-medium text-content-secondary">
                 Intelligence

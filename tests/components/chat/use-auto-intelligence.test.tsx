@@ -37,4 +37,30 @@ describe('useAutoIntelligence', () => {
     expect(first.result.current.autoIntelligence).toBe('low')
     expect(second.result.current.autoIntelligence).toBe('low')
   })
+
+  it('follows changes made in another tab and resets when storage is cleared', () => {
+    const { result } = renderHook(() => useAutoIntelligence())
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: SETTINGS_AUTO_INTELLIGENCE,
+          newValue: 'max',
+        }),
+      )
+    })
+    expect(result.current.autoIntelligence).toBe('max')
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', { key: 'unrelated', newValue: 'low' }),
+      )
+    })
+    expect(result.current.autoIntelligence).toBe('max')
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: null }))
+    })
+    expect(result.current.autoIntelligence).toBe('high')
+  })
 })

@@ -1,5 +1,4 @@
 import {
-  DEFAULT_AUTO_INTELLIGENCE_LEVEL,
   findSelectableModel,
   getAIModels,
   getCachedAIModels,
@@ -4441,7 +4440,7 @@ export function ChatInterface({
                                 data-model-selector
                                 aria-haspopup="menu"
                                 aria-expanded={expandedLabel === 'model'}
-                                aria-label={`Current model ${getSelectedModelLabel(selectedModel, models, autoIntelligence ?? DEFAULT_AUTO_INTELLIGENCE_LEVEL) ?? ''}`}
+                                aria-label={`Current model ${getSelectedModelLabel(selectedModel, models, autoIntelligence) ?? ''}`}
                                 onClick={(e) => {
                                   e.preventDefault()
                                   e.stopPropagation()
@@ -4453,8 +4452,7 @@ export function ChatInterface({
                                   const label = getSelectedModelLabel(
                                     selectedModel,
                                     models,
-                                    autoIntelligence ??
-                                      DEFAULT_AUTO_INTELLIGENCE_LEVEL,
+                                    autoIntelligence,
                                   )
                                   if (!label) return null
                                   return (

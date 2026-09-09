@@ -11,6 +11,7 @@ import type { Message } from '@/components/chat/types'
 import {
   AUTO_MODEL_ID,
   AUTO_MODEL_OPTIONS_FIELD,
+  DEFAULT_AUTO_INTELLIGENCE_LEVEL,
   getAutoIntelligenceLevel,
   type AutoIntelligenceLevelId,
   type BaseModel,
@@ -256,13 +257,11 @@ export function isRetryableError(error: unknown): boolean {
  */
 function applyAutoRouting(
   requestBody: Record<string, unknown>,
-  autoIntelligence: AutoIntelligenceLevelId | undefined,
+  autoIntelligence: AutoIntelligenceLevelId = DEFAULT_AUTO_INTELLIGENCE_LEVEL,
 ): void {
   requestBody.model = AUTO_MODEL_ID
-  if (autoIntelligence !== undefined) {
-    requestBody[AUTO_MODEL_OPTIONS_FIELD] = {
-      intelligence: getAutoIntelligenceLevel(autoIntelligence).value,
-    }
+  requestBody[AUTO_MODEL_OPTIONS_FIELD] = {
+    intelligence: getAutoIntelligenceLevel(autoIntelligence).value,
   }
 }
 

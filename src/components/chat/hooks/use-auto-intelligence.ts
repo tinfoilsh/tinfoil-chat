@@ -30,15 +30,26 @@ export function useAutoIntelligence() {
         setAutoIntelligenceState(event.detail)
       }
     }
+    // Other tabs write the same key; a null key means storage was cleared.
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== SETTINGS_AUTO_INTELLIGENCE) return
+      setAutoIntelligenceState(
+        isAutoIntelligenceLevelId(event.newValue)
+          ? event.newValue
+          : DEFAULT_AUTO_INTELLIGENCE_LEVEL,
+      )
+    }
     window.addEventListener(
       AUTO_INTELLIGENCE_CHANGED_EVENT,
       handleChanged as EventListener,
     )
+    window.addEventListener('storage', handleStorage)
     return () => {
       window.removeEventListener(
         AUTO_INTELLIGENCE_CHANGED_EVENT,
         handleChanged as EventListener,
       )
+      window.removeEventListener('storage', handleStorage)
     }
   }, [])
 

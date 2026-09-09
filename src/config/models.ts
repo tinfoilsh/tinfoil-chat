@@ -78,9 +78,16 @@ const DEV_MODELS: BaseModel[] = [
 const modelDisplayNames = new Map<string, string>()
 
 const rememberModelDisplayNames = (models: BaseModel[]): BaseModel[] => {
-  const autoModel = getAutoModel(models)
-  for (const model of autoModel ? [...models, autoModel] : models) {
+  for (const model of models) {
     modelDisplayNames.set(model.modelName, model.name)
+  }
+  // Synced chats may still carry a legacy Auto tier id; every Auto id shows
+  // the same label.
+  const autoModel = getAutoModel(models)
+  if (autoModel) {
+    for (const id of [AUTO_MODEL_ID, ...LEGACY_AUTO_MODEL_IDS]) {
+      modelDisplayNames.set(id, autoModel.name)
+    }
   }
   return models
 }

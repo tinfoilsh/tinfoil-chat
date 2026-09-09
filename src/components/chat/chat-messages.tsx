@@ -82,8 +82,8 @@ type ChatMessagesProps = {
   setReasoningEffort?: (effort: ReasoningEffort) => void
   thinkingEnabled?: boolean
   setThinkingEnabled?: (enabled: boolean) => void
-  autoIntelligence?: AutoIntelligenceLevelId
-  setAutoIntelligence?: (level: AutoIntelligenceLevelId) => void
+  autoIntelligence: AutoIntelligenceLevelId
+  setAutoIntelligence: (level: AutoIntelligenceLevelId) => void
   codeExecutionEnabled?: boolean
   onCodeExecutionToggle?: () => void
   isTemporaryMode?: boolean
