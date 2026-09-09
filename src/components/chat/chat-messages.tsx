@@ -1,4 +1,8 @@
-import { findSelectableModel, type BaseModel } from '@/config/models'
+import {
+  findSelectableModel,
+  type AutoIntelligenceLevelId,
+  type BaseModel,
+} from '@/config/models'
 import { useChatPrint } from '@/hooks/use-chat-print'
 import {
   REASONING_HISTORY_POLICIES,
@@ -78,6 +82,8 @@ type ChatMessagesProps = {
   setReasoningEffort?: (effort: ReasoningEffort) => void
   thinkingEnabled?: boolean
   setThinkingEnabled?: (enabled: boolean) => void
+  autoIntelligence?: AutoIntelligenceLevelId
+  setAutoIntelligence?: (level: AutoIntelligenceLevelId) => void
   codeExecutionEnabled?: boolean
   onCodeExecutionToggle?: () => void
   isTemporaryMode?: boolean
@@ -313,6 +319,8 @@ export function ChatMessages({
   setReasoningEffort,
   thinkingEnabled,
   setThinkingEnabled,
+  autoIntelligence,
+  setAutoIntelligence,
   codeExecutionEnabled,
   onCodeExecutionToggle,
   isTemporaryMode,
@@ -528,6 +536,8 @@ export function ChatMessages({
             setReasoningEffort={setReasoningEffort}
             thinkingEnabled={thinkingEnabled}
             setThinkingEnabled={setThinkingEnabled}
+            autoIntelligence={autoIntelligence}
+            setAutoIntelligence={setAutoIntelligence}
             codeExecutionEnabled={codeExecutionEnabled}
             onCodeExecutionToggle={onCodeExecutionToggle}
             isTemporaryMode={isTemporaryMode}

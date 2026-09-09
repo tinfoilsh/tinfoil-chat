@@ -10,6 +10,7 @@
  * in-memory messages. This keeps parsing, thinking mode, web search, and
  * citation processing identical to the main chat view.
  */
+import type { AutoIntelligenceLevelId } from '@/config/models'
 import {
   getKnownModelDisplayName,
   resolveModelSelection,
@@ -30,6 +31,7 @@ interface UseSidebarChatProps {
   selectedModel: AIModel
   reasoningEffort?: ReasoningEffort
   thinkingEnabled?: boolean
+  autoIntelligence?: AutoIntelligenceLevelId
   webSearchEnabled?: boolean
   piiCheckEnabled?: boolean
 }
@@ -85,6 +87,7 @@ export function useSidebarChat({
   selectedModel,
   reasoningEffort,
   thinkingEnabled,
+  autoIntelligence,
   webSearchEnabled,
   piiCheckEnabled,
 }: UseSidebarChatProps): UseSidebarChatReturn {
@@ -198,6 +201,7 @@ export function useSidebarChat({
             signal: controller.signal,
             reasoningEffort,
             thinkingEnabled,
+            autoIntelligence,
             webSearchEnabled,
             piiCheckEnabled,
           })
@@ -285,6 +289,7 @@ export function useSidebarChat({
       rules,
       reasoningEffort,
       thinkingEnabled,
+      autoIntelligence,
       webSearchEnabled,
       piiCheckEnabled,
     ],

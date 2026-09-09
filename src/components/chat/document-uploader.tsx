@@ -1,4 +1,4 @@
-import { getAIModels, type AutoTier, type BaseModel } from '@/config/models'
+import { getAIModels, type BaseModel } from '@/config/models'
 import {
   getSecureFetch,
   getSessionToken,
@@ -93,7 +93,7 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
     mimeType: string,
   ): Promise<string> => {
     const models = (await getAIModels()) ?? []
-    const fastTier: AutoTier = 'fast'
+    const fastTier = 'fast'
     const isMultimodalChat = (m: BaseModel) =>
       Boolean(m.multimodal && m.chat && m.type === 'chat')
     // Prefer a fast multimodal model over larger reasoning-heavy ones

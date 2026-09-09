@@ -1,10 +1,12 @@
 import {
+  DEFAULT_AUTO_INTELLIGENCE_LEVEL,
   findSelectableModel,
   getAIModels,
   getCachedAIModels,
   getCachedSystemPromptAndRules,
   getReasoningHistoryPolicy,
   getResolvedModelContextWindowTokens,
+  getSelectedModelLabel,
   getSystemPromptAndRules,
   resolveModelSelection,
   type BaseModel,
@@ -156,6 +158,7 @@ import {
   resolveWebSearchEnabled,
   upsertChatById,
 } from './hooks/chat-operations'
+import { useAutoIntelligence } from './hooks/use-auto-intelligence'
 import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
 import { useMessageQueue } from './hooks/use-message-queue'
@@ -692,6 +695,7 @@ export function ChatInterface({
   // (not per-model) and only surfaced for models whose reasoningConfig opts in.
   const { reasoningEffort, setReasoningEffort } = useReasoningEffort()
   const { thinkingEnabled, setThinkingEnabled } = useThinkingEnabled()
+  const { autoIntelligence, setAutoIntelligence } = useAutoIntelligence()
 
   // Detect platform for keyboard shortcut display
   const isMac = useMemo(() => {
@@ -1020,6 +1024,7 @@ export function ChatInterface({
     scrollToBottom: scrollUserMessageToTop,
     reasoningEffort,
     thinkingEnabled,
+    autoIntelligence,
     initialChatId,
     isLocalChatUrl,
     initialNewChatIsLocalOnly,
@@ -1387,6 +1392,7 @@ export function ChatInterface({
     selectedModel,
     reasoningEffort,
     thinkingEnabled,
+    autoIntelligence,
     webSearchEnabled: effectiveWebSearchEnabled,
     piiCheckEnabled,
   })
@@ -4299,6 +4305,8 @@ export function ChatInterface({
                       setReasoningEffort={setReasoningEffort}
                       thinkingEnabled={thinkingEnabled}
                       setThinkingEnabled={setThinkingEnabled}
+                      autoIntelligence={autoIntelligence}
+                      setAutoIntelligence={setAutoIntelligence}
                       codeExecutionEnabled={
                         canEnableCodeExecution ? codeExecutionEnabled : false
                       }
@@ -4433,7 +4441,7 @@ export function ChatInterface({
                                 data-model-selector
                                 aria-haspopup="menu"
                                 aria-expanded={expandedLabel === 'model'}
-                                aria-label={`Current model ${findSelectableModel(selectedModel, models)?.name ?? ''}`}
+                                aria-label={`Current model ${getSelectedModelLabel(selectedModel, models, autoIntelligence ?? DEFAULT_AUTO_INTELLIGENCE_LEVEL) ?? ''}`}
                                 onClick={(e) => {
                                   e.preventDefault()
                                   e.stopPropagation()
@@ -4442,15 +4450,17 @@ export function ChatInterface({
                                 className="flex items-center gap-1 py-1.5 text-content-secondary transition-colors hover:text-content-primary"
                               >
                                 {(() => {
-                                  const model = findSelectableModel(
+                                  const label = getSelectedModelLabel(
                                     selectedModel,
                                     models,
+                                    autoIntelligence ??
+                                      DEFAULT_AUTO_INTELLIGENCE_LEVEL,
                                   )
-                                  if (!model) return null
+                                  if (!label) return null
                                   return (
                                     <>
                                       <span className="text-xs font-medium">
-                                        {model.name}
+                                        {label}
                                       </span>
                                       <svg
                                         className={`h-3 w-3 transition-transform ${expandedLabel === 'model' ? 'rotate-180' : ''}`}
@@ -4481,6 +4491,8 @@ export function ChatInterface({
                                   onEffortChange={setReasoningEffort}
                                   thinkingEnabled={thinkingEnabled}
                                   onThinkingEnabledChange={setThinkingEnabled}
+                                  autoIntelligence={autoIntelligence}
+                                  onAutoIntelligenceChange={setAutoIntelligence}
                                 />
                               )}
                             </div>
