@@ -16,6 +16,7 @@ import { CONSTANTS } from './constants'
 import { DataFlowDiagram } from './DataFlowDiagram'
 import { type ReasoningEffort } from './hooks/use-reasoning-effort'
 import { ModelSelector } from './model-selector'
+import { ModelSelectorTriggerLabel } from './model-selector-trigger-label'
 import type { PromptPreset } from './prompts/types'
 import type { ProcessedDocument } from './renderers/types'
 import type { LabelType, LoadingState } from './types'
@@ -461,35 +462,12 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                           }}
                           className="flex items-center gap-1 py-1.5 text-content-secondary transition-colors hover:text-content-primary"
                         >
-                          {(() => {
-                            const label = getSelectedModelLabel(
-                              selectedModel,
-                              models,
-                              autoIntelligence,
-                            )
-                            if (!label) return null
-                            return (
-                              <>
-                                <span className="text-xs font-medium">
-                                  {label}
-                                </span>
-                                <svg
-                                  className={`h-3 w-3 transition-transform ${expandedLabel === 'model' ? 'rotate-180' : ''}`}
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                  aria-hidden="true"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M19 9l-7 7-7-7"
-                                  />
-                                </svg>
-                              </>
-                            )
-                          })()}
+                          <ModelSelectorTriggerLabel
+                            selectedModel={selectedModel}
+                            models={models}
+                            autoIntelligence={autoIntelligence}
+                            isOpen={expandedLabel === 'model'}
+                          />
                         </button>
 
                         {expandedLabel === 'model' && handleModelSelect && (
