@@ -288,6 +288,53 @@ describe('useModelManagement', () => {
 
       expect(result.current.selectedModel).toBe(initialModel)
     })
+
+    it('closes the menu when a concrete model is picked', async () => {
+      const { result } = renderHook(() =>
+        useModelManagement({
+          models: mockModels,
+          isClient: true,
+        }),
+      )
+
+      await waitFor(() => {
+        expect(result.current.hasValidatedModel).toBe(true)
+      })
+
+      act(() => {
+        result.current.setExpandedLabel('model')
+      })
+      act(() => {
+        result.current.handleModelSelect('model-b')
+      })
+
+      expect(result.current.expandedLabel).toBeNull()
+    })
+
+    it('keeps the menu open when Auto is picked so the slider can be adjusted', async () => {
+      localStorage.setItem(SETTINGS_SELECTED_MODEL, 'model-a')
+      const { result } = renderHook(() =>
+        useModelManagement({
+          models: mockModels,
+          isClient: true,
+        }),
+      )
+
+      await waitFor(() => {
+        expect(result.current.hasValidatedModel).toBe(true)
+      })
+      expect(result.current.selectedModel).toBe('model-a')
+
+      act(() => {
+        result.current.setExpandedLabel('model')
+      })
+      act(() => {
+        result.current.handleModelSelect(AUTO_MODEL_ID)
+      })
+
+      expect(result.current.selectedModel).toBe(AUTO_MODEL_ID)
+      expect(result.current.expandedLabel).toBe('model')
+    })
   })
 
   describe('localStorage persistence', () => {

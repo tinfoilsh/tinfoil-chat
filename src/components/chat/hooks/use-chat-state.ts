@@ -7,7 +7,11 @@ import type { AIModel, Chat, LabelType, LoadingState, Message } from '../types'
 import { useChatMessaging, type ChatDispatchResult } from './use-chat-messaging'
 import { useChatStorage } from './use-chat-storage'
 import type { StreamErrorInfo } from './use-chat-streams'
-import { resolveChatModel, useModelManagement } from './use-model-management'
+import {
+  resolveChatModel,
+  shouldCloseMenuOnSelect,
+  useModelManagement,
+} from './use-model-management'
 import type { ReasoningEffort } from './use-reasoning-effort'
 import { useUIState, type ThemeMode } from './use-ui-state'
 
@@ -205,7 +209,9 @@ export function useChatState({
       }
       updateChatModel(modelName)
       persistModelSelection(modelName)
-      setExpandedLabel(null)
+      if (shouldCloseMenuOnSelect(modelName)) {
+        setExpandedLabel(null)
+      }
     },
     [models, updateChatModel, persistModelSelection, setExpandedLabel],
   )
