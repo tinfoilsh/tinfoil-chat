@@ -1,5 +1,9 @@
 import type { AutoIntelligenceLevelId } from '@/config/models'
-import { isModelNameAvailable, type BaseModel } from '@/config/models'
+import {
+  isAutoModelId,
+  isModelNameAvailable,
+  type BaseModel,
+} from '@/config/models'
 import { useExecSnapshot } from '@/services/exec-snapshot/use-exec-snapshot'
 import { logWarning } from '@/utils/error-handling'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
@@ -205,7 +209,11 @@ export function useChatState({
       }
       updateChatModel(modelName)
       persistModelSelection(modelName)
-      setExpandedLabel(null)
+      // Auto reveals the intelligence slider inside the menu, so the menu
+      // stays open for the user to adjust it.
+      if (!isAutoModelId(modelName)) {
+        setExpandedLabel(null)
+      }
     },
     [models, updateChatModel, persistModelSelection, setExpandedLabel],
   )

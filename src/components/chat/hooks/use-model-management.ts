@@ -1,5 +1,6 @@
 import {
   getDefaultModelId,
+  isAutoModelId,
   isModelNameAvailable,
   type BaseModel,
 } from '@/config/models'
@@ -122,7 +123,9 @@ export function useModelManagement({
       const modelName = event.detail as AIModel
       if (!modelName || !isModelNameAvailable(modelName, models)) return
       setSelectedModel(modelName)
-      setExpandedLabel(null)
+      if (!isAutoModelId(modelName)) {
+        setExpandedLabel(null)
+      }
     }
 
     window.addEventListener(
@@ -151,7 +154,11 @@ export function useModelManagement({
       }
 
       setSelectedModel(modelName)
-      setExpandedLabel(null)
+      // Auto reveals the intelligence slider inside the menu, so the menu
+      // stays open for the user to adjust it.
+      if (!isAutoModelId(modelName)) {
+        setExpandedLabel(null)
+      }
 
       // Save to local storage
       persistSelectedModel(modelName)
