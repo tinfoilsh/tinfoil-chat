@@ -38,6 +38,14 @@ export function resolveChatModel(
   return getDefaultModelId(models)
 }
 
+/**
+ * Whether picking a model should close the selector menu. Auto reveals the
+ * intelligence slider inside the menu, so the menu stays open for the user
+ * to adjust it.
+ */
+export const shouldCloseMenuOnSelect = (modelName: AIModel): boolean =>
+  !isAutoModelId(modelName)
+
 interface UseModelManagementProps {
   models: BaseModel[]
   isClient: boolean
@@ -123,7 +131,7 @@ export function useModelManagement({
       const modelName = event.detail as AIModel
       if (!modelName || !isModelNameAvailable(modelName, models)) return
       setSelectedModel(modelName)
-      if (!isAutoModelId(modelName)) {
+      if (shouldCloseMenuOnSelect(modelName)) {
         setExpandedLabel(null)
       }
     }
@@ -154,9 +162,7 @@ export function useModelManagement({
       }
 
       setSelectedModel(modelName)
-      // Auto reveals the intelligence slider inside the menu, so the menu
-      // stays open for the user to adjust it.
-      if (!isAutoModelId(modelName)) {
+      if (shouldCloseMenuOnSelect(modelName)) {
         setExpandedLabel(null)
       }
 

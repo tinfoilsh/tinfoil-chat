@@ -1,9 +1,5 @@
 import type { AutoIntelligenceLevelId } from '@/config/models'
-import {
-  isAutoModelId,
-  isModelNameAvailable,
-  type BaseModel,
-} from '@/config/models'
+import { isModelNameAvailable, type BaseModel } from '@/config/models'
 import { useExecSnapshot } from '@/services/exec-snapshot/use-exec-snapshot'
 import { logWarning } from '@/utils/error-handling'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
@@ -11,7 +7,11 @@ import type { AIModel, Chat, LabelType, LoadingState, Message } from '../types'
 import { useChatMessaging, type ChatDispatchResult } from './use-chat-messaging'
 import { useChatStorage } from './use-chat-storage'
 import type { StreamErrorInfo } from './use-chat-streams'
-import { resolveChatModel, useModelManagement } from './use-model-management'
+import {
+  resolveChatModel,
+  shouldCloseMenuOnSelect,
+  useModelManagement,
+} from './use-model-management'
 import type { ReasoningEffort } from './use-reasoning-effort'
 import { useUIState, type ThemeMode } from './use-ui-state'
 
@@ -209,9 +209,7 @@ export function useChatState({
       }
       updateChatModel(modelName)
       persistModelSelection(modelName)
-      // Auto reveals the intelligence slider inside the menu, so the menu
-      // stays open for the user to adjust it.
-      if (!isAutoModelId(modelName)) {
+      if (shouldCloseMenuOnSelect(modelName)) {
         setExpandedLabel(null)
       }
     },

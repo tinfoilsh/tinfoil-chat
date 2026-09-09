@@ -312,6 +312,7 @@ describe('useModelManagement', () => {
     })
 
     it('keeps the menu open when Auto is picked so the slider can be adjusted', async () => {
+      localStorage.setItem(SETTINGS_SELECTED_MODEL, 'model-a')
       const { result } = renderHook(() =>
         useModelManagement({
           models: mockModels,
@@ -322,6 +323,7 @@ describe('useModelManagement', () => {
       await waitFor(() => {
         expect(result.current.hasValidatedModel).toBe(true)
       })
+      expect(result.current.selectedModel).toBe('model-a')
 
       act(() => {
         result.current.setExpandedLabel('model')
